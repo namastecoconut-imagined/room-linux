@@ -66,9 +66,12 @@ def tone(path, notes, length=0.16, vol=0.22, rate=24000):
 
 
 def mic_target():
-    """The echo-cancelled mic if it's there, else the default one."""
+    """The plain mic. The echo-cancelled one (room-ec-source) only when asked for with "echoCancel": true — on the
+    Surface its sound came out distorted (clipping), so it stays off until it's tuned."""
     if CFG.get("mic"):
         return CFG["mic"]
+    if CFG.get("echoCancel") is not True:
+        return None
     try:
         out = subprocess.run(["pw-cli", "ls", "Node"], capture_output=True, text=True, timeout=5).stdout
         if "room-ec-source" in out:

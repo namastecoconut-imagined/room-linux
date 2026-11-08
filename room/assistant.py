@@ -163,6 +163,7 @@ class Assistant(QObject):
             import time as _t
             self._t_heard, self._t_say = _t.time(), 0
             self.heard = (e.get("text") or "").strip()
+            self._alt = (e.get("alt") or "").strip()
             if not self.heard and e.get("quiet"):
                 self.following = True             # a "maybe Alexa" with nothing after it: close without the miss chime
             self._act(self.heard)
@@ -359,7 +360,8 @@ class Assistant(QObject):
 
             def on_done(out):
                 self._main.emit(lambda: turn == self._turn and self._deliver(text, out, spoken_early["t"], it, turn))
-            self.brain.interpret(text, self.snapshot(), self.following, self.computer.ok, on_say, on_done)
+            self.brain.interpret(text, self.snapshot(), self.following, self.computer.ok, on_say, on_done,
+                                 alt=getattr(self, "_alt", ""))
             return
         self._local(text, it)
 
@@ -416,6 +418,8 @@ class Assistant(QObject):
                 self._send(cmd="say", text=spoken, listen=False)
             elif not spoken:
                 self.state = "idle"
+                if actions:
+                    self.chime("done")
             self._finish(stage, line, spoken, card, follow)
             if not spoken and not follow:
                 QTimer.singleShot(1500, lambda: self._duck(False))

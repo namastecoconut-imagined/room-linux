@@ -214,7 +214,8 @@ Work out what they mean and call control_home exactly once.
 Talking:
 - "say" is spoken aloud by a text-to-speech voice. Sound like a friendly, sharp person — natural, contractions, no \
 lists, no markdown, no symbols, no emoji. Numbers as people say them.
-- Home commands: one short sentence ("Done, the living room's cosy."). Don't narrate obvious things.
+- Home commands: one short sentence ("Done, the living room's cosy."). Don't narrate obvious things. say is never \
+empty when you act — for music it's a few words before it starts ("Putting on something chill.").
 - Questions and chat: answer properly but briefly — usually one to three sentences; up to five if they ask you to \
 explain something. Lead with the answer.
 - Use the snapshot for time, date, weather here, air quality, calendar and what's playing. For live facts (news, \
@@ -312,11 +313,11 @@ action (closest name from the speaker list).
         "required": ["kind"],
     }
 
-    def interpret(self, text, snapshot: dict, follow_up: bool, has_computer: bool, on_say, on_done):
+    def interpret(self, text, snapshot: dict, follow_up: bool, has_computer: bool, on_say, on_done, alt=""):
         """Streams Claude's answer. on_say(sentence) as soon as the spoken line is complete; on_done(outcome or None)."""
-        threading.Thread(target=self._interpret, args=(text, snapshot, follow_up, has_computer, on_say, on_done), daemon=True).start()
+        threading.Thread(target=self._interpret, args=(text, snapshot, follow_up, has_computer, on_say, on_done, alt), daemon=True).start()
 
-    def _interpret(self, text, snapshot, follow_up, has_computer, on_say, on_done):
+    def _interpret(self, text, snapshot, follow_up, has_computer, on_say, on_done, alt=""):
         recent, last = [], time.time()
         for t in reversed(self.history):
             if last - t["at"] > 600:
@@ -333,7 +334,8 @@ action (closest name from the speaker list).
             messages.append({"role": "assistant", "content": a})
         messages.append({"role": "user", "content": "Home snapshot right now:\n" + json.dumps(snapshot) + "\n\n" +
                          ("(Follow-up turn — no wake word, the mic was just left open.) " if follow_up else "") +
-                         f"They said: “{text}”"})
+                         f"They said: “{text}”" +
+                         (f" (the recogniser's earlier guess was “{alt}” — go by whichever makes more sense)" if alt else "")})
         # "say" first in the schema, so it streams in (and can be spoken) before the actions
         schema = {"type": "object", "properties": {
             "say": {"type": "string"}, "reply": {"type": "string"},
@@ -377,7 +379,9 @@ action (closest name from the speaker list).
             self.last_error = "no internet" if isinstance(e, (urllib.error.URLError, TimeoutError, OSError)) else repr(e)
             print(f"[room] claude: {e!r}")
             out = None
-        print(f"[room] claude {int((time.time() - t0) * 1000)} ms for {text!r}")
+        print(f"[room] claude {int((time.time() - t0) * 1000)} ms for {text!r}" + (f" (or {alt!r})" if alt else ""))
+        if out:
+            print(f"[room] claude said {out.get('say', '')!r} · did {[a.get('kind') for a in out.get('actions') or []]}")
         on_done(out)
 
     def look_up(self, question, done):

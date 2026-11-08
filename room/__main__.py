@@ -10,6 +10,11 @@ import signal
 import sys
 from pathlib import Path
 
+try:
+    sys.stdout.reconfigure(line_buffering=True)   # every log line reaches the journal when it happens
+except Exception:
+    pass
+
 ROOT = Path(__file__).resolve().parent.parent
 
 # Wayland first (Fedora's default), with the GPU scene graph; fall back to X11 if Wayland isn't there.

@@ -12,15 +12,20 @@
 
 Events out: level · wake · listening · partial · heard · error. Commands in: listen (tap, or follow-up) · cancel · words.
 """
+import functools
 import json
 import os
 import queue
 import re
 import subprocess
+import sys
 import threading
 import time
 
 import numpy as np
+
+# stdout is Room's JSON channel — anything printed there was being thrown away; logs go to the journal via stderr
+print = functools.partial(print, file=sys.stderr, flush=True)  # noqa: A001
 
 RATE = 16000
 CHUNK = 1280                                 # 80 ms — what openWakeWord wants
@@ -59,6 +64,9 @@ class Stream:
         self.failed = False
         self.url = Stream.url(cfg, words)
         self.spare = spare
+        self.t0 = time.time()
+        self.first_at = 0.0                 # Deepgram's first words back
+        self.guesses: list[str] = []        # what it thought along the way (the final can be worse: "please drink chill")
         threading.Thread(target=self._run, daemon=True).start()
 
     @staticmethod
@@ -104,6 +112,8 @@ class Stream:
             self._end()
             return
 
+        self.opened = time.time() - t0
+
         def sender():
             try:
                 while not self.ended:
@@ -135,6 +145,9 @@ class Stream:
                         self.interim = t
                         if t:
                             self.last_guess = " ".join([*self.finals, t])
+                            self.guesses.append(self.last_guess)
+                    if t and not self.first_at:
+                        self.first_at = time.time()
                     if self.text():
                         self.on_text(self.text(), self)
                     if m.get("from_finalize") and self.finals:
@@ -146,7 +159,8 @@ class Stream:
         except Exception as e:
             if not self.ended:
                 print("[voice] deepgram:", repr(e), flush=True)
-        print(f"[voice] heard {self.text()!r} in {time.time() - t0:.1f} s", flush=True)
+        print(f"[voice] heard {self.text()!r} · {'spare' if self.spare else 'new'} connection {self.opened:.2f} s · "
+              f"first words {self.first_at - self.t0 if self.first_at else 0:.1f} s · done {time.time() - self.t0:.1f} s")
         self._end()
         try:
             ws.send(json.dumps({"type": "CloseStream"}))
@@ -235,6 +249,7 @@ class Ears:
         self.best_at = 0.0
         self.on_begin = None
         self.last_text, self.text_at = "", 0.0
+        self.voice_at = self.closed_at = 0.0
 
     # ---------------------------------------------------------------- the mic
     def run(self):
@@ -302,6 +317,8 @@ class Ears:
         if s:
             s.push(pcm)
             if float(self.vad.predict(pcm, frame_size=480)) > 0.4:
+                if not self.voice_at:
+                    self.voice_at = now
                 self.spoke_at = now
             said = s.text()
             quiet = now - self.spoke_at
@@ -316,6 +333,11 @@ class Ears:
             if not s.closing and ((not said and now - self.started > self.wait and quiet > 1.0)
                                   or now - self.started > 15):
                 s.finish()
+            if s.closing and not self.closed_at:
+                self.closed_at = now
+                print(f"[voice] request: speech from {self.voice_at - self.started if self.voice_at else -1:.1f} s, "
+                      f"last speech {self.spoke_at - self.started:.1f} s, closed {now - self.started:.1f} s "
+                      f"(quiet {quiet:.1f} s)")
 
     # ---------------------------------------------------------------- a request
     def begin(self, preroll=False, follow=False, mine_first=False):
@@ -328,6 +350,7 @@ class Ears:
             self.stream.ended = True        # the old one is dropped (its late words can't end the new one)
         self.state = "listening"
         self.started = self.spoke_at = self.clock
+        self.voice_at = self.closed_at = 0.0
         self.wait = 8.0 if follow else 6.0
         self.mine_first = mine_first
         self.vad.reset_states()
@@ -366,7 +389,16 @@ class Ears:
             return
         if self.mine_first and not WAKE_RE.search(text or ""):
             text = ""
-        self.emit(ev="heard", text=after_wake(text))
+        said = after_wake(text)
+        # the best other reading along the way, if the final one changed it ("play something chill on spot" →
+        # "please drink chill on spotify"): Claude gets both
+        alt = ""
+        for g in reversed(s.guesses):
+            g = after_wake(g)
+            if len(g.split()) >= max(2, len(said.split()) - 2) and g.lower().rstrip(".?!") != said.lower().rstrip(".?!") \
+                    and not said.lower().startswith(g.lower().rstrip(".?!")):     # just the start of the same thing
+                alt = g; break
+        self.emit(ev="heard", text=said, alt=alt)
 
     def cancel(self):
         if self.stream:

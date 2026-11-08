@@ -40,7 +40,6 @@ def warm_voice():
             pass
     if DG_KEY:
         threading.Thread(target=go, daemon=True).start()
-DUMP = os.environ.get("ROOM_VOICE_DUMP")          # (checks) a copy of exactly what's sent to the speakers
 CUES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cues")
 
 
@@ -252,8 +251,7 @@ class Speaker:
         threading.Thread(target=self._say, args=(text, g, done), daemon=True).start()
 
     def _say(self, text, g, done):
-        # the speakers to full alongside the request, not before it (its wpctl/amixer calls were adding to the wait)
-        threading.Thread(target=speakers_full, daemon=True).start()
+        speakers_full()
         try:
             if DG_KEY and self._deepgram(text, g):
                 self.busy = False
@@ -346,9 +344,6 @@ class Speaker:
                     x = np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768
                     out = (shape(x) * 32000).astype("<i2").tobytes()
                     self.proc.stdin.write(out)
-                    if DUMP:
-                        with open(DUMP, "ab") as f:
-                            f.write(out)
         except Exception as e:
             if g == self.gen:
                 log("aura play:", repr(e))

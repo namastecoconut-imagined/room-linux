@@ -25,7 +25,8 @@ Item {
 
     Glass {
         x: 40; y: 300; width: 420; height: 250
-        T { x: 28; y: 18; text: wx.ok ? wx.t + "°" : "—"; font.pixelSize: 56; font.weight: Font.Light }
+        T { x: 28; y: 18; visible: wx.ok === true; text: wx.t + "°"; font.pixelSize: 56; font.weight: Font.Light }
+        T { x: 28; y: 30; visible: wx.ok !== true; text: "Getting the weather…"; font.pixelSize: 21; color: Theme.dim }
         Column {
             x: 150; y: 30; spacing: 4
             T { text: wx.d || ""; font.pixelSize: 21 }
@@ -126,6 +127,12 @@ Item {
                     onMoved: (v) => room.setRoomLevel(modelData.name, v)
                 }
             }
+        }
+
+        T {
+            visible: rooms.length === 0
+            x: 26; y: 80; width: parent.width - 52; wrapMode: Text.WordWrap
+            text: "No lights yet — add your rooms to config.json"; font.pixelSize: 21; color: Theme.dim
         }
 
         // warmth and colour for the room the panel is in

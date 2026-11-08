@@ -12,6 +12,9 @@ Window {
     title: "Room"
 
     property real now: Date.now() / 1000
+    // Esc: leave full screen (to reach the desktop); F11: back to full screen
+    Shortcut { sequence: "Esc"; onActivated: win.visibility = Window.Windowed }
+    Shortcut { sequence: "F11"; onActivated: win.visibility = win.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
     property string screen: startScreen === "standby" || startScreen === "musicstandby" ? "standby" : "home"
     property real lastTouch: Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing

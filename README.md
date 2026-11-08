@@ -12,7 +12,11 @@ The Room panel as a native Qt Quick app. The screens are drawn on the GPU, and t
    ```
 4. **Config.** Copy `config.json` from the Mac (`Downloads/RoomPanel/config.json`) to `~/.config/room/config.json`. Then set `"here": "Living room"` and add the living-room lights under `"rooms"`.
 
-Room starts with the desktop session and restarts itself if it ever quits.
+Room starts with the desktop session. It doesn't restart itself while we're still fixing things.
+
+- Stop it: `systemctl --user stop room`
+- Run it in a terminal so errors show: `cd ~/room && .venv/bin/python -m room` (Esc leaves full screen, Ctrl-C quits)
+- AirPlay only: `bash scripts/airplay.sh`
 
 ## Update
 

@@ -21,7 +21,7 @@ if [ ! -f ~/.config/room/config.json ]; then
   echo "    Then set \"here\" to \"Living room\" and add the living-room lights under \"rooms\"."
 fi
 
-echo "▸ Starts with your desktop session, and comes back if it ever quits"
+echo "▸ Starts with your desktop session (no automatic restart while we are still fixing things)"
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/room.service <<UNIT
 [Unit]
@@ -32,8 +32,8 @@ After=graphical-session.target
 [Service]
 WorkingDirectory=$HERE
 ExecStart=$HERE/.venv/bin/python -m room
-Restart=always
-RestartSec=2
+# no automatic restart while we're still fixing things — a crash stays visible in the log
+Restart=no
 Environment=QT_QPA_PLATFORM=wayland;xcb
 
 [Install]
@@ -50,6 +50,8 @@ if command -v gsettings >/dev/null; then
   gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled false || true
   gsettings set org.gnome.desktop.notifications show-banners false || true
 fi
+
+bash "$HERE/scripts/airplay.sh"
 
 echo "▸ room-update command"
 mkdir -p ~/.local/bin

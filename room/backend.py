@@ -4,6 +4,7 @@ import time
 
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
+from .airplay import AirPlay
 from .calendar import Calendar
 from .lights import Lights
 from .spotify import Spotify
@@ -27,6 +28,8 @@ class Room(QObject):
         self.calendar = Calendar(cfg.get("icalURL"))
         self.lights = Lights(cfg.get("rooms", []), cfg.get("here", ""))
         self.spotify = Spotify(cfg.get("spotify"))
+        self.airplay = AirPlay()
+        self.airplay.changed.connect(self.musicChanged)
         self.wx.changed.connect(self.weatherChanged)
         self.calendar.changed.connect(self.eventsChanged)
         self.lights.changed.connect(self.roomsChanged)
@@ -41,7 +44,10 @@ class Room(QObject):
         self.calendar.start()
         self.lights.start()
         self.spotify.start()
-        self._start_mic()
+        self.airplay.start()
+        # the room-sound ripple on standby: off until it's proven on this machine (opening the mic crashed in testing)
+        if os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True:
+            self._start_mic()
 
     # ---------------------------------------------------------------- what the screens read
     @Property("QVariantMap", notify=weatherChanged)
@@ -62,7 +68,8 @@ class Room(QObject):
             m = dict(demo.MUSIC); m["at"] = time.time() - 4
             m["playing"] = os.environ.get("ROOM_SCREEN") != "standby"; m["exists"] = m["playing"]
             return m
-        return self.spotify.snapshot()
+        # whatever's actually playing: AirPlay while a phone or Mac is sending to Room, otherwise Spotify
+        return self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()
 
     @Property(bool, constant=True)
     def clock24(self):
@@ -117,15 +124,15 @@ class Room(QObject):
 
     @Slot()
     def playPause(self):
-        self.spotify.play_pause()
+        (self.airplay if self.airplay.showing else self.spotify).play_pause()
 
     @Slot()
     def next(self):
-        self.spotify.next()
+        (self.airplay if self.airplay.showing else self.spotify).next()
 
     @Slot()
     def previous(self):
-        self.spotify.previous()
+        (self.airplay if self.airplay.showing else self.spotify).previous()
 
     @Slot(int)
     def setVolume(self, v):

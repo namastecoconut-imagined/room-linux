@@ -16,12 +16,40 @@ ROOT = Path(__file__).resolve().parent.parent
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland;xcb")
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
 
-from PySide6.QtCore import QTimer, QUrl, Qt  # noqa: E402
-from PySide6.QtGui import QFontDatabase, QGuiApplication, QCursor  # noqa: E402
+from PySide6.QtCore import QEvent, QObject, QTimer, QUrl, Qt  # noqa: E402
+from PySide6.QtGui import QFontDatabase, QGuiApplication, QCursor, QInputDevice  # noqa: E402
 from PySide6.QtQml import QQmlApplicationEngine  # noqa: E402
 
 from .backend import Room  # noqa: E402
 from . import config  # noqa: E402
+
+
+class Pointer(QObject):
+    """The mouse pointer shows whenever a real mouse or trackpad moves, and hides 3 s after it stops —
+    so it's there when you use one, and never sits on the panel when you only use touch."""
+
+    def __init__(self, app):
+        super().__init__()
+        self.app, self.hidden = app, False
+        self.timer = QTimer(self); self.timer.setSingleShot(True); self.timer.timeout.connect(self.hide)
+        app.installEventFilter(self)
+        self.hide()
+
+    def hide(self):
+        if not self.hidden:
+            self.app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor)); self.hidden = True
+
+    def show(self):
+        if self.hidden:
+            self.app.restoreOverrideCursor(); self.hidden = False
+        self.timer.start(3000)
+
+    def eventFilter(self, obj, ev):
+        if ev.type() in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
+            dev = ev.device() if hasattr(ev, "device") else None
+            if dev is None or dev.type() in (QInputDevice.DeviceType.Mouse, QInputDevice.DeviceType.TouchPad):
+                self.show()
+        return False
 
 
 def main():
@@ -51,8 +79,7 @@ def main():
     if not engine.rootObjects():
         sys.exit(1)
     win = engine.rootObjects()[0]
-    if os.environ.get("ROOM_WINDOWED") != "1":
-        app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))   # a touch panel: no mouse pointer
+    pointer = Pointer(app)  # noqa: F841
 
     room.start()
     code = app.exec()

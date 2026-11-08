@@ -1,0 +1,6 @@
+config.json
+*.pyc
+__pycache__/
+.venv/
+*.png
+!assets/**/*.png

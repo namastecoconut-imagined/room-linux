@@ -190,12 +190,6 @@ class Assistant(QObject):
     def chime(self, name):
         self._send(cmd="chime", name=name)
 
-    def _words(self):
-        r = self.room
-        w = [x["name"] for x in r.lights.snapshot()]
-        w += [p.get("name", "") for p in (r.spotify.snapshot().get("playlists") or [])]
-        return [x for x in w if x]
-
     # ---------------------------------------------------------------- music down while talking
     def _music_streams(self):
         """PipeWire playback streams other than Room's own voice and tones (pw-play) — AirPlay, a browser…"""

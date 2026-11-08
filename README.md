@@ -44,7 +44,7 @@ journalctl --user -u room -f                                          # live log
 | `room/spotify.py` | Spotify Web API (shares the iPhone panel's login) |
 | `room/weather.py` · `room/calendar.py` | Open-Meteo, Google Calendar iCal |
 
-Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it (same for `fade.frag`):
+Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
 `pyside6-qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o shaders/standby.frag.qsb shaders/standby.frag`
 
 ## Voice

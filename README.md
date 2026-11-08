@@ -61,7 +61,7 @@ Set up once with `bash scripts/voice.sh` (install.sh runs it too).
 
 The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on.
 Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"listen": true, "wakeThreshold": 0.4,
-"bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "loudness": 1.0, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
+"bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
 Room's voice never plays quieter than voiceMinLevel of the speakers (the output is lifted while it talks, then put back).
 
 ## Burn-in care

@@ -14,7 +14,6 @@ import errno
 import os
 import re
 import time
-from pathlib import Path
 
 from PySide6.QtCore import QObject, QSocketNotifier, QTimer, Signal
 from PySide6.QtGui import QImage
@@ -50,7 +49,6 @@ class AirPlay(QObject):
         self.art_url = ""
         self.rgb, self.rgb2 = [60, 56, 52], [20, 18, 16]
         self.wash = ""
-        self.local_volume_until = 0.0
         self.duration = 0.0
         self.position = 0.0
         self.at = 0.0
@@ -58,7 +56,6 @@ class AirPlay(QObject):
         self.last_seen = 0.0
         self.art_dir = STATE_DIR / "airplay"
         self.art_dir.mkdir(parents=True, exist_ok=True)
-        self._mpris = None
 
     def start(self):
         self._open()

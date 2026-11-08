@@ -5,7 +5,9 @@ Surface's raw speakers and a tuned sink exists (its name contains "preferSink" f
 the tuned one becomes the default again. A Bluetooth speaker or anything else you pick is left alone.
 
 AirPlay always goes to the Bluetooth speaker when one is connected (whatever the default output is), and back to the
-Surface's speakers when it isn't ("airplayToBluetooth": false turns that off). Checked every 3 s.
+Surface's speakers when it isn't ("airplayToBluetooth": false turns that off). Checked the moment AirPlay starts or
+changes (Room is told by the AirPlay reader), and every 20 s otherwise — the PipeWire listing it reads is too heavy to
+run every few seconds on a battery.
 """
 import json
 import subprocess
@@ -19,23 +21,36 @@ class Output:
         self.off = cfg.get("preferSink") is False
         self.airplay_bt = cfg.get("airplayToBluetooth") is not False
         self.moved: dict = {}          # AirPlay stream id → where it was sent
+        self.poked = threading.Event()
+
+    def poke(self):
+        """Something changed (AirPlay started, a speaker came or went): look now, and again over the next few seconds
+        while the new stream settles."""
+        self.burst = 4
+        self.poked.set()
 
     def start(self):
         threading.Thread(target=self._loop, daemon=True).start()
 
     def _loop(self):
         n = 0
+        self.burst = 0
         while True:
             try:
                 nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or "[]")
                 if self.airplay_bt:
                     self.airplay(nodes)
-                if not self.off and n % 3 == 0:
+                if not self.off:
                     self.check(nodes)
             except Exception as e:
                 print(f"[room] output: {e!r}")
             n += 1
-            time.sleep(3)
+            if self.burst > 0:
+                self.burst -= 1
+                time.sleep(1.5)
+            else:
+                self.poked.wait(20)
+            self.poked.clear()
 
     def airplay(self, nodes):
         bt = next(((n.get("info") or {}).get("props", {}).get("node.name") for n in nodes

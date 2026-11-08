@@ -58,7 +58,9 @@ class Spotify(QObject):
     def _tick(self):
         self.ticks += 1
         playing = bool(self.player and self.player.get("is_playing"))
-        every = (4 if playing else 8) if self.relaxed else (1 if playing else 2)
+        # (1.5 s ticks) awake and playing: every 3 s (the position runs on by itself in between); on standby every 9 s;
+        # nothing playing: 6 s / 30 s — each poll is a request to Spotify, and the radio costs battery
+        every = (6 if playing else 20) if self.relaxed else (2 if playing else 4)
         if self.ticks % every == 0:
             self.poll()
 

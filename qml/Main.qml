@@ -68,8 +68,11 @@ Window {
     // burn-in care: the slow drift (see the stage) and the nightly refresh
     property real orbitAmp: standbyOn ? 28 : 6
     Behavior on orbitAmp { NumberAnimation { duration: 6000; easing.type: Easing.InOutSine } }
-    readonly property real shiftX: orbitAmp * Math.sin(2 * Math.PI * now / 1260)
-    readonly property real shiftY: orbitAmp * Math.sin(2 * Math.PI * now / 1740 + 1)
+    // whole pixels, moved once every 20 s: a sub-pixel shift four times a second redrew the whole screen non-stop
+    property real driftNow: Date.now() / 1000
+    Timer { interval: 20000; running: true; repeat: true; onTriggered: win.driftNow = Date.now() / 1000 }
+    readonly property real shiftX: Math.round(orbitAmp * Math.sin(2 * Math.PI * driftNow / 1260))
+    readonly property real shiftY: Math.round(orbitAmp * Math.sin(2 * Math.PI * driftNow / 1740 + 1))
     property string refreshedOn: ""
     onNowChanged: {
         var at = timing.refreshAt
@@ -78,7 +81,9 @@ Window {
         if (hm === at && refreshedOn !== day) { refreshedOn = day; refreshRun.start() }
     }
 
-    Timer { interval: 250; running: true; repeat: true; onTriggered: win.now = Date.now() / 1000 }
+    Timer { interval: 500; running: true; repeat: true; onTriggered: win.now = Date.now() / 1000 }
+    // standby fully up: nothing underneath it is drawn (it was all still being rendered behind the black)
+    readonly property bool covered: standbyOn && standby.opacity >= 1
     // the once-a-second tick
     Timer {
         interval: 1000; running: true; repeat: true
@@ -111,9 +116,9 @@ Window {
         transform: Translate { x: win.shiftX; y: win.shiftY }
 
         Home {
-            now: win.now
+            now: visible ? win.now : 0
             opacity: win.screen === "home" ? 1 : 0
-            visible: opacity > 0
+            visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
             onOpenMusic: win.screen = "music"
             onOpenRoom: (name) => { win.roomName = name; win.screen = "room" }
@@ -124,37 +129,37 @@ Window {
         }
         RoomScreen {
             name: win.roomName
-            opacity: win.screen === "room" ? 1 : 0; visible: opacity > 0
+            opacity: win.screen === "room" ? 1 : 0; visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }
         ClockScreen {
-            now: win.now
-            opacity: win.screen === "clock" ? 1 : 0; visible: opacity > 0
+            now: visible ? win.now : 0
+            opacity: win.screen === "clock" ? 1 : 0; visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }
         WeatherScreen {
-            opacity: win.screen === "weather" ? 1 : 0; visible: opacity > 0
+            opacity: win.screen === "weather" ? 1 : 0; visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }
         RemindersScreen {
-            opacity: win.screen === "reminders" ? 1 : 0; visible: opacity > 0
+            opacity: win.screen === "reminders" ? 1 : 0; visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }
         Assistant {
             active: win.screen === "assistant"
-            opacity: active ? 1 : 0; visible: opacity > 0
+            opacity: active ? 1 : 0; visible: opacity > 0 && !win.covered
             // in fast (it should feel instant after "Alexa"), out gently
             Behavior on opacity { NumberAnimation { duration: win.screen === "assistant" ? 150 : 300; easing.type: Easing.OutQuad } }
             onClose: win.screen = "home"
         }
         MusicPlayer {
-            now: win.now
+            now: visible ? win.now : 0
             opacity: win.screen === "music" ? 1 : 0
-            visible: opacity > 0
+            visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
             onPickingChanged: win.sheetOpen = picking || library
@@ -172,7 +177,7 @@ Window {
             Rectangle { anchors.fill: parent; color: "black" }
             Standby {
                 id: plainFace
-                now: win.now
+                now: visible ? win.now : 0
                 night: win.lateNight
                 dayTime: win.dayTime
                 active: win.standbyOn
@@ -182,7 +187,7 @@ Window {
             }
             MusicStandby {
                 id: musicFace
-                now: win.now
+                now: visible ? win.now : 0
                 night: win.lateNight
                 dayTime: win.dayTime
                 opacity: win.musicFace ? 1 : 0

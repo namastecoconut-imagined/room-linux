@@ -39,7 +39,6 @@ class Room(QObject):
         self.airplay.changed.connect(self.musicChanged)
         # what played before, whatever the source — the left side of the cover flow
         self._history: list[dict] = []
-        self._last_key = ""
         self._settle = QTimer(self); self._settle.setSingleShot(True); self._settle.setInterval(1500)
         self._settle.timeout.connect(self._settled)
         self.musicChanged.connect(self._note_track)
@@ -74,8 +73,9 @@ class Room(QObject):
         self.assistant.start()
         from .output import Output
         self.output = Output(self.cfg); self.output.start()
+        self.airplay.changed.connect(self.output.poke)
         self._read_out_volume()
-        self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(5000)
+        self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
         # the room-sound ripple on standby comes from the voice process's mic when voice is on; the Qt mic is only a
         # fallback, off unless asked for (opening it crashed in testing)
         if not self.assistant.available() and (os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True):
@@ -448,10 +448,6 @@ class Room(QObject):
             if self.airplay.showing:          # show the new place straight away; the phone confirms it shortly
                 self.airplay.position, self.airplay.at = float(s), time.time()
                 self.musicChanged.emit()
-
-    @Slot(bool)
-    def setStandby(self, on):
-        self.spotify.relaxed = on
 
     @Slot()
     def listen(self):

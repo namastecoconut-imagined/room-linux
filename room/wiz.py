@@ -6,7 +6,6 @@
 
 Bulbs are matched by MAC, so a bulb that gets a new IP from the router is still found by the broadcast.
 """
-import ipaddress
 import json
 import time
 
@@ -49,7 +48,7 @@ class WizClient(QObject):
 
     def start(self):
         self.discover()
-        t1 = QTimer(self); t1.timeout.connect(self.poll); t1.start(4000)
+        t1 = QTimer(self); t1.timeout.connect(self.poll); t1.start(8000)
         t2 = QTimer(self); t2.timeout.connect(self.discover); t2.start(60000)
         self._timers = (t1, t2)
 
@@ -71,16 +70,6 @@ class WizClient(QObject):
     def discover(self):
         for ip in self.broadcast_addresses() + ["255.255.255.255"] + self.known_ips:
             self._send(self._get, ip)
-
-    def sweep(self):
-        """Ask every address on the local /24 — for routers that drop broadcasts."""
-        for b in self.broadcast_addresses():
-            try:
-                net = ipaddress.ip_network(b.rsplit(".", 1)[0] + ".0/24", strict=False)
-            except ValueError:
-                continue
-            for h in net.hosts():
-                self._send(self._get, str(h))
 
     def poll(self):
         ips = {b.ip for b in self.bulbs.values()} | set(self.known_ips)

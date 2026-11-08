@@ -1,9 +1,7 @@
 """The little status line on standby: ⚡ while on the charger, then how warm the Surface is (Cool / Normal / Warm /
 Hot from its CPU sensor). (Screen brightness is left to the Surface itself.)
 """
-import datetime as dt
 import glob
-import time
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -16,10 +14,7 @@ class Screen(QObject):
         self.cfg = cfg
         self.standby = False
         self.dim = False
-        self.last_presence = time.time()
-        self.alarm_ringing = False
         self.status = ""
-        self._last_pct = None
 
     def start(self):
         self.timer = QTimer(self); self.timer.timeout.connect(self._tick); self.timer.start(20000)
@@ -27,10 +22,6 @@ class Screen(QObject):
 
     def _tick(self):
         self._status()
-
-    def night_hour(self, h: int) -> bool:
-        a, b = int(self.cfg.get("nightStart", 23)), int(self.cfg.get("nightEnd", 7))
-        return (h >= a or h < b) if a > b else (a <= h < b)
 
     def set_state(self, standby: bool, dim: bool):
         self.standby, self.dim = standby, dim

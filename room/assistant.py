@@ -7,7 +7,6 @@ turned down, and back up when it's done.
 """
 import datetime as dt
 import json
-import os
 import re
 import subprocess
 from pathlib import Path
@@ -18,7 +17,6 @@ from . import intents
 from .brain import Brain, Computer
 
 ROOT = Path(__file__).resolve().parent.parent
-NUM = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
 
 
 def dur_text(sec: float) -> str:
@@ -57,7 +55,6 @@ class Assistant(QObject):
         self.level = 0.0
         self.proc: QProcess | None = None
         self._buf = b""
-        self._ducked = None
         self._restart = QTimer(self); self._restart.setSingleShot(True); self._restart.timeout.connect(self.start)
         self._fails = 0
         self._pending = None
@@ -87,7 +84,7 @@ class Assistant(QObject):
         self.proc = QProcess(self)
         env = QProcessEnvironment.systemEnvironment()
         cfg = dict(self.room.cfg.get("voiceSettings") or {})
-        for k in ("deepgramKey", "picovoiceKey"):          # the two service keys live at the top of config.json
+        for k in ("deepgramKey",):                          # the speech key lives at the top of config.json
             if self.room.cfg.get(k):
                 cfg[k] = self.room.cfg[k]
         env.insert("ROOM_VOICE_CFG", json.dumps(cfg))

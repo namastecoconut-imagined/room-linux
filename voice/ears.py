@@ -291,10 +291,24 @@ class Ears:
         self.clock += len(pcm) / RATE
         now = self.clock
         x = pcm.astype(np.float32) / 32768
+        rms = float(np.sqrt(np.mean(x ** 2)))
         self.level_n = getattr(self, "level_n", 0) + 1
-        if self.level_n % 2 == 0:
-            self.emit(ev="level", v=round(float(np.sqrt(np.mean(x ** 2))), 5))
+        if self.level_n % 4 == 0:                    # ~3 a second is enough for the screen's ripple and glow
+            self.emit(ev="level", v=round(rms, 5))
         self.ring = (self.ring + [pcm])[-12:]
+        # a silent room can't be saying "Alexa": the wake model (the biggest steady CPU cost) rests until there's
+        # sound above the room's own quiet, then catches up on the last moments first, so nothing is missed
+        fl = getattr(self, "floor", rms)
+        self.floor = fl + (rms - fl) * (0.3 if rms < fl else 0.002)
+        if rms > max(self.floor * 2.5, 0.002):
+            self.loud_at = now
+        if self.state != "listening" and not self.speaker.busy and now - getattr(self, "loud_at", -9) > 1.5:
+            self.resting = getattr(self, "resting", 0) + 1
+            return
+        if getattr(self, "resting", 0):
+            for c in self.ring[-1 - min(self.resting, 5):-1]:
+                self.wake.predict(c)
+            self.resting = 0
         score = max(self.wake.predict(pcm).values() or [0])
         if score > self.best:
             self.best = score

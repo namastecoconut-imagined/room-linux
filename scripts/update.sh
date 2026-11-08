@@ -21,6 +21,7 @@ fi
 # leftovers from the removed extras (echo canceller, kept lines, helper commands)
 pkill -f "echo-cancel.conf" 2>/dev/null || true
 rm -rf ~/.local/share/room/voice/echo-cancel.conf ~/.local/share/room/voice/lines ~/.local/share/room/bench \
-       ~/.local/bin/room-heard ~/.local/bin/room-mic-compare ~/.local/bin/room-stt-bench
+       ~/.local/bin/room-heard ~/.local/bin/room-mic-compare ~/.local/bin/room-stt-bench \
+       ~/room-heard ~/room-mic-compare ~/room-check-*.wav
 systemctl --user restart room.service
 echo "Room updated to $(git log -1 --format='%h · %s')"

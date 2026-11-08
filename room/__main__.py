@@ -74,7 +74,7 @@ def main():
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     signal.signal(signal.SIGTERM, lambda *_: app.quit())
     # let Python see Ctrl-C while Qt is running
-    t = QTimer(); t.start(500); t.timeout.connect(lambda: None)
+    t = QTimer(); t.start(2000); t.timeout.connect(lambda: None)
 
     for f in (ROOT / "assets" / "fonts").glob("*.ttf"):
         QFontDatabase.addApplicationFont(str(f))

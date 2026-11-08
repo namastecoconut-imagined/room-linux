@@ -291,6 +291,12 @@ class Ears:
         buf = io.BytesIO()
         with wave.open(buf, "wb") as w:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(audio.tobytes())
+        try:                                         # the last thing heard, to listen back to: pw-play ~/.local/state/room/last-heard.wav
+            p = os.path.expanduser("~/.local/state/room/last-heard.wav")
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p, "wb").write(buf.getvalue())
+        except Exception:
+            pass
         prompt = "Alexa. " + ", ".join(self.words) + "." if self.words else ""
         text = ""
         t0 = time.time()
@@ -372,14 +378,34 @@ def main():
                 swap = True
                 rec.stdout.read(max(0, int.from_bytes(head[4:8], "big") - 24))
             log("mic stream:", "au, big-endian" if swap else "raw")
+        # the mic is read on its own thread, straight into a queue, so pw-record never waits on us — if the wake word
+        # or the screen ever make processing late, the sound arrives late but whole (no gaps, which whisper hears as
+        # noise)
+        qa: queue.Queue = queue.Queue()
+
+        def reader(proc=rec, swap=swap):
+            while True:
+                b = proc.stdout.read(n)
+                if not b or len(b) < n:
+                    qa.put(None); return
+                qa.put(np.frombuffer(b, dtype=">i2" if swap else "<i2").astype(np.int16))
+        threading.Thread(target=reader, daemon=True).start()
+        slow, count, behind_said = 0.0, 0, 0.0
         while True:
-            b = rec.stdout.read(n)
-            if not b or len(b) < n:
+            chunk = qa.get()
+            if chunk is None:
                 break
+            t0 = time.time()
             try:
-                ears.feed(np.frombuffer(b, dtype=">i2" if swap else "<i2").astype(np.int16))
+                ears.feed(chunk)
             except Exception as e:
                 log("feed:", repr(e))
+            slow += time.time() - t0; count += 1
+            if count >= 375:                             # every 30 s of sound
+                avg = slow / count * 1000
+                if avg > 40 or qa.qsize() > 6:
+                    log(f"working {avg:.0f} ms per 80 ms of sound · {qa.qsize()} waiting")
+                slow, count = 0.0, 0
         log("mic stopped — reopening in 2 s")
         time.sleep(2)
 

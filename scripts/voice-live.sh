@@ -30,6 +30,6 @@ w = np.sqrt(np.mean(x[: len(x) // 12000 * 12000].reshape(-1, 12000) ** 2, 1))
 print("Reaching the Surface's speakers, every ½ s:")
 print("  " + " ".join(f"{v:.2f}" for v in w))
 P
-echo "Sound streams while it ran:"; sort -u -k2 /tmp/rl-streams.txt | sort -n | uniq | head -40
+echo "Sound streams while it ran (second, name, volume):"; sort -n /tmp/rl-streams.txt | head -80
 journalctl --user -u room --since "-40 s" --no-pager | grep -E "voice|aura|Alexa|heard" | tail -12
 rm -f /tmp/rl.raw /tmp/rl-streams.txt

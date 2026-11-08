@@ -101,7 +101,9 @@ def voice_out():
     speakers, not through the speaker tuning (made for music, it turned speech down). As loud as the volume slider when
     the Surface is the output, but never below voiceMinLevel (75 %); with music on another speaker, at full.
     "voiceDirect": false sends it wherever the system's output is instead."""
-    props = ["-P", "{ application.name = \"Room voice\" }"]
+    # state.restore-props off: WirePlumber otherwise puts back a volume it remembered for "Room voice" (a low one, from
+    # earlier versions) over the one asked for here — the chime, a different stream, was loud while the voice was quiet
+    props = ["-P", "{ application.name = \"Room voice\" state.restore-props = false state.restore-target = false }"]
     floor = float(CFG.get("voiceMinLevel", 0.75))
     try:
         default, raw, vol = _sinks()

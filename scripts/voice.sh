@@ -22,6 +22,8 @@ command -v cmake >/dev/null || { echo "✗ cmake didn't install"; exit 1; }
 
 echo "▸ Voice: its own Python (3.12) and packages"
 cd "$HERE/voice"
+# Fedora's uv doesn't fetch Pythons by itself — ask it to (once; it's kept in ~/.local/share/uv)
+uv python install -q 3.12
 [ -x .venv/bin/python ] || uv venv -q --python 3.12 .venv
 uv pip install -q --python .venv/bin/python -r requirements.txt
 uv pip install -q --python .venv/bin/python --no-deps "openwakeword==0.6.0"

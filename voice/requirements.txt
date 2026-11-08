@@ -1,0 +1,9 @@
+# Room's voice process (its own Python, voice/.venv). openwakeword is installed separately with --no-deps:
+# its declared tflite-runtime dependency has no wheels for current Pythons, and Room uses its ONNX models instead.
+numpy
+scipy
+requests
+tqdm
+soundfile
+onnxruntime
+kokoro-onnx>=0.4

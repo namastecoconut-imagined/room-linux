@@ -85,6 +85,7 @@ def main():
 
     room.start()
     code = app.exec()
+    room.assistant.stop()   # the voice process goes with Room
     del engine          # tear the screens down before the object they read from
     sys.exit(code)
 

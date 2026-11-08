@@ -41,6 +41,17 @@ Window {
     readonly property bool dayTime: { var h = new Date(now * 1000).getHours(); return h >= 7 && h < 18 }
     property bool sheetOpen: false        // speaker picker / library over the player
 
+    // Alexa: the wake word (or a tap) brings up the assistant from anywhere, standby included; a few seconds after
+    // the answer it goes back to where you were
+    readonly property string voiceState: room.voice.state || "off"
+    readonly property bool talking: voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking"
+    property string beforeVoice: "home"
+    onVoiceStateChanged: {
+        if (voiceState === "listening" && screen !== "assistant") { beforeVoice = screen; wake(); screen = "assistant" }
+        if (voiceState === "idle" && screen === "assistant") voiceClose.restart()
+        else voiceClose.stop()
+    }
+    Timer { id: voiceClose; interval: 5000; onTriggered: if (win.screen === "assistant" && !win.talking) win.screen = win.beforeVoice === "assistant" ? "home" : win.beforeVoice }
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
@@ -52,7 +63,7 @@ Window {
         interval: 1000; running: true; repeat: true
         onTriggered: {
             var t = Date.now() / 1000
-            if (win.screen === "music" || win.sheetOpen || win.alerting) win.lastTouch = t   // the player (and an alert) keeps it awake
+            if (win.screen === "music" || win.sheetOpen || win.alerting || win.talking) win.lastTouch = t   // the player (and an alert) keeps it awake
             var wait = win.lateNight ? win.timing.nightStandbySec : win.timing.standbySec
             var want = t - win.lastTouch > wait
             if (want && !win.standbyOn) win.enterStandby()
@@ -82,7 +93,7 @@ Window {
             onOpenClock: win.screen = "clock"
             onOpenWeather: win.screen = "weather"
             onOpenReminders: win.screen = "reminders"
-            onOpenAssistant: { win.screen = "assistant"; room.listen() }
+            onOpenAssistant: { win.beforeVoice = "home"; win.screen = "assistant"; room.listen() }
         }
         RoomScreen {
             name: win.roomName

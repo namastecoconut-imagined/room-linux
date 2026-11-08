@@ -47,6 +47,19 @@ journalctl --user -u room -f                                          # live log
 Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it (same for `fade.frag`):
 `pyside6-qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o shaders/standby.frag.qsb shaders/standby.frag`
 
-## Coming next
+## Voice
 
-The full music player (cover flow, volume, playlists), then voice ("Alexa" wake word, Whisper speech, Claude replies), then AirPlay (shairport-sync).
+Set up once with `bash scripts/voice.sh` (install.sh runs it too). Everything runs on the Surface, offline:
+
+- **Wake word** "Alexa" — openWakeWord's pretrained model, listening all the time (and while Room talks, so "Alexa"
+  cuts an answer off). Reads the echo-cancelled mic PipeWire provides (`room-ec-source`), so music playing from the
+  Surface is taken out of what it hears.
+- **Speech** — whisper.cpp's server (`room-whisper.service`, model base.en; `WHISPER_MODEL=small.en bash
+  scripts/voice.sh` for the more accurate one), primed with your room and playlist names.
+- **Understanding** — `room/intents.py`, plain rules: lights, scenes, timers, alarms, reminders, weather, time, calendar,
+  music. `room/assistant.py` acts on them and answers.
+- **Answers** — Kokoro (voice `af_heart`), sentence by sentence through `pw-play`. Music is turned down while you talk.
+
+The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on
+and restarts it. Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"voice": "bf_emma",
+"wakeThreshold": 0.5, "speed": 1.05, "mic": "<pipewire node>"}`.

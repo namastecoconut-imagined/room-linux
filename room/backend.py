@@ -10,6 +10,7 @@ from .lights import Lights
 from .screen import Screen
 from .spotify import Spotify
 from .things import Things
+from .assistant import Assistant
 from .weather import Weather
 from . import demo
 
@@ -23,6 +24,7 @@ class Room(QObject):
     statusChanged = Signal()
     thingsChanged = Signal()
     alertChanged = Signal()
+    voiceChanged = Signal()
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -55,6 +57,9 @@ class Room(QObject):
         self._things.alertChanged.connect(self.alertChanged)
         if self.demo:
             demo.fill_things(self._things)
+        self.assistant = Assistant(self)
+        self.assistant.changed.connect(self.voiceChanged)
+        self.assistant.levelChanged.connect(self._voice_level)
 
     def start(self):
         self._things.start()
@@ -66,10 +71,12 @@ class Room(QObject):
         self.lights.start()
         self.spotify.start()
         self.airplay.start()
+        self.assistant.start()
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(5000)
-        # the room-sound ripple on standby: off until it's proven on this machine (opening the mic crashed in testing)
-        if os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True:
+        # the room-sound ripple on standby comes from the voice process's mic when voice is on; the Qt mic is only a
+        # fallback, off unless asked for (opening it crashed in testing)
+        if not self.assistant.available() and (os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True):
             self._start_mic()
 
     # ---------------------------------------------------------------- what the screens read
@@ -188,10 +195,27 @@ class Room(QObject):
         self.screen.set_state(standby, dim)
         self.spotify.relaxed = standby
 
-    @Property(bool, constant=True)
+    @Property(bool, notify=voiceChanged)
     def micOn(self):
         """Whether the room's sound is being listened to (it drives the standby ripple and the music beat)."""
-        return os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True
+        return self.assistant.state != "off" or os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True
+
+    @Property("QVariantMap", notify=voiceChanged)
+    def voice(self):
+        """For the Alexa screen: state (off · idle · listening · thinking · speaking), what was heard, the answer."""
+        a = self.assistant
+        if self.demo and os.environ.get("ROOM_DEMO_VOICE"):
+            st = os.environ["ROOM_DEMO_VOICE"]
+            return {"state": st, "heard": "" if st == "listening" else "Turn the living room to forty percent",
+                    "reply": "Living room, 40 percent." if st == "speaking" else "", "error": "", "on": True}
+        return {"state": a.state, "heard": a.heard, "reply": a.reply, "error": a.error, "on": a.state != "off"}
+
+    def _voice_level(self):
+        import math
+        db = 20 * math.log10(max(self.assistant.level, 1e-5))
+        v = max(0.0, min(1.0, (db + 60) / 45))
+        self._level += (v - self._level) * (0.5 if v > self._level else 0.12)
+        self.levelChanged.emit()
 
     @Property(float, notify=levelChanged)
     def level(self):
@@ -358,7 +382,11 @@ class Room(QObject):
 
     @Slot()
     def listen(self):
-        print("[room] voice: coming in the voice stage (wake word + Whisper)")
+        self.assistant.listen()
+
+    @Slot()
+    def cancelVoice(self):
+        self.assistant.cancel()
 
     # ---------------------------------------------------------------- room sound for the standby ripple
     def _start_mic(self):

@@ -71,14 +71,11 @@ echo "▸ room-update command"
 mkdir -p ~/.local/bin
 cat > ~/.local/bin/room-update <<UPD
 #!/usr/bin/env bash
-set -e
-cd "$HERE"
-git pull --ff-only
-"$HERE/.venv/bin/pip" install -q -r requirements.txt
-systemctl --user restart room.service
-echo "Room updated to \$(git log -1 --format='%h · %s')"
+exec bash "$HERE/scripts/update.sh" "\$@"
 UPD
 chmod +x ~/.local/bin/room-update
+
+bash "$HERE/scripts/voice.sh"
 
 systemctl --user restart room.service
 echo "✓ Room is running. Update any time with:  room-update"

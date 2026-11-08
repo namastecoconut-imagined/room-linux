@@ -28,6 +28,7 @@ DG_KEY = CFG.get("deepgramKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
 HTTP = requests.Session()                      # kept alive: from India a fresh TLS handshake costs ~0.5 s per answer
+DUMP = os.environ.get("ROOM_VOICE_DUMP")          # (checks) a copy of exactly what's sent to the speakers
 CUES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cues")
 
 
@@ -290,7 +291,11 @@ class Speaker:
                     cut = len(chunk) // 2 * 2
                     chunk, odd = chunk[:cut], chunk[cut:]
                     x = np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768
-                    self.proc.stdin.write((shape(x) * 32000).astype("<i2").tobytes())
+                    out = (shape(x) * 32000).astype("<i2").tobytes()
+                    self.proc.stdin.write(out)
+                    if DUMP:
+                        with open(DUMP, "ab") as f:
+                            f.write(out)
         except Exception as e:
             if g == self.gen:
                 log("aura play:", repr(e))

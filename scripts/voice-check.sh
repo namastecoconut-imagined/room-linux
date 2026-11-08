@@ -21,14 +21,16 @@ echo "1) the chime"
 rec 3 /tmp/rc.raw; sleep 0.5
 pw-play --target "$RAW" --volume 0.9 "$HERE/voice/cues/listen.wav"; wait
 echo "2) Room's voice"
-rec 7 /tmp/rv.raw; sleep 0.5
-(echo '{"cmd":"say","text":"This is how loud Room sounds when it answers you."}'; sleep 6) | \
-  ROOM_VOICE_CFG="$CFG" "$PY" "$HERE/voice/roomvoice.py" 2>&1 | grep -vE '"ev"' | sed 's/^/    /'
+rm -f /tmp/rsent.raw
+rec 14 /tmp/rv.raw; sleep 0.5
+(echo '{"cmd":"say","text":"This is how loud Room sounds when it answers you."}'; sleep 12) | \
+  ROOM_VOICE_DUMP=/tmp/rsent.raw ROOM_VOICE_CFG="$CFG" "$PY" "$HERE/voice/roomvoice.py" 2>&1 | sed 's/^/    /'
 wait
 echo "Reaching the speakers:"
 measure /tmp/rc.raw chime; measure /tmp/rv.raw "Room voice"
+[ -s /tmp/rsent.raw ] && measure /tmp/rsent.raw "sent" || echo "  (Room's voice sent nothing — the online voice didn't play)"
 echo "Volumes:"; wpctl get-volume @DEFAULT_AUDIO_SINK@ | sed 's/^/  output: /'
 amixer -c 0 sget Master 2>/dev/null | tail -1 | sed 's/^/  chip Master:/'
 grep -i "room" ~/.local/state/wireplumber/stream-properties 2>/dev/null | sed 's/^/  remembered: /'
-rm -f /tmp/rc.raw /tmp/rv.raw
+rm -f /tmp/rc.raw /tmp/rv.raw /tmp/rsent.raw
 echo "(recordings: ~/room-check-chime.wav and ~/room-check-room.wav)"

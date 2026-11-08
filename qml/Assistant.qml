@@ -66,7 +66,7 @@ Item {
         Behavior on y { NumberAnimation { duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.3, 0, 0.2, 1, 1, 1] } }
         Behavior on width { NumberAnimation { duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.3, 0, 0.2, 1, 1, 1] } }
         Behavior on height { NumberAnimation { duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.3, 0, 0.2, 1, 1, 1] } }
-        Behavior on opacity { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: vv.mode === "gone" ? 600 : 220; easing.type: Easing.OutCubic } }
         property size res: Qt.size(width, height)
         property real radius: 60 * vv.s
         property real blur: 16 * vv.s

@@ -52,7 +52,7 @@ Window {
     readonly property bool talking: voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking"
     property string beforeVoice: "home"
     onVoiceStateChanged: {
-        if (voiceState === "listening" && screen !== "assistant") { beforeVoice = screen; wake(); screen = "assistant" }
+        if (voiceState === "listening" && screen !== "assistant") { beforeVoice = screen; screen = "assistant"; wake() }
         if (voiceState === "idle" && screen === "assistant") voiceClose.restart()
         else voiceClose.stop()
     }
@@ -128,7 +128,8 @@ Window {
         Assistant {
             active: win.screen === "assistant"
             opacity: active ? 1 : 0; visible: opacity > 0
-            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+            // in fast (it should feel instant after "Alexa"), out gently
+            Behavior on opacity { NumberAnimation { duration: win.screen === "assistant" ? 150 : 300; easing.type: Easing.OutQuad } }
             onClose: win.screen = "home"
         }
         MusicPlayer {
@@ -147,7 +148,8 @@ Window {
             anchors.fill: parent
             opacity: win.standbyOn ? 1 : 0
             visible: opacity > 0
-            Behavior on opacity { NumberAnimation { duration: 900; easing.type: Easing.OutCubic } }
+            // "Alexa" from standby: out of the way at once
+            Behavior on opacity { NumberAnimation { duration: !win.standbyOn && win.screen === "assistant" ? 150 : 900; easing.type: Easing.OutCubic } }
             Rectangle { anchors.fill: parent; color: "black" }
             Standby {
                 id: plainFace

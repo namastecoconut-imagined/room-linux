@@ -47,7 +47,7 @@ DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 # with Deepgram: a lenient local trigger, then Deepgram checks it really was "Alexa" before Room reacts
 CANDIDATE = float(CFG.get("wakeCandidate", 0.12))
 WAKE_RE = re.compile(r"\b(alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa|alexis's|elexa|a lexa)\b", re.I)
-CONFIDENT = float(CFG.get("wakeConfident", 0.3))          # above this, wake straight away without asking Deepgram
+CONFIDENT = float(CFG.get("wakeConfident", 0.2))   # from here Room opens at once (no asking Deepgram first)          # above this, wake straight away without asking Deepgram
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
 # one kept-alive connection for the voice: from India a fresh TLS handshake to Deepgram costs ~0.5 s per answer
@@ -797,6 +797,11 @@ class Ears:
                     and not getattr(dg, "closing", False)):
                 dg.closing = True
                 dg.close()
+            # a "maybe Alexa" that nobody follows up within 2.5 s: it was the room — close quietly, soon
+            if self.provisional and not said and now - self.started > 2.5 and getattr(self, "spoke_at", 0) <= self.started + 0.3:
+                dg.close()
+                self.started = now + 999
+                return
             if now - self.started > 10 or (now - self.started > self.wait and not said):
                 dg.close()
                 self.started = now + 999            # don't ask twice

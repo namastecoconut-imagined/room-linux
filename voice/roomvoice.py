@@ -40,11 +40,37 @@ def log(*a):
     print("[voice]", *a, file=sys.stderr, flush=True)
 
 
-def louder(x: np.ndarray) -> np.ndarray:
-    """Room's voice, made louder for the Surface's small speakers: gain (×2.5 by default, 'loudness' scales it) with a
-    soft limiter, so peaks round off instead of crackling. Float in, float out (−1…1)."""
-    g = 3.5 * float(CFG.get("loudness", 1.0))
-    return np.tanh(x * g) / np.tanh(g) if g > 1 else x * g
+class Voicer:
+    """Room's voice, shaped for the Surface's small speakers, which can't play bass and are quiet on Linux:
+      1. the lows (under ~250 Hz) taken out — they only use up the speakers' headroom without being heard,
+      2. presence lifted (+6 dB around 2.8 kHz) — where speech is understood, and where small speakers sound loudest,
+      3. an even level (every sentence as loud as the last), then a soft limiter (peaks round off, never crackle).
+    Streaming, so it works on Aura's chunks as they arrive. 'loudness' in voiceSettings scales the drive."""
+
+    def __init__(self, rate):
+        from scipy.signal import butter
+        self.hp = butter(2, 250, "highpass", fs=rate, output="sos")
+        f0, gain_db, q = 2800.0, 6.0, 0.9                 # RBJ peaking EQ
+        A, w0 = 10 ** (gain_db / 40), 2 * np.pi * f0 / rate
+        al = np.sin(w0) / (2 * q)
+        bb = np.array([1 + al * A, -2 * np.cos(w0), 1 - al * A])
+        aa = np.array([1 + al / A, -2 * np.cos(w0), 1 - al / A])
+        self.pk = np.concatenate([bb / aa[0], aa / aa[0]])[None, :]
+        self.z1 = np.zeros((self.hp.shape[0], 2)); self.z2 = np.zeros((1, 2))
+        self.level = 0.0
+        self.drive = 3.0 * float(CFG.get("loudness", 1.0))
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        from scipy.signal import sosfilt
+        if not len(x):
+            return x
+        y, self.z1 = sosfilt(self.hp, x, zi=self.z1)
+        y, self.z2 = sosfilt(self.pk, y, zi=self.z2)
+        r = float(np.sqrt(np.mean(y ** 2)))
+        if r > 0.004:                                       # speech, not a pause: follow its loudness
+            self.level = r if self.level == 0 else self.level + (r - self.level) * (0.5 if r > self.level else 0.1)
+        g = float(np.clip(0.22 / max(self.level, 1e-4), 1.0, 12.0)) * self.drive / 3.0
+        return np.tanh(y * g * 3.0) / np.tanh(3.0) * 0.98
 
 
 def _sinks():
@@ -224,6 +250,7 @@ class Speaker:
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         first = True
         odd = b""
+        shape = Voicer(24000)
         try:
             for chunk in r.iter_content(chunk_size=4800):
                 if g != self.gen:
@@ -236,7 +263,7 @@ class Speaker:
                     cut = len(chunk) // 2 * 2
                     chunk, odd = chunk[:cut], chunk[cut:]
                     x = np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768
-                    self.proc.stdin.write((louder(x) * 32000).astype("<i2").tobytes())
+                    self.proc.stdin.write((shape(x) * 32000).astype("<i2").tobytes())
         except Exception as e:
             if g == self.gen:
                 log("aura play:", repr(e))
@@ -262,9 +289,7 @@ class Speaker:
                     f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
                     # Kokoro comes out quiet: every sentence to the same loudness (by its average, not its peak, so a
                     # short "Okay." isn't louder than a long answer)
-                    rms = float(np.sqrt(np.mean(a ** 2))) if len(a) else 0.0
-                    if rms > 0:
-                        a = louder(np.clip(a * (0.16 / rms), -1, 1))
+                    a = Voicer(sr)(np.asarray(a, dtype=np.float64))
                     sf.write(f.name, a, sr); q.put(f.name)
                 except Exception as e:
                     log("tts:", e)
@@ -307,6 +332,20 @@ def main():
         emit(ev="error", msg="pw-play is missing (pipewire-utils)")
         return
     speaker = Speaker()
+    # the Surface's speakers themselves at full: the volume slider works on the output in front of them (the speaker
+    # tuning, or a Bluetooth speaker), so a lowered level here only ever made Room's voice quiet
+    try:
+        for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
+            props = (n.get("info") or {}).get("props") or {}
+            name = props.get("node.name", "")
+            if props.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.pci") and "hdmi" not in name:
+                out = subprocess.run(["wpctl", "get-volume", str(n["id"])], capture_output=True, text=True, timeout=2).stdout
+                if "1.00" not in out or "MUTED" in out:
+                    subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=2)
+                    subprocess.run(["wpctl", "set-mute", str(n["id"]), "0"], timeout=2)
+                    log(f"the Surface's speakers were at {out.strip()} — set to full")
+    except Exception as e:
+        log("speakers:", repr(e))
     ears = None
     if CFG.get("listen") is not False:
         try:

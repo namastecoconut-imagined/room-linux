@@ -3,6 +3,7 @@
 #   bash scripts/voice.sh                      (whisper model: base.en)
 #   WHISPER_MODEL=small.en bash scripts/voice.sh   (more accurate, ~2× slower)
 set -euo pipefail
+trap 'echo "✗ Voice setup stopped at line $LINENO — paste the lines above to Claude"' ERR
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 DATA="$HOME/.local/share/room/voice"
 WDIR="$HOME/.local/share/room/whisper"
@@ -11,7 +12,13 @@ MODEL="${WHISPER_MODEL:-base.en}"
 mkdir -p "$DATA/oww" "$WDIR" "$SRC" "$HOME/.local/bin"
 
 echo "▸ Voice: system packages"
-sudo dnf install -y -q cmake gcc-c++ git pipewire-utils uv curl >/dev/null
+sudo dnf install -y -q --skip-unavailable cmake gcc-c++ git pipewire-utils curl python3-pip uv
+if ! command -v uv >/dev/null; then
+  echo "  uv isn't packaged here — installing it with pip"
+  python3 -m pip install -q --user uv
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+command -v cmake >/dev/null || { echo "✗ cmake didn't install"; exit 1; }
 
 echo "▸ Voice: its own Python (3.12) and packages"
 cd "$HERE/voice"

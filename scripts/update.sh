@@ -5,7 +5,8 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HERE"
 git pull --ff-only
 "$HERE/.venv/bin/pip" install -q -r requirements.txt
-if [ -x "$HERE/voice/.venv/bin/python" ] && command -v uv >/dev/null; then
+if [ -x "$HERE/voice/.venv/bin/python" ] && { command -v uv || [ -x "$HOME/.local/bin/uv" ]; } >/dev/null; then
+  export PATH="$HOME/.local/bin:$PATH"
   uv pip install -q --python "$HERE/voice/.venv/bin/python" -r voice/requirements.txt
 fi
 systemctl --user restart room.service

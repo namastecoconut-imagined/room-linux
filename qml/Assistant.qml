@@ -1,7 +1,7 @@
 import QtQuick
 
-// Alexa — a ring of dots that moves with your voice, what you said large underneath, and the answer below it.
-// Listening: the ring swells with the mic. Thinking: it turns slowly. Speaking: it breathes. Tap the ring to talk
+// Alexa — the standby dot field, rippling out from the middle with your voice; what you said large underneath and
+// the answer below it. Thinking: slow rings. Speaking: it ripples with Room's own voice. Tap the middle to talk
 // again; × (or a few seconds after the answer) goes back.
 Item {
     id: as
@@ -12,34 +12,32 @@ Item {
     signal close()
     property real t: 0
     Timer { interval: 40; repeat: true; running: as.active && as.visible; onTriggered: as.t += 0.04 }
-    property real lvl: st === "listening" ? room.level : st === "speaking" ? 0.35 + 0.25 * Math.sin(t * 5.5) : 0.15
+    property real lvl: st === "listening" ? Math.min(1, room.level * 1.4) : st === "speaking" ? 0.45 + 0.3 * Math.sin(t * 5.5) : 0.08
     Behavior on lvl { NumberAnimation { duration: 90 } }
 
-    Glow { anchors.centerIn: ring; width: 1040; height: 1040; color: Theme.accent; strength: 0.12 + 0.14 * as.lvl }
+    // the rippling dot field (one GPU shader): the voice sends rings out from the middle; thinking, slow rings
+    ShaderEffect {
+        x: 0; y: 0; width: as.width; height: as.height
+        property real t: as.t
+        property real lvl: as.lvl
+        property real think: as.st === "thinking" ? 1 : 0
+        property size res: Qt.size(width, height)
+        property point centre: Qt.point(684, 290)
+        fragmentShader: shaderDir + "ripple.frag.qsb"
+    }
     RoundBtn { x: 56; y: 48; size: 64; icon: "close"; iconSize: 22; onTapped: { room.cancelVoice(); as.close() } }
-
+    // tap the middle to talk again
     Press {
         id: ring
         x: 684 - 200; y: 290 - 200; width: 400; height: 400
-        pressScale: 0.97
+        pressScale: 1
         onTapped: room.listen()
-        Repeater {
-            model: 48
-            Rectangle {
-                readonly property real a: index / 48 * Math.PI * 2 + (as.st === "thinking" ? as.t * 0.9 : 0)
-                readonly property real wob: 0.5 + 0.5 * Math.sin(index * 1.7 + as.t * 3)
-                readonly property real r: 130 + wob * 34 * (0.25 + as.lvl)
-                x: 200 + Math.cos(a) * r - 6; y: 200 + Math.sin(a) * r - 6
-                width: 12; height: 12; radius: 6
-                color: Qt.rgba(1, 207 / 255, 156 / 255, (as.st === "off" ? 0.2 : 0.35) + (as.st === "off" ? 0.2 : 0.55) * wob)
-            }
-        }
         Icon { anchors.centerIn: parent; visible: as.st === "idle" || as.st === "off"; name: "mic"; size: 40; color: Qt.rgba(1, 207 / 255, 156 / 255, as.st === "off" ? 0.4 : 0.8) }
     }
 
     SectionCap {
         anchors.horizontalCenter: parent.horizontalCenter; y: 528
-        text: as.st === "listening" ? "Listening" : as.st === "thinking" ? "One moment" : as.st === "speaking" ? "" : as.st === "off" ? "Voice is off" : (as.v.heard ? "" : "Tap the ring or say “Alexa”")
+        text: as.st === "listening" ? "Listening" : as.st === "thinking" ? "One moment" : as.st === "speaking" ? "" : as.st === "off" ? "Voice is off" : (as.v.heard ? "" : "Tap or say “Alexa”")
         color: Qt.rgba(1, 207 / 255, 156 / 255, 0.8)
     }
     T {

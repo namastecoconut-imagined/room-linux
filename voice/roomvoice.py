@@ -76,14 +76,17 @@ class Voicer:
 
 
 def _sinks():
-    """(default sink name, the Surface's own speaker sink name, the default's volume)."""
+    """(default sink name, the Surface's speakers — through the Dolby tuning if there is one, it makes them much
+    louder — and the default's volume)."""
     nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]")
-    raw, default = None, None
+    raw, default, tuned = None, None, None
     for n in nodes:
         props = (n.get("info") or {}).get("props") or {}
         name = props.get("node.name", "")
         if props.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.pci") and "hdmi" not in name:
             raw = name
+        if props.get("media.class") == "Audio/Sink" and "dolby" in (name + props.get("node.description", "")).lower():
+            tuned = name                      # the speaker tuning, which plays on the Surface's speakers
         if n.get("type") == "PipeWire:Interface:Metadata" and (n.get("props") or {}).get("metadata.name") == "default":
             for m in n.get("metadata") or []:
                 if m.get("key") == "default.audio.sink" and isinstance(m.get("value"), dict):
@@ -93,7 +96,7 @@ def _sinks():
         vol = 0.0 if "MUTED" in out else float(out.split()[1])
     except Exception:
         vol = 1.0
-    return default, raw, vol
+    return default, tuned or raw, vol
 
 
 def voice_out():
@@ -108,6 +111,14 @@ def voice_out():
         return ["--volume", "1.0", *props]
     elsewhere = bool(default) and (default.startswith("bluez") or default.startswith("alsa_output.usb"))
     if elsewhere and raw and CFG.get("voiceDirect") is not False:
+        # nothing else plays on the Surface while music is on Bluetooth: its speakers (tuning included) at full
+        try:
+            for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
+                if ((n.get("info") or {}).get("props") or {}).get("node.name") == raw:
+                    subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=2)
+                    subprocess.run(["wpctl", "set-mute", str(n["id"]), "0"], timeout=2)
+        except Exception:
+            pass
         return ["--target", raw, "--volume", f"{min(1.0, float(CFG.get('voiceVolume', 1.0))):.2f}", *props]
     LEVEL.lift()
     return ["--volume", f"{min(1.0, float(CFG.get('voiceVolume', 1.0))):.2f}", *props]

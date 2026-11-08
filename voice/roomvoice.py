@@ -349,8 +349,16 @@ _DANGLE = {"in", "on", "at", "to", "for", "of", "the", "a", "an", "and", "or", "
            "play", "turn", "what's", "what", "how", "about", "by", "into", "some", "until", "till"}
 
 
+def wake_only(text: str) -> bool:
+    """Just "Alexa" so far (maybe with Room's own voice before it) — the request is still to come."""
+    return bool(WAKE_RE.search(text or "")) and not Ears.strip_wake(text)
+
+
 def dangling(text: str) -> bool:
-    """Ends mid-sentence ("what's the weather tomorrow in") — wait for the rest."""
+    """Ends mid-sentence ("what's the weather tomorrow in"), or nothing yet after "Alexa" — wait for the rest. (Ending
+    the stream there and opening a new one lost whatever was said in between — "what's the weather" of "…tomorrow".)"""
+    if wake_only(text):
+        return True
     w = re.sub(r"[^a-z' ]", "", (text or "").lower()).split()
     return bool(w) and w[-1] in _DANGLE and not (text or "").rstrip().endswith((".", "?", "!"))
 
@@ -765,7 +773,8 @@ class Ears:
                 self.spoke_at = now
             said = dg.text()
             quiet = now - getattr(self, "spoke_at", now)
-            if (said and now - self.started > 1.0 and (quiet > 0.7 and not dangling(said) or quiet > 2.0)
+            if (said and now - self.started > 1.0
+                    and (quiet > 0.7 and not dangling(said) or quiet > (self.wait - 1 if wake_only(said) else 2.0))
                     and not getattr(dg, "closing", False)):
                 dg.closing = True
                 dg.close()

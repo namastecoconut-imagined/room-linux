@@ -68,27 +68,13 @@ systemctl --user daemon-reload
 systemctl --user enable --now room-whisper.service >/dev/null
 systemctl --user restart room-whisper.service
 
-echo "▸ Voice: echo cancellation (so Room can hear you over music played from the Surface)"
-mkdir -p ~/.config/pipewire/pipewire.conf.d
-cat > ~/.config/pipewire/pipewire.conf.d/60-room-echo-cancel.conf <<'CONF'
-# Room: an echo-cancelled mic. The reference is whatever the Surface is playing (monitor mode), so music and Room's
-# own voice are taken out of what the wake word and speech recognition hear.
-context.modules = [
-  { name = libpipewire-module-echo-cancel
-    args = {
-      library.name  = aec/libspa-aec-webrtc
-      monitor.mode  = true
-      capture.props = { node.name = "room-ec-capture" node.passive = true }
-      source.props  = { node.name = "room-ec-source" node.description = "Room mic (echo cancelled)" }
-    }
-  }
-]
-CONF
-systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
-sleep 2
-systemctl --user restart room-airplay.service 2>/dev/null || true
-if pw-cli ls Node 2>/dev/null | grep -q room-ec-source; then echo "  ✓ echo-cancelled mic ready"
-else echo "  ! echo cancellation didn't start — Room will use the plain mic"; fi
+echo "▸ Voice: echo cancellation stays off (on the Surface it distorted the mic and made the speakers crackle)"
+if [ -f ~/.config/pipewire/pipewire.conf.d/60-room-echo-cancel.conf ]; then
+  rm -f ~/.config/pipewire/pipewire.conf.d/60-room-echo-cancel.conf
+  systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
+  sleep 2
+  systemctl --user restart room-airplay.service 2>/dev/null || true
+fi
 
 echo "▸ room-update now also keeps voice up to date"
 cat > ~/.local/bin/room-update <<UPD

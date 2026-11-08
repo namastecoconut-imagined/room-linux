@@ -642,6 +642,15 @@ class Ears:
                 log(f"mic input fixed at {int(v * 100)}%")
             except Exception as e:
                 log("mic input:", e)
+        # PipeWire sets the codec's own controls from its volume, so these go after it (and win)
+        time.sleep(0.5)
+        if CFG.get("micCapture") is not None:
+            c = int(CFG["micCapture"])
+            try:
+                subprocess.run(["amixer", "-q", "-c", "0", "cset", "name=Capture Volume", f"{c},{c}"], timeout=3)
+                log(f"mic capture {(c - 67) * 0.5:+.1f} dB")
+            except Exception as e:
+                log("mic capture:", e)
         if CFG.get("micBoost") is not None:
             b = int(CFG["micBoost"])
             try:

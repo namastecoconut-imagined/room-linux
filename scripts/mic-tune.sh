@@ -1,91 +1,79 @@
 #!/usr/bin/env bash
-# Measures the Surface's mic at each preamp boost (+0 … +30 dB) while you talk, and keeps the loudest one that doesn't
-# distort. Also shows what Windows' driver set for this model (subsystem 10CC). Saves micBoost and micVolume to Room's
-# config.json and restarts Room. Takes about a minute; you talk four times.
+# Finds the cleanest mic setting. The Surface's mic has two gains in the Realtek chip: a preamp ("Internal Mic Boost",
+# +0…+30 dB, before the converter) and a digital gain ("Capture Volume", −33.5…+30 dB, after it). Preamp gain lifts
+# your voice above the chip's own hiss; digital gain lifts both. So: measure the hiss at every combination (in
+# silence), measure your voice once, and pick the combination with the best voice-to-hiss that still has headroom.
+# Room is paused while it runs (so nothing else uses the mic or makes sound), then restarted with the result.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 PY="$HERE/voice/.venv/bin/python"; [ -x "$PY" ] || PY=python3
-INF=$(find "$HOME/.cache/room/sp6-driver" -name HDXSSTM.inf 2>/dev/null | head -1)
-CTL="Internal Mic Boost Volume"
 OUT="$HOME/room-mic-tune.txt"
+T=/tmp/room-mic; rm -rf "$T"; mkdir -p "$T"
 exec > >(tee "$OUT") 2>&1
 
-if [ -n "$INF" ]; then
-  echo "=== What Windows' driver sets for this Surface (10CC)"
-  "$PY" - "$INF" <<'P'
-import re, sys
-t = open(sys.argv[1], encoding="utf-16" if open(sys.argv[1], "rb").read(2) in (b"\xff\xfe", b"\xfe\xff") else "latin-1", errors="replace").read()
-secs = dict(re.findall(r"^\[([^\]]+)\]\s*\n(.*?)(?=^\[)", t, re.S | re.M))
-want = [n for n in secs if "10CC" in n.upper()]
-seen = set()
-def show(n, depth=0):
-    if n in seen or depth > 2 or n not in secs: return
-    seen.add(n)
-    lines = [l.strip() for l in secs[n].splitlines() if l.strip() and not l.strip().startswith(";")]
-    hits = [l for l in lines if re.search(r"mic|rec|capt|boost|gain|agc|ns|beam|array|geometry|dmic|input|aec", l, re.I)]
-    if hits:
-        print(f"[{n}]"); [print("  " + l[:160]) for l in hits[:40]]
-    for l in lines:
-        m = re.match(r"AddReg\s*=\s*(.+)", l, re.I)
-        if m:
-            for sub in m.group(1).split(","): show(sub.strip(), depth + 1)
-for n in want: show(n)
-print("(sections for 10CC: " + ", ".join(want) + ")")
-P
-  echo
-fi
+rec() { pw-record --raw --rate 16000 --channels 2 --format s16 - 2>/dev/null | head -c $((16000 * 4 * $2 / 10)) > "$T/$1.raw"; }
+setmic() { amixer -q -c 0 cset name="Internal Mic Boost Volume" "$1,$1"; amixer -q -c 0 cset name="Capture Volume" "$2,$2"; sleep 0.3; }
 
-echo "=== Now: boost $(amixer -c 0 cget name="$CTL" | grep -o ': values=.*'), PipeWire level $(wpctl get-volume @DEFAULT_AUDIO_SOURCE@)"
-wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 1.0
-echo "PipeWire mic level set to 100% (it was throwing signal away)"
+echo "▸ Pausing Room"
+systemctl --user stop room 2>/dev/null; sleep 1
+wpctl set-volume @DEFAULT_AUDIO_SOURCE@ 1.0; sleep 0.5
+
 echo
-echo "First, 3 seconds of quiet — don't talk…"
-pw-record --raw --rate 16000 --channels 2 --format s16 - 2>/dev/null | head -c $((16000*2*2*3)) > /tmp/room-q.raw
-for b in 0 1 2 3; do
-  amixer -q -c 0 cset name="$CTL" "$b,$b"
-  echo
-  echo "Boost +$((b*10)) dB — from where you'd normally sit, say: \"Alexa, what's the weather like tomorrow?\""
-  sleep 1; echo "  go"
-  pw-record --raw --rate 16000 --channels 2 --format s16 - 2>/dev/null | head -c $((16000*2*2*4)) > /tmp/room-b$b.raw
-  echo "  ok"
-done
+echo "▸ Part 1 — stay quiet for about 30 seconds (measuring the hiss at each setting)…"
+for b in 0 1 2 3; do for c in 47 67 87 107 127; do setmic $b $c; rec "n-$b-$c" 15; done; done
+echo "  done"
+
 echo
-"$PY" - <<'P'
-import numpy as np
-def load(p):
-    a = np.frombuffer(open(p, "rb").read(), "<i2").astype(np.float32).reshape(-1, 2) / 32768
+echo "▸ Part 2 — from where you'd normally sit, in your normal voice, when it says go:"
+echo "  \"Alexa, what's the weather like tomorrow?\""
+setmic 1 67
+sleep 1; echo "  go"; rec speech 50; echo "  ok"
+
+"$PY" - "$T" <<'P'
+import sys, numpy as np, json
+T = sys.argv[1]
+def load(n):
+    a = np.frombuffer(open(f"{T}/{n}.raw", "rb").read(), "<i2").astype(np.float32).reshape(-1, 2) / 32768
     return a - a.mean(0)
-q = load("/tmp/room-q.raw")
-best = 0
-print("boost   noise    speech   peak   clipped   speech-to-noise")
+def rms(x): return float(np.sqrt(np.mean(x ** 2)))
+sp = load("speech")[:, 0]
+w = np.sqrt(np.mean(sp[: len(sp) // 800 * 800].reshape(-1, 800) ** 2, 1))
+speech, peak = float(np.percentile(w, 95)), float(np.abs(sp).max())
+clipped = float(np.mean(np.abs(sp) > 0.97)) * 100
+G0 = 10 + 0                                    # the speech was recorded at boost 1 (+10), capture 67 (0 dB)
+print(f"\nYour voice at +10 dB preamp, 0 dB digital: level {speech:.4f}, peak {peak:.2f}, clipped {clipped:.2f}%")
+rows, best = [], None
 for b in range(4):
-    x = load(f"/tmp/room-b{b}.raw")
-    w = np.sqrt(np.mean(x.reshape(-1, 800, 2)[:, :, 0] ** 2, 1))       # 50 ms windows, left mic
-    speech = float(np.percentile(w, 95)); noise = float(np.percentile(w, 15))
-    pk = float(np.abs(x).max()); clip = float(np.mean(np.abs(x) > 0.97)) * 100
-    snr = 20 * np.log10(speech / max(noise, 1e-6))
-    ok = clip < 0.05 and pk < 0.95
-    if ok and speech > 0.003: best = b
-    print(f"+{b*10:2d} dB  {noise:.4f}   {speech:.4f}   {pk:.2f}   {clip:5.2f}%    {snr:4.1f} dB{'' if ok else '   ← distorts'}")
-qn = float(np.sqrt(np.mean(q[:, 0] ** 2)))
-print(f"room quiet (at the starting boost): {qn:.4f}")
-open("/tmp/room-best", "w").write(str(best))
-print(f"\nBest: +{best*10} dB")
+    for c in (47, 67, 87, 107, 127):
+        g = b * 10 + (c - 67) * 0.5
+        k = 10 ** ((g - G0) / 20)
+        n = rms(load(f"n-{b}-{c}")[3000:, 0])
+        s, p = speech * k, peak * k
+        snr = 20 * np.log10(s / max(n, 1e-7))
+        ok = p < 0.45                           # room to be ~6 dB louder (closer) without distorting
+        rows.append((b, c, g, n, s, p, snr, ok))
+        if ok and (best is None or snr > best[6] + 0.5 or (abs(snr - best[6]) <= 0.5 and g > best[2])):
+            best = (b, c, g, n, s, p, snr, ok)
+print("\npreamp  digital   total   hiss     voice    peak   voice-to-hiss")
+for b, c, g, n, s, p, snr, ok in rows:
+    mark = "  ← best" if best and (b, c) == best[:2] else ("" if ok else "  (too hot)")
+    print(f"+{b*10:2d} dB  {(c-67)*0.5:+5.1f} dB  {g:+5.1f}   {n:.4f}   {s:.4f}   {min(p, 9.99):.2f}   {snr:5.1f} dB{mark}")
+if best is None or clipped > 0.5:
+    best = (0, 67) if best is None else best
+json.dump({"micBoost": best[0], "micCapture": best[1]}, open(f"{T}/best.json", "w"))
 P
-B=$(cat /tmp/room-best)
-amixer -q -c 0 cset name="$CTL" "$B,$B"
+
 CFG=""; for p in "${ROOM_CONFIG:-}" "$HOME/.config/room/config.json" "$HERE/config.json"; do [ -n "$p" ] && [ -f "$p" ] && { CFG="$p"; break; }; done
-if [ -n "$CFG" ]; then
-  "$PY" - "$CFG" "$B" <<'P'
+"$PY" - "$CFG" "$T/best.json" <<'P'
 import json, sys
-p, b = sys.argv[1], int(sys.argv[2])
-c = json.load(open(p))
+p, best = sys.argv[1], json.load(open(sys.argv[2]))
+c = json.load(open(p)) if p else {}
 vs = c.setdefault("voiceSettings", {})
-vs["micBoost"] = b; vs["micVolume"] = 1.0
-json.dump(c, open(p, "w"), indent=2)
-print(f"saved micBoost {b}, micVolume 1.0 → {p}")
+vs.update(best); vs["micVolume"] = 1.0
+if p:
+    json.dump(c, open(p, "w"), indent=2)
+print(f"\nSaved preamp +{best['micBoost']*10} dB, digital {(best['micCapture']-67)*0.5:+.1f} dB → {p}")
 P
-fi
-rm -f /tmp/room-q.raw /tmp/room-b?.raw /tmp/room-best
-systemctl --user restart room 2>/dev/null && echo "Room restarted"
+rm -rf "$T"
+systemctl --user start room && echo "Room started again"
 echo "✓ Saved to $OUT"

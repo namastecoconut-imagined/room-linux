@@ -88,6 +88,22 @@ class Weather(QObject):
                 break
         D = w.get("daily", {})
         hi, lo = D.get("temperature_2m_max", [None]), D.get("temperature_2m_min", [None])
+        days = []
+        for i, t in enumerate(D.get("time", [])[:3]):
+            try:
+                day = dt.date.fromisoformat(t)
+                days.append({"name": "Today" if i == 0 else day.strftime("%a"),
+                             "d": text((D.get("weather_code") or [0] * 3)[i] or 0),
+                             "hi": round(hi[i]), "lo": round(lo[i]),
+                             "p": (D.get("precipitation_probability_max") or [0] * 3)[i] or 0})
+            except Exception:
+                pass
+        def hm(x):
+            try:
+                return dt.datetime.fromisoformat(x).strftime("%-I:%M")
+            except Exception:
+                return ""
+        sunrise = hm((D.get("sunrise") or [""])[0]); sunset = hm((D.get("sunset") or [""])[0])
         self.data = {
             "ok": True,
             "t": round(cur.get("temperature_2m", 0)),
@@ -97,6 +113,8 @@ class Weather(QObject):
             "hi": round(hi[0]) if hi and hi[0] is not None else None,
             "lo": round(lo[0]) if lo and lo[0] is not None else None,
             "hours": hours,
+            "days": days, "sunrise": sunrise, "sunset": sunset,
+            "updated": dt.datetime.now().strftime("%-I:%M"),
         }
         self.changed.emit()
 

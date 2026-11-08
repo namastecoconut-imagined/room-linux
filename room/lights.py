@@ -76,8 +76,24 @@ class Lights(QObject):
                 "total": total, "reachable": len(reach), "on": len(on),
                 "level": bri, "kelvin": k or 2700, "rgb": list(rgb) if rgb else [],
                 "glow": glow_of(k, rgb), "sub": sub,
+                "lamps": self._lamps(r),
             })
         return out
+
+    def _lamps(self, room: dict) -> list[dict]:
+        out = []
+        for i, d in enumerate(room.get("devices", [])):
+            b = self.wiz.bulbs.get(norm_mac(d.get("mac", ""))) if d.get("type") == "wiz" else None
+            out.append({"id": norm_mac(d.get("mac", "")) or str(i), "name": d.get("name") or f"Lamp {i + 1}",
+                        "reachable": bool(b and b.reachable), "on": bool(b and b.reachable and b.on),
+                        "level": b.dimming if b else 0})
+        return out
+
+    def toggle_lamp(self, mac: str):
+        b = self.wiz.bulbs.get(norm_mac(mac))
+        if b:
+            self.wiz.set(b.mac, on=not b.on)
+            self.changed.emit()
 
     def counts(self):
         s = self.snapshot()

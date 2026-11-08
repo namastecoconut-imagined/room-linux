@@ -26,7 +26,8 @@ Window {
     Shortcut { sequence: "F11"; onActivated: win.visibility = win.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: startScreen === "music" ? "music" : "home"
+    property string screen: ["music", "room", "clock", "weather", "reminders", "assistant"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing
@@ -40,6 +41,8 @@ Window {
     readonly property bool dayTime: { var h = new Date(now * 1000).getHours(); return h >= 7 && h < 18 }
     property bool sheetOpen: false        // speaker picker / library over the player
 
+    readonly property bool alerting: room.alert && room.alert.kind !== undefined
+    onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
     function enterStandby() { screen = "home"; standbyOn = true }
 
@@ -49,7 +52,7 @@ Window {
         interval: 1000; running: true; repeat: true
         onTriggered: {
             var t = Date.now() / 1000
-            if (win.screen === "music" || win.sheetOpen) win.lastTouch = t          // the player keeps it awake
+            if (win.screen === "music" || win.sheetOpen || win.alerting) win.lastTouch = t   // the player (and an alert) keeps it awake
             var wait = win.lateNight ? win.timing.nightStandbySec : win.timing.standbySec
             var want = t - win.lastTouch > wait
             if (want && !win.standbyOn) win.enterStandby()
@@ -73,8 +76,41 @@ Window {
             now: win.now
             opacity: win.screen === "home" ? 1 : 0
             visible: opacity > 0
-            Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
+            Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
             onOpenMusic: win.screen = "music"
+            onOpenRoom: (name) => { win.roomName = name; win.screen = "room" }
+            onOpenClock: win.screen = "clock"
+            onOpenWeather: win.screen = "weather"
+            onOpenReminders: win.screen = "reminders"
+            onOpenAssistant: { win.screen = "assistant"; room.listen() }
+        }
+        RoomScreen {
+            name: win.roomName
+            opacity: win.screen === "room" ? 1 : 0; visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+            onBack: win.screen = "home"
+        }
+        ClockScreen {
+            now: win.now
+            opacity: win.screen === "clock" ? 1 : 0; visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+            onBack: win.screen = "home"
+        }
+        WeatherScreen {
+            opacity: win.screen === "weather" ? 1 : 0; visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+            onBack: win.screen = "home"
+        }
+        RemindersScreen {
+            opacity: win.screen === "reminders" ? 1 : 0; visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+            onBack: win.screen = "home"
+        }
+        Assistant {
+            active: win.screen === "assistant"
+            opacity: active ? 1 : 0; visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+            onClose: win.screen = "home"
         }
         MusicPlayer {
             now: win.now
@@ -114,6 +150,8 @@ Window {
                 Behavior on opacity { NumberAnimation { duration: 800 } }
             }
         }
+        // an alarm, timer or reminder going off — over everything, standby included
+        Alert {}
     }
 
     // any touch while awake counts as activity (it never blocks the touch itself)

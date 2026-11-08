@@ -9,6 +9,7 @@ from .calendar import Calendar
 from .lights import Lights
 from .screen import Screen
 from .spotify import Spotify
+from .things import Things
 from .weather import Weather
 from . import demo
 
@@ -20,6 +21,8 @@ class Room(QObject):
     musicChanged = Signal()
     levelChanged = Signal()
     statusChanged = Signal()
+    thingsChanged = Signal()
+    alertChanged = Signal()
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -47,8 +50,14 @@ class Room(QObject):
         self.screen.statusChanged.connect(self.statusChanged)
         self._level = 0.0
         self._mic = None
+        self._things = Things(cfg, self.lights)
+        self._things.changed.connect(self.thingsChanged)
+        self._things.alertChanged.connect(self.alertChanged)
+        if self.demo:
+            demo.fill_things(self._things)
 
     def start(self):
+        self._things.start()
         if self.demo:
             return
         self.wx.start()
@@ -188,6 +197,82 @@ class Room(QObject):
     def level(self):
         """Room loudness, 0…1 — the standby dots ripple with it."""
         return self._level
+
+
+    # ---------------------------------------------------------------- alarms, timers, reminders
+    @Property("QVariantMap", notify=thingsChanged)
+    def things(self):
+        return self._things.snapshot()
+
+    @Property("QVariantMap", notify=alertChanged)
+    def alert(self):
+        return self._things.alert
+
+    @Slot(int, int, "QVariantList")
+    def addAlarm(self, h, m, days): self._things.add_alarm(h, m, [int(d) for d in days])
+
+    @Slot(str, int, int, "QVariantList")
+    def setAlarm(self, aid, h, m, days): self._things.set_alarm(aid, h, m, [int(d) for d in days])
+
+    @Slot(str)
+    def toggleAlarm(self, aid): self._things.toggle_alarm(aid)
+
+    @Slot(str)
+    def deleteAlarm(self, aid): self._things.delete_alarm(aid)
+
+    @Slot(int, str)
+    def startTimer(self, sec, label): self._things.start_timer(sec, label)
+
+    @Slot(str, int)
+    def addTime(self, tid, sec): self._things.add_time(tid, sec)
+
+    @Slot(str)
+    def pauseTimer(self, tid): self._things.pause_timer(tid)
+
+    @Slot(str)
+    def cancelTimer(self, tid): self._things.cancel_timer(tid)
+
+    @Slot(str, float)
+    def addReminder(self, text, due): self._things.add_reminder(text, due)
+
+    @Slot(str)
+    def toggleReminder(self, rid): self._things.toggle_reminder(rid)
+
+    @Slot(str)
+    def deleteReminder(self, rid): self._things.delete_reminder(rid)
+
+    @Slot()
+    def stopAlert(self): self._things.stop_alert()
+
+    @Slot()
+    def snoozeAlert(self): self._things.snooze_alert()
+
+    # ---------------------------------------------------------------- lamps and scenes
+    @Slot(str)
+    def toggleLamp(self, mac): self.lights.toggle_lamp(mac)
+
+    ROOM_SCENES = {"Relax": (40, 2400), "Read": (90, 4000), "Movie": (15, 2200), "Night": (8, 2200)}
+
+    @Slot(str, str)
+    def roomScene(self, name, scene):
+        lv, k = self.ROOM_SCENES.get(scene, (60, 2700))
+        self.lights.set_room(name, on=True, level=lv, kelvin=k)
+
+    @Slot(str)
+    def houseScene(self, scene):
+        """Evening: every room warm at half. Movie: the panel's room very low, the rest off. Night / All off."""
+        if scene == "Evening":
+            self.lights.set_room(None, on=True, level=50, kelvin=2500)
+        elif scene == "Movie":
+            for r in self.lights.rooms:
+                if r.get("name") == self.lights.here:
+                    self.lights.set_room(r["name"], on=True, level=12, kelvin=2200)
+                else:
+                    self.lights.set_room(r["name"], on=False)
+        elif scene == "Night":
+            self.night()
+        else:
+            self.allOff()
 
     # ---------------------------------------------------------------- what the screens do
     @Slot(str)

@@ -146,6 +146,7 @@ Item {
     readonly property var lit: room.rooms.filter(function (r) { return r.on > 0 })
     readonly property var known: room.rooms.filter(function (r) { return r.reachable > 0 })
     readonly property var ev: room.events
+    readonly property var due: (room.things.reminders || []).filter(function (r) { return !r.done && (r.today || r.dueNow) })
     component Cap2: T { font.pixelSize: 18; font.weight: Font.Medium; font.letterSpacing: 3.6; color: sb.capC; font.capitalization: Font.AllUppercase }
     component Rule: Item { width: rightCol.width; height: 61; Rectangle { y: 30; width: parent.width; height: 1; color: Qt.rgba(1, 238 / 255, 222 / 255, 0.1) } }
 
@@ -183,6 +184,18 @@ Item {
             visible: text !== ""; topPadding: 6; width: parent.width
             text: sb.ev.length > 1 ? "then " + sb.ev[1].title + "  ·  " + sb.ev[1].when : (sb.ev.length && sb.ev[0].extra ? sb.ev[0].extra : "")
             font.pixelSize: 22; color: sb.sub
+        }
+        // a reminder due today (stays until it's ticked off)
+        Rule { visible: sb.due.length > 0 }
+        Row {
+            visible: sb.due.length > 0
+            spacing: 12
+            Icon { name: "check"; size: 20; color: Qt.rgba(1, 200 / 255, 140 / 255, 0.85); anchors.verticalCenter: parent.verticalCenter }
+            T {
+                width: rightCol.width - 32
+                text: sb.due.length ? sb.due[0].text + (sb.due[0].when ? "  ·  " + sb.due[0].when.replace("Today · ", "") : "") + (sb.due.length > 1 ? "  ·  +" + (sb.due.length - 1) : "") : ""
+                font.pixelSize: 22; color: Qt.rgba(1, 214 / 255, 170 / 255, 0.85)
+            }
         }
         // the lights
         Rule { visible: sb.known.length > 0 }

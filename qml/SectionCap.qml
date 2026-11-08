@@ -1,0 +1,3 @@
+import QtQuick
+// The small spaced section labels: LIGHTS, ALARMS, NEXT 12 HOURS…
+T { font.pixelSize: 15; font.weight: Font.Medium; font.letterSpacing: 3; font.capitalization: Font.AllUppercase; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.4) }

@@ -445,8 +445,12 @@ class Ears:
         self.words: list[str] = []
         self.listen_after_speaking = False
         self.cues = os.path.join(DATA, "cues"); os.makedirs(self.cues, exist_ok=True)
-        self.cue_on = tone(os.path.join(self.cues, "on.wav"), [660, 990])
-        self.cue_off = tone(os.path.join(self.cues, "off.wav"), [990, 660], vol=0.15)
+        # the phone's own chimes (listen · done · miss); generated tones only if they're missing
+        here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cues")
+        self.chimes = {n: os.path.join(here, n + ".wav") for n in ("listen", "done", "miss")}
+        if not os.path.exists(self.chimes["listen"]):
+            self.chimes["listen"] = tone(os.path.join(self.cues, "on.wav"), [660, 990])
+        self.wait = 6.0
 
     # ---------------------------------------------------------------- listening
     # ---------------------------------------------------------------- "Alexa?" — checked by Deepgram
@@ -479,9 +483,17 @@ class Ears:
         m = re.search(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b[\s,.!?]*", text, re.I)
         return (text[m.end():] if m else text).strip()
 
-    def begin_listening(self, keep=False, preroll=False):
+    def chime(self, name):
+        f = self.chimes.get(name)
+        if f and os.path.exists(f):
+            subprocess.Popen(["pw-play", "--volume", "0.9", f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def begin_listening(self, keep=False, preroll=False, follow=False):
         self.speaker.stop()
-        subprocess.Popen(["pw-play", self.cue_on], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # after a question the mic just stays open for a few seconds — no chime, no wake word (like the phone)
+        if not follow:
+            self.chime("listen")
+        self.wait = 8.0 if follow else 6.0
         self.state = "listening"
         self.rec = []
         self.heard_speech = False
@@ -499,7 +511,7 @@ class Ears:
                 if preroll:                          # "Alexa, turn off…" in one breath: the start is already said
                     for c in self.ring[-12:]:
                         self.dg.push(c)
-        emit(ev="listening")
+        emit(ev="listening", follow=follow)
 
     def _dg_done(self, text):
         dg = self.dg
@@ -525,13 +537,11 @@ class Ears:
             log("deepgram unreachable — listening offline")
             return
         self.dg = None
-        if self.state == "listening":
-            subprocess.Popen(["pw-play", self.cue_off], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.state = "idle"
         emit(ev="heard", text=text)
 
     # ---------------------------------------------------------------- the mic, evened out
-    # The Surface's mic is quiet from across a room. A slow automatic gain lifts it (up to 10×) so the wake word, the
+    # The Surface's mic is quiet from across a room. A fixed boost lifts it so the wake word, the
     # pause detection and whisper all get speech at a useful level; `ref` is a slowly-falling peak of what's heard.
     ref = 0.05
     floor = 0.002
@@ -541,24 +551,27 @@ class Ears:
         # the mic can sit far off zero (a DC offset) — take it out so loudness means sound
         self.dc = getattr(self, "dc", float(np.mean(x))) * 0.95 + float(np.mean(x)) * 0.05
         x = x - self.dc
-        # clipping: the Surface's mic input is set too hot — turn it down a step (PipeWire's input volume) until it
-        # stops, rather than hand distorted sound to the wake word and whisper
-        clipped = float(np.mean(np.abs(x) > 0.97))
-        self.clips = getattr(self, "clips", 0) + (1 if clipped > 0.01 else 0)
-        self.chunks = getattr(self, "chunks", 0) + 1
-        if self.chunks >= 25:                       # every 2 s
-            if self.clips >= 5 and not self.target_set and self._input_volume() > 0.35:
-                subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", "0.1-"], timeout=3)
-                out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], capture_output=True, text=True, timeout=3).stdout.strip()
-                log(f"mic was clipping — input turned down ({out})")
-            self.clips = 0; self.chunks = 0
-        pk = float(np.max(np.abs(x))) if len(x) else 0.0
-        self.ref = max(pk, self.ref * 0.998, 0.004)
-        g = float(np.clip(0.35 / self.ref, 1.0, float(CFG.get("maxGain", 10))))
+        # a steady boost (no riding up and down): the Surface's mic is quiet from across the room, so lift it a fixed
+        # amount and round off loud peaks softly instead of clipping them. micGain in config.json changes it.
+        g = float(CFG.get("micGain", 4.0))
         rms = float(np.sqrt(np.mean(x ** 2))) if len(x) else 0.0
         self.floor = min(rms, self.floor * 1.002 + 1e-6) if rms > 0 else self.floor     # background noise
         self.gain = g
-        return (np.clip(x * g, -1, 1) * 32767).astype(np.int16)
+        y = x * g
+        y = np.where(np.abs(y) < 0.7, y, np.sign(y) * (0.7 + 0.3 * np.tanh((np.abs(y) - 0.7) / 0.3)))
+        return (y * 32767).astype(np.int16)
+
+    @staticmethod
+    def pin_input():
+        """Set the system's mic input level once, so nothing moves it around (micVolume in config.json, 0–1)."""
+        if CFG.get("micVolume") is False:
+            return
+        v = float(CFG.get("micVolume", 0.6))
+        try:
+            subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{v:.2f}"], timeout=3)
+            log(f"mic input fixed at {int(v * 100)}%")
+        except Exception as e:
+            log("mic input:", e)
 
     def _input_volume(self) -> float:
         try:
@@ -633,7 +646,7 @@ class Ears:
             # it decides when you've finished. A copy is kept in case it can't be reached.
             self.dg.push(pcm)
             self.rec.append(pcm)
-            if now - self.started > 10 or (now - self.started > 6 and not self.dg.text()):
+            if now - self.started > 10 or (now - self.started > self.wait and not self.dg.text()):
                 self.dg.close()
                 self.started = now + 999            # don't ask twice
             return
@@ -653,12 +666,11 @@ class Ears:
         elif self.heard_speech and not self.quiet_since:
             self.quiet_since = now
         long_pause = self.heard_speech and self.quiet_since and now - self.quiet_since > 0.8
-        nothing = not self.heard_speech and now - self.started > 5
+        nothing = not self.heard_speech and now - self.started > self.wait - 1
         too_long = now - self.started > 8
         if long_pause or nothing or too_long:
             audio = np.concatenate(self.rec) if self.rec else np.zeros(0, np.int16)
             self.state = "thinking"
-            subprocess.Popen(["pw-play", self.cue_off], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             log(f"heard {len(audio) / RATE:.1f} s · speech {'yes' if self.heard_speech else 'no'} · vad max {self.max_vad:.2f}"
                 f" · loudest {self.max_rms:.3f} · gain ×{self.gain:.1f} · noise {self.floor:.4f}")
             self.max_vad = 0.0; self.max_rms = 0.0
@@ -704,7 +716,9 @@ class Ears:
     def command(self, c: dict):
         cmd = c.get("cmd")
         if cmd == "listen":
-            self.begin_listening()
+            self.begin_listening(follow=bool(c.get("follow")))
+        elif cmd == "chime":
+            self.chime(c.get("name", ""))
         elif cmd == "say":
             self.listen_after_speaking = bool(c.get("listen"))
             self.speaker.say(c.get("text", ""), self._spoken)
@@ -732,6 +746,7 @@ def main():
     global WARM
     WARM = Warm() if DG_KEY else None
     try:
+        Ears.pin_input()
         ears = Ears()
     except Exception as e:
         emit(ev="error", msg=f"Voice couldn't start: {e}")

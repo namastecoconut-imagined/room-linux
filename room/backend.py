@@ -205,10 +205,35 @@ class Room(QObject):
         """For the Alexa screen: state (off · idle · listening · thinking · speaking), what was heard, the answer."""
         a = self.assistant
         if self.demo and os.environ.get("ROOM_DEMO_VOICE"):
+            # stages to check the screen with: wake · heard · think · done · weather · timer · music · miss · off
             st = os.environ["ROOM_DEMO_VOICE"]
-            return {"state": st, "heard": "" if st == "listening" else "Turn the living room to forty percent",
-                    "reply": "Living room, 40 percent." if st == "speaking" else "", "error": "", "on": True}
-        return {"state": a.state, "heard": a.heard, "reply": a.reply, "error": a.error, "on": a.state != "off"}
+            q = {"weather": "What's the weather like this evening", "timer": "Set a timer for ten minutes",
+                 "music": "Play something mellow", "miss": ""}.get(st, "Turn the living room to forty percent")
+            d = {"state": "listening", "stage": st, "heard": q, "reply": "", "line": "", "card": "", "error": "",
+                 "on": st != "off", "following": False}
+            if st == "wake":
+                d["heard"] = ""
+            elif st == "heard":
+                d["heard"] = "Turn the living room"
+            elif st == "think":
+                d["state"] = "thinking"
+            elif st == "done":
+                d.update(state="idle", line="living room · 40%")
+            elif st == "weather":
+                d.update(state="speaking", stage="done", card="weather",
+                         reply="It's 24 and clear now, cooling to about 19 by ten. No rain tonight.",
+                         line="24° and clear · 19° by ten")
+            elif st == "timer":
+                d.update(state="speaking", stage="done", card="timer", reply="Ten minutes, starting now.", line="timer · 10 min")
+            elif st == "music":
+                d.update(state="speaking", stage="done", card="music", reply="Here's something mellow.", line="playing late night jazz")
+            elif st == "miss":
+                d.update(state="idle", stage="miss")
+            elif st == "off":
+                d.update(state="off", stage="idle", heard="", error="Voice isn't set up yet")
+            return d
+        return {"state": a.state, "stage": a.stage, "heard": a.heard, "reply": a.reply, "line": a.line, "card": a.card,
+                "error": a.error, "on": a.state != "off", "following": a.following}
 
     def _voice_level(self):
         import math

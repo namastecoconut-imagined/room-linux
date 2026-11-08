@@ -15,6 +15,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, QTimer, Signal
 
 from . import intents
+from .brain import Brain, Computer
 
 ROOT = Path(__file__).resolve().parent.parent
 NUM = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine", 10: "ten"}
@@ -44,6 +45,7 @@ def time_text(h: int, m: int, h24=False) -> str:
 class Assistant(QObject):
     changed = Signal()
     levelChanged = Signal()
+    _main = Signal(object)          # work handed back from Claude's threads to the main thread
 
     def __init__(self, room):
         super().__init__()
@@ -59,6 +61,19 @@ class Assistant(QObject):
         self._restart = QTimer(self); self._restart.setSingleShot(True); self._restart.timeout.connect(self.start)
         self._fails = 0
         self._pending = None
+        # the phone's stages for the screen: wake · follow · heard · think · done · miss · idle
+        self.stage = "idle"
+        self.line = ""             # the on-screen caption under the answer
+        self.card = ""             # weather · forecast · air · timer · music · schedule · alarm
+        self.following = False     # this turn came from the open mic after an answer (no wake word)
+        self._follow_next = False
+        self._follow_turns = 0
+        self._turn = 0
+        self._talking = False
+        self._main.connect(lambda f: f())
+        key = (room.cfg.get("anthropicKey") or "").strip()
+        self.brain = Brain(key, room.cfg.get("anthropicModel"), room="living room") if key else None
+        self.computer = Computer(room.cfg.get("computer"))
 
     # ---------------------------------------------------------------- the voice process
     def available(self) -> bool:
@@ -99,6 +114,8 @@ class Assistant(QObject):
         self._restart.start(min(60000, 3000 * self._fails))
 
     def _send(self, **cmd):
+        if cmd.get("cmd") == "say" and cmd.get("text"):
+            self._talking = True
         if self.proc and self.proc.state() == QProcess.ProcessState.Running:
             self.proc.write((json.dumps(cmd) + "\n").encode())
 
@@ -122,21 +139,37 @@ class Assistant(QObject):
         elif ev == "error":
             self.error = e.get("msg", "")
         elif ev in ("wake", "listening"):
-            self.state = "listening"; self.heard = ""; self.reply = ""; self.error = ""
+            if ev == "wake" or not self.following:
+                self.following = bool(e.get("follow"))
+            if ev == "wake":
+                self.following = False; self._follow_turns = 0
+            self.state = "listening"; self.heard = ""; self.reply = ""; self.error = ""; self.line = ""; self.card = ""
+            self.stage = "follow" if self.following else "wake"
             self._duck(True)
+            if self.brain:
+                self.brain.warm()
         elif ev == "partial":
             self.heard = (e.get("text") or "").strip()        # words as they're recognised
+            if self.heard:
+                self.stage = "heard"
         elif ev == "thinking":
-            self.state = "thinking"
+            self.state = "thinking"; self.stage = "think"
         elif ev == "heard":
             self.heard = (e.get("text") or "").strip()
             self._act(self.heard)
         elif ev == "speaking":
             self.state = "speaking"
         elif ev == "spoken":
+            self._talking = False
             if self.state == "speaking":
                 self.state = "idle"
-                self._duck(False)
+                if self._follow_next:
+                    # it asked something: keep the mic open a few seconds, no wake word needed (like the phone)
+                    self._follow_next = False
+                    self.following = True
+                    self._send(cmd="listen", follow=True)
+                else:
+                    self._duck(False)
         self.changed.emit()
 
     def listen(self):
@@ -147,10 +180,18 @@ class Assistant(QObject):
 
     def cancel(self):
         self._send(cmd="cancel")
+        if self.brain and self.state == "speaking":
+            self.brain.mark_interrupted()
+        self._turn += 1                      # anything still on its way is dropped
+        self._follow_next = False
         if self.state != "off":
             self.state = "idle"
+        self.stage = "idle"
         self._duck(False)
         self.changed.emit()
+
+    def chime(self, name):
+        self._send(cmd="chime", name=name)
 
     def _words(self):
         r = self.room
@@ -216,9 +257,29 @@ class Assistant(QObject):
             self._duck(False)
         self.changed.emit()
 
+    def _finish(self, stage, line="", spoken="", card="", follow=False):
+        """Show the outcome; speak it unless it was already spoken early."""
+        self.stage, self.line, self.card = stage, line, card
+        self.reply = spoken or line
+        self._follow_next = follow
+        if follow and not self._talking and self.state != "speaking":
+            # the question was already spoken (it streamed out early) — open the mic now
+            self._follow_next = False
+            self.following = True
+            self._send(cmd="listen", follow=True)
+        self.changed.emit()
+
     def _act(self, text: str):
+        self._turn += 1
+        turn = self._turn
         if not text:
-            self.state = "idle"; self.reply = ""; self._duck(False); return
+            # nothing heard: the phone's "miss" chime, unless it was just the open mic after an answer
+            if self.following:
+                self.following = False; self.stage = "idle"; self.state = "idle"; self._duck(False)
+            else:
+                self.chime("miss"); self.state = "idle"; self._finish("miss", "")
+                QTimer.singleShot(1500, lambda: self._duck(False))
+            return
         if self._pending:
             lead = {"timer_length": "set a timer for ", "alarm_time": "set an alarm for ", "reminder_text": "remind me to "}[self._pending]
             self._pending = None
@@ -228,12 +289,256 @@ class Assistant(QObject):
         rooms = [x["name"] for x in r.lights.snapshot()]
         pls = [p.get("name", "") for p in (r.spotify.snapshot().get("playlists") or [])]
         it = intents.parse(text, rooms, pls)
+        # short, plain commands run at once — a chime instead of a sentence (the phone's fast path)
+        if self._fast(text, it):
+            try:
+                line, _ = self._do(it)
+            except Exception as e:
+                line = ""
+                print(f"[room] fast path: {e!r}")
+            self.chime("done")
+            if self.brain:
+                self.brain.remember(text, "", did=line)
+            self.following = False
+            self.state = "idle"
+            self._finish("done", (line or "done").rstrip(".").lower())
+            QTimer.singleShot(1200, lambda: self._duck(False))
+            return
+        if self.brain:
+            self.state = "thinking"; self.stage = "think"; self.changed.emit()
+            spoken_early = {"t": ""}
+
+            def on_say(sentence):
+                def go():
+                    if turn != self._turn or not sentence:
+                        return
+                    spoken_early["t"] = sentence
+                    self.reply = sentence
+                    self._send(cmd="say", text=sentence, listen=False)
+                self._main.emit(go)
+
+            def on_done(out):
+                self._main.emit(lambda: turn == self._turn and self._deliver(text, out, spoken_early["t"], it, turn))
+            self.brain.interpret(text, self.snapshot(), self.following, self.computer.ok, on_say, on_done)
+            return
+        self._local(text, it)
+
+    def _local(self, text, it):
         try:
             reply, listen = self._do(it)
         except Exception as e:
             print(f"[room] assistant: {e!r} for {it}")
             reply, listen = "Sorry, something went wrong there.", False
+        self.stage, self.line, self.card = ("miss" if it.get("do") == "unknown" else "done"), reply.rstrip(".").lower(), ""
         self.say(reply, listen)
+
+    @staticmethod
+    def _fast(text, it) -> bool:
+        low = " " + text.lower() + " "
+        if len(text.split()) > 10:
+            return False
+        if re.match(r"\s*(is|are|what|how|did|does|do|can|could|will|would|why|when|which|who|should)\b", text.lower()):
+            return False
+        if any(w in low for w in (" not ", " don't ", " no ", " never ", " except ", " but ", " and then ", " after ", " in ")):
+            return False
+        return it.get("do") in ("lights", "scene", "pause", "resume", "next", "previous", "volume")
+
+    # ---------------------------------------------------------------- Claude's answer → the home
+    def _deliver(self, text, out, spoken_early, it, turn):
+        if out is None:
+            print(f"[room] claude failed ({self.brain.last_error}) — using the built-in rules")
+            self._local(text, it)
+            return
+        if self.following and out.get("for_me") is False:
+            # the open mic heard something that wasn't for the panel — close quietly
+            self.following = False; self.state = "idle"; self.stage = "idle"; self._duck(False); self.changed.emit()
+            return
+        actions = out.get("actions") or []
+
+        def finished(summary):
+            if turn != self._turn:
+                return
+            failed = "couldn't" in summary
+            looked = any(a.get("kind") == "look_up" for a in actions)
+            line = summary if looked else ((out.get("reply") or "") if out.get("reply") and not failed else summary).lower()
+            spoken = summary if looked else ((out.get("say") or "") if out.get("say") and not failed else line)
+            if self.brain:
+                self.brain.remember(text, spoken, did=summary)
+            asked = spoken.strip().endswith("?")
+            follow = bool(out.get("follow_up", True)) and asked and self.room.cfg.get("followUp") is not False \
+                and self._follow_turns < 3
+            if self.following:
+                self._follow_turns += 1
+            card = out.get("card") if out.get("card") not in (None, "none") else ""
+            stage = "miss" if not actions and not out.get("say") else "done"
+            # speak now unless the same sentence already went out early
+            if spoken and (looked or spoken.strip() != (spoken_early or "").strip()):
+                self._send(cmd="say", text=spoken, listen=False)
+            elif not spoken:
+                self.state = "idle"
+            self._finish(stage, line, spoken, card, follow)
+            if not spoken and not follow:
+                QTimer.singleShot(1500, lambda: self._duck(False))
+        self.run(actions, lambda summary: self._main.emit(lambda: finished(summary)))
+
+    def snapshot(self) -> dict:
+        r, th = self.room, self.room._things
+        now = dt.datetime.now()
+        w = r.weather or {}
+        wx = {k: w.get(k) for k in ("t", "feels", "hum", "d", "hi", "lo", "aqi", "hours", "days", "sunrise", "sunset") if w.get(k) is not None}
+        snap = {"now": now.strftime("%A %-d %b, %-I:%M %p"), "here": r.lights.here or "", "place": "Bangalore",
+                "lights": r.lights.lamps_now(), "weather": wx,
+                "timers": [{"label": t["label"], "left_seconds": int(t["left"]), "paused": t["paused"]} for t in th.snapshot()["timers"]],
+                "computer": self.computer.name if self.computer.ok else "not set up"}
+        days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+        snap["alarms"] = [{"alarm_id": a["id"], "time": f"{a['h']:02d}:{a['m']:02d}", "on": a.get("on"),
+                           "repeat": ",".join(days[d] for d in a.get("days") or []) or "once"} for a in th.alarms]
+        snap["reminders"] = [{"reminder_id": x["id"], "text": x["text"], "at": x["when"] or "no time"}
+                             for x in th.snapshot()["reminders"] if not x["done"]][:12]
+        if th.alert.get("kind") == "reminder":
+            snap["reminder_showing"] = {"reminder_id": th.alert.get("id"), "text": th.alert.get("title")}
+        m = r.music
+        sp = r.spotify.snapshot()
+        snap["music"] = {"state": "playing" if m.get("playing") else ("paused" if m.get("exists") else "idle"),
+                         "track": m.get("title", ""), "artist": m.get("artist", ""), "speaker": m.get("device", ""),
+                         "volume": m.get("volume"), "speakers": [d["name"] for d in sp.get("devices") or []]}
+        if r.airplay.showing:
+            snap["music"]["note"] = "playing from their phone over AirPlay to this panel: music and volume actions control it; to play something new, use play (Spotify)"
+        snap["my_playlists"] = [{"name": p["name"], "uri": p["uri"]} for p in (sp.get("playlists") or [])][:40]
+        snap["calendar"] = [f"{e['title']} — {e['when']}{(' ' + e['extra']) if e.get('extra') else ''}" for e in r.events[:5]]
+        return snap
+
+    def run(self, actions, done):
+        """Carry out Claude's actions (the phone's run(steps)); done(summary) once — some steps finish later."""
+        r, th = self.room, self.room._things
+        parts, waiting = [], [0]
+        finished = [False]
+
+        def fin():
+            if waiting[0] == 0 and not finished[0]:
+                finished[0] = True
+                done(" · ".join(parts))
+        for a in actions:
+            k = a.get("kind")
+            try:
+                if k == "lights":
+                    ids = a.get("light_ids") or []
+                    plain = a.get("brightness") is None and a.get("kelvin") is None and a.get("rgb") is None
+                    if a.get("on") is False:
+                        n = r.lights.set_lamps(ids, on=False)
+                    else:
+                        n = r.lights.set_lamps(ids, on=True, level=None if plain else a.get("brightness"),
+                                               kelvin=a.get("kelvin"), rgb=a.get("rgb"))
+                    if n:
+                        parts.append(f"{n} light{'s' if n != 1 else ''}")
+                elif k == "music":
+                    c = a.get("command")
+                    src = r.airplay if r.airplay.showing else r.spotify
+                    m = r.music
+                    if c == "pause" and m.get("playing") or c == "play" and not m.get("playing"):
+                        src.play_pause()
+                    elif c == "next":
+                        r.next()
+                    elif c == "previous":
+                        r.previous()
+                    parts.append(c or "")
+                elif k == "volume":
+                    v = a.get("level")
+                    if v is None:
+                        v = (r.music.get("volume") or 50) + int(a.get("change") or 0)
+                    v = max(0, min(100, int(v)))
+                    self._duck(False)
+                    r.setVolume(v); parts.append(f"volume {v}")
+                elif k == "speaker":
+                    d = r.spotify.device_named(a.get("speaker", ""))
+                    if d:
+                        r.spotify.transfer(d["id"]); parts.append(f"on {d['name'].lower()}")
+                elif k == "play":
+                    uri = a.get("uri") or ""
+                    if uri.startswith("spotify:"):
+                        r.spotify.play_uri(uri, speaker=a.get("speaker"))
+                        name = next((p["name"] for p in r.spotify.playlists if p.get("uri") == uri), a.get("query") or "that")
+                        parts.append(f"playing {name.lower()}")
+                    elif a.get("query"):
+                        waiting[0] += 1
+
+                        def rep(name, why):
+                            parts.append(f"playing {name.lower()}" if name else f"couldn't play — {why}")
+                            waiting[0] -= 1
+                            self._main.emit(fin)
+                        r.spotify.play_search(a["query"], a.get("search_type"), a.get("speaker"), rep)
+                elif k == "timer" and a.get("seconds"):
+                    th.start_timer(int(a["seconds"]), (a.get("label") or "").capitalize())
+                    sec = int(a["seconds"]); parts.append(f"timer {sec // 60} min" if sec >= 60 else f"timer {sec} s")
+                elif k == "cancel_timer":
+                    lab = (a.get("label") or "").lower()
+                    for t in list(th.timers):
+                        if not lab or lab in (t.get("label") or "").lower():
+                            th.cancel_timer(t["id"])
+                    parts.append("timer cancelled")
+                elif k == "sleep_timer" and a.get("seconds"):
+                    sec = int(a["seconds"])
+                    QTimer.singleShot(sec * 1000, lambda: r.music.get("playing") and r.playPause())
+                    parts.append(f"music stops in {sec // 60} min")
+                elif k == "set_alarm" and a.get("time"):
+                    h, m = (int(x) for x in a["time"].split(":")[:2])
+                    dmap = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+                    th.add_alarm(h, m, [dmap[d] for d in a.get("days") or [] if d in dmap])
+                    parts.append(f"alarm {h}:{m:02d}")
+                elif k == "alarm_off" and a.get("alarm_id"):
+                    for al in th.alarms:
+                        if al["id"] == a["alarm_id"] and al.get("on"):
+                            th.toggle_alarm(al["id"])
+                    parts.append("alarm off")
+                elif k == "delete_alarm" and a.get("alarm_id"):
+                    th.delete_alarm(a["alarm_id"]); parts.append("alarm deleted")
+                elif k == "set_reminder" and a.get("label"):
+                    due = 0.0
+                    if a.get("at"):
+                        try:
+                            due = dt.datetime.strptime(a["at"].strip(), "%Y-%m-%d %H:%M").timestamp()
+                        except ValueError:
+                            pass
+                    th.add_reminder(a["label"][0].upper() + a["label"][1:], due)
+                    parts.append("reminder" + (" · " + dt.datetime.fromtimestamp(due).strftime("%-I:%M %p").lower() if due else ""))
+                elif k == "cancel_reminder" and a.get("reminder_id"):
+                    th.delete_reminder(a["reminder_id"]); parts.append("reminder cancelled")
+                elif k == "reminder_done":
+                    rid = a.get("reminder_id") or th.alert.get("id")
+                    if rid:
+                        th.toggle_reminder(rid)
+                        if th.alert.get("kind") == "reminder":
+                            th.stop_alert()
+                        parts.append("done")
+                elif k == "remember" and a.get("label") and self.brain:
+                    self.brain.memory.add(a["label"]); parts.append("noted")
+                elif k == "forget" and a.get("label") and self.brain:
+                    n = self.brain.memory.forget(a["label"]); parts.append("forgotten" if n else "nothing to forget")
+                elif k == "look_up" and a.get("question") and self.brain:
+                    waiting[0] += 1
+
+                    def ans(x):
+                        parts.append(x or "Sorry, I couldn't look that up just now.")
+                        waiting[0] -= 1
+                        self._main.emit(fin)
+                    self.brain.look_up(a["question"], ans)
+                elif k == "computer":
+                    if not self.computer.ok:
+                        parts.append("couldn't — the computer isn't set up")
+                    else:
+                        waiting[0] += 1
+                        cmd = a.get("command", "")
+
+                        def pc(why, cmd=cmd):
+                            parts.append(f"couldn't reach the computer — {why}" if why else
+                                         {"sleep": "computer asleep", "lock": "computer locked", "screen_off": "computer screen off",
+                                          "shutdown": "computer shutting down", "restart": "computer restarting"}.get(cmd, cmd))
+                            waiting[0] -= 1
+                            self._main.emit(fin)
+                        self.computer.send(cmd, pc)
+            except Exception as e:
+                print(f"[room] action {k}: {e!r}")
+        fin()
 
     def _here(self):
         return self.room.lights.here or (self.room.lights.rooms[0]["name"] if self.room.lights.rooms else None)

@@ -8,6 +8,7 @@ from standby) and a chime plays until it's stopped:
 """
 import datetime as dt
 import math
+from pathlib import Path
 import shutil
 import struct
 import subprocess
@@ -36,7 +37,10 @@ def days_text(days: list[int]) -> str:
 
 
 def _chime_file() -> str:
-    """A soft two-note chime (written once as a .wav)."""
+    """The phone's alarm chime; a soft two-note one (written once) if it's missing."""
+    phone = Path(__file__).resolve().parent.parent / "voice" / "cues" / "alarm.wav"
+    if phone.exists():
+        return str(phone)
     p = STATE_DIR / "chime.wav"
     if p.exists():
         return str(p)

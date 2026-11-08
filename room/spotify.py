@@ -305,15 +305,47 @@ class Spotify(QObject):
     def transfer(self, device_id: str):
         self._api("PUT", "/me/player", lambda *_: (self.refresh_devices(), self._soon()), {"device_ids": [device_id], "play": True})
 
-    def play_uri(self, uri: str):
+    def play_uri(self, uri: str, speaker: str | None = None):
         body = {"context_uri": uri} if ":track:" not in uri else {"uris": [uri]}
+        dev = self.device_named(speaker) if speaker else None
         def done(status, data):
             if status == 404:   # nothing active to play on — wake the last speaker we saw
                 if self.devices:
                     self._api("PUT", f"/me/player/play?device_id={self.devices[0]['id']}", self._soon, body)
             else:
                 self._soon()
-        self._api("PUT", "/me/player/play", done, body)
+        self._api("PUT", "/me/player/play" + (f"?device_id={dev['id']}" if dev else ""), done, body)
+
+    def device_named(self, name: str):
+        """The closest speaker to a spoken name ('desk speaker' → 'Desk Speaker (Echo)')."""
+        n = (name or "").lower()
+        best, score = None, 0
+        for d in self.devices:
+            dn = d["name"].lower()
+            sc = 3 if dn == n else 2 if n in dn or dn in n else len(set(n.split()) & set(dn.split())) / 4
+            if sc > score:
+                best, score = d, sc
+        return best
+
+    def play_search(self, query: str, kind: str | None, speaker: str | None, done):
+        """Search Spotify and play the best match: a track plays with its album after it, an artist plays their top
+        songs, a playlist or album plays from the start. done(name or None, why)."""
+        from urllib.parse import quote
+        kind = kind if kind in ("track", "artist", "album", "playlist") else "track"
+        def got(status, data):
+            if status != 200:
+                done(None, "spotify search failed"); return
+            try:
+                items = (json.loads(data).get(kind + "s") or {}).get("items") or []
+                it = next((i for i in items if i), None)
+            except Exception:
+                it = None
+            if not it:
+                done(None, "nothing found"); return
+            uri, name = it.get("uri", ""), it.get("name", "")
+            self.play_uri(uri, speaker=speaker)
+            done(name, None)
+        self._api("GET", f"/search?q={quote(query)}&type={kind}&limit=3&market=from_token", got)
 
     def set_volume(self, pct: int):
         pct = max(0, min(100, int(pct)))

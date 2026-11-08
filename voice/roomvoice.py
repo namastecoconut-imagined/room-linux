@@ -607,7 +607,28 @@ class Ears:
         self.gain = g
         y = x * g
         y = np.where(np.abs(y) < 0.8, y, np.sign(y) * (0.8 + 0.2 * np.tanh((np.abs(y) - 0.8) / 0.2)))
-        return (y * 32767).astype(np.int16)
+        out = (y * 32767).astype(np.int16)
+        return self.clean(out)
+
+    def clean(self, pcm: np.ndarray) -> np.ndarray:
+        """Noise suppression — what Windows' Realtek/Intel mic processing did and Linux doesn't: the fan, the street
+        and the room's hum are taken out (WebRTC's suppressor, the one in video calls), the voice is left. 10 ms at a
+        time. "noiseSuppression" in config.json: 0 off … 4 strongest (2 by default)."""
+        ns = getattr(self, "ns", None)
+        if ns is None:
+            lvl = int(CFG.get("noiseSuppression", 2))
+            try:
+                from webrtc_noise_gain import AudioProcessor
+                ns = AudioProcessor(0, lvl) if lvl > 0 else False
+                log(f"mic: noise suppression level {lvl}" if ns else "mic: noise suppression off")
+            except Exception as e:
+                ns = False
+                log("mic: no noise suppression —", repr(e))
+            self.ns = ns
+        if not ns:
+            return pcm
+        b = pcm.tobytes()
+        return np.frombuffer(b"".join(ns.Process10ms(b[i:i + 320]).audio for i in range(0, len(b) - 319, 320)), dtype=np.int16)
 
     @staticmethod
     def pin_input():

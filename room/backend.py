@@ -99,7 +99,7 @@ class Room(QObject):
     @Property("QVariantMap", notify=musicChanged)
     def music(self):
         if self.demo:
-            m = dict(demo.MUSIC); m["at"] = time.time() - 4
+            m = dict(demo.MUSIC); m["at"] = time.time() - 4; m["canSeek"] = True
             m["playing"] = os.environ.get("ROOM_SCREEN") != "standby"; m["exists"] = m["playing"]
             if os.environ.get("ROOM_DEMO_ART"):          # a cover to check layouts with
                 if not getattr(self, "_demo_art", None):
@@ -121,7 +121,9 @@ class Room(QObject):
             if sp.get("exists") and sp.get("title", "").strip().lower() == m.get("title", "").strip().lower():
                 m["nextUp"] = sp.get("nextUp", [])
                 m["context"] = sp.get("context", "")
+                m["canSeek"] = True          # AirPlay can't seek, but Spotify on the phone can — seek through it
         m.setdefault("nextUp", [])
+        m.setdefault("canSeek", m.get("source") != "airplay")
         if m.get("source") == "airplay":
             # AirPlay plays through the Surface itself, so the slider is the Surface's volume
             # the phone's own AirPlay volume (it reports every change); the panel's slider sets the Surface's output
@@ -399,7 +401,12 @@ class Room(QObject):
 
     @Slot(float)
     def seek(self, s):
-        self.spotify.seek(s)
+        """Spotify seeks (also when it's Spotify on the phone being AirPlayed here); AirPlay itself has no seek."""
+        if self.music.get("canSeek"):
+            self.spotify.seek(s)
+            if self.airplay.showing:          # show the new place straight away; the phone confirms it shortly
+                self.airplay.position, self.airplay.at = float(s), time.time()
+                self.musicChanged.emit()
 
     @Slot(bool)
     def setStandby(self, on):

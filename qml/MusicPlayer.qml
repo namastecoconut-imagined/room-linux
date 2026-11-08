@@ -58,7 +58,13 @@ Item {
 
     // ---------------------------------------------------------------- song position
     property real seekDrag: -1
-    readonly property real pos: music.exists ? Math.min(music.duration || 0, (music.position || 0) + (music.playing ? now - music.at : 0)) : 0
+    // after a seek, hold the new place until the player reports it (Spotify takes a second or two) — no jumping back
+    property real seekTo: -1
+    property real seekAt: 0
+    readonly property real livePos: music.exists ? Math.min(music.duration || 0, (music.position || 0) + (music.playing ? now - music.at : 0)) : 0
+    readonly property real pos: seekTo >= 0 && now - seekAt < 4 && Math.abs(livePos - (seekTo + (music.playing ? now - seekAt : 0))) > 2
+                                ? Math.min(music.duration || 0, seekTo + (music.playing ? now - seekAt : 0)) : livePos
+    function seekTo_(sec) { seekTo = sec; seekAt = now; room.seek(sec) }
     readonly property real f: seekDrag >= 0 ? seekDrag : (music.duration > 0 ? pos / music.duration : 0)
 
     // ---------------------------------------------------------------- volume (slide anywhere)
@@ -159,7 +165,7 @@ Item {
         onPositionChanged: (e) => {
             var dx = e.x - x0, dy = e.y - y0
             if (mode === "" && Math.abs(dx) + Math.abs(dy) > 14) {
-                if (inSeek(x0, y0) && music.duration > 0 && mp.spotify) mode = "seek"
+                if (inSeek(x0, y0)) mode = music.duration > 0 && music.canSeek ? "seek" : "none"   // never volume by accident
                 else if (Math.abs(dy) >= Math.abs(dx)) { mode = "vol"; v0 = (music.volume || 0) / 100 }
                 else mode = "flow"
             }
@@ -169,12 +175,12 @@ Item {
         }
         onReleased: (e) => {
             var dx = e.x - x0
-            if (mode === "seek") { room.seek(seekF(e.x) * music.duration); mp.seekDrag = -1 }
+            if (mode === "seek") { mp.seekTo_(seekF(e.x) * music.duration); mp.seekDrag = -1 }
             else if (mode === "vol") { volSend.stop(); room.setVolume(Math.round(mp.volDrag * 100)); mp.volDrag = -1 }
             else if (mode === "flow") mp.flowEnd(dx)
             else if (mode === "") {
                 // a tap
-                if (inSeek(e.x, e.y) && music.duration > 0 && mp.spotify) room.seek(seekF(e.x) * music.duration)
+                if (inSeek(e.x, e.y)) { if (music.duration > 0 && music.canSeek) mp.seekTo_(seekF(e.x) * music.duration) }
                 else if (Math.abs(e.x - mp.cx) < mp.cs / 2 && Math.abs(e.y - mp.cy) < mp.cs / 2) room.playPause()
             }
             mode = ""

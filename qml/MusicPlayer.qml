@@ -40,9 +40,9 @@ Item {
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.35) }
-            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.40) }
-            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.82) }
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.10) }
+            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.20) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.70) }
         }
     }
 

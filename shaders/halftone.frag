@@ -29,7 +29,7 @@ void main() {
     float aa = 1.0;
     float m = 1.0 - smoothstep(r - aa, r + aa, dist);
     // a faint wash between the dots so the colour carries, dots brighter on top
-    vec3 base = col * 0.22;
-    vec3 dotc = mix(col, vec3(1.0), 0.12) * (0.58 + 0.28 * wave);
+    vec3 base = col * 0.55;
+    vec3 dotc = mix(col, vec3(1.0), 0.15) * (0.72 + 0.26 * wave);
     fragColor = vec4(mix(base, dotc, m), 1.0) * qt_Opacity;
 }

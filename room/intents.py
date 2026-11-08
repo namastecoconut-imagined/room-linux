@@ -15,30 +15,7 @@ COLOURS = {"red": (255, 60, 40), "orange": (255, 140, 30), "yellow": (255, 210, 
 WARMTH = {"candle": 2200, "warm": 2700, "warm white": 2700, "neutral": 4000, "cool": 5000, "cool white": 5000,
           "daylight": 6500, "bright white": 6500}
 SCENES = {"movie": "Movie", "film": "Movie", "evening": "Evening", "night": "Night", "relax": "Relax", "relaxing": "Relax",
-          "read": "Read", "reading": "Read", "cozy": "Relax", "cosy": "Relax"}
-
-# What the recogniser writes when it mishears a command, → what was said. Only whole, well-known command shapes, so a
-# real sentence is never "corrected" (Alexa does the same: a reading that's a valid command beats one that isn't).
-SOUNDALIKES = [
-    (r"^(?:no|now|know|done|don|torn|tone|ton|tun|tan|then|turned|tune|tum|tom|town)\s+(off|on)\b", r"turn \1"),
-    (r"^(?:switch|turn)\s+of\b", "turn off"),
-    (r"\blights? of$", "lights off"),
-    (r"^(?:set|said|sit|sat)\s+(?:a\s+)?(?:time|timer|tie|type)\s+(?:of|for|off|to)\s+", "set a timer for "),
-    (r"^standard time of\s+", "set a timer for "),
-    (r"^(?:set a|start a)\s+time\b", "set a timer"),
-    (r"^make (?:a posing|a cozy|a cosy|it cosy|it cause he|it cosie|it causey|it cozie|a cozie|it kozy)$", "make it cozy"),
-    (r"^(?:please|plays|place|played|flay|blaze|plea)\s+(?:drink|thing|sting|some thing|something|some)\b", "play something"),
-    (r"^(?:say|stay|play)\s+something\s+(\w+)\s+on\s+spot(?:ify)?$", r"play something \1"),
-    (r"\bon spot$", "on spotify"),
-    (r"^(?:paws|pours|pores|pass)$", "pause"),
-    (r"^(?:next song|skip it|skip this)$", "next"),
-]
-
-
-def soundalike(t: str) -> str:
-    for pat, to in SOUNDALIKES:
-        t = re.sub(pat, to, t)
-    return t
+          "read": "Read", "reading": "Read"}
 
 
 def words_to_numbers(t: str) -> str:
@@ -70,12 +47,11 @@ def clean(text: str) -> str:
     t = text.lower()
     t = re.sub(r"[^\w\s:%'.-]", " ", t)
     t = re.sub(r"^\s*(hey\s+|ok(ay)?\s+)?alexa[\s,]*", "", t)
-    t = soundalike(re.sub(r"\s+", " ", t).strip(" ."))         # before "please" goes: "please drink chill" is "play something chill"
     t = re.sub(r"\b(please|could you|can you|would you|kindly|just)\b", " ", t)
     t = t.replace("%", " percent").replace("o'clock", "").replace("p.m.", "pm").replace("a.m.", "am")
     t = re.sub(r"(\d)\.(?=\s|$)", r"\1", t)
     t = re.sub(r"\s+", " ", t).strip(" .")
-    return words_to_numbers(soundalike(t))
+    return words_to_numbers(t)
 
 
 def duration(t: str) -> int | None:
@@ -280,21 +256,10 @@ def parse(text: str, rooms: list[str] | None = None, playlists: list[str] | None
     if m:
         q = m.group(1).strip()
         best = _best_playlist(q, playlists)
-        # a mood, not a name: "something chill", "some jazz", "relaxing music" → a playlist search for it
-        mm = re.fullmatch(r"(?:something|some|a bit of|anything)\s+(.+?)|(.+?)\s+(?:music|songs|vibes|tunes)", q)
-        mood = (mm.group(1) or mm.group(2)).strip() if mm else ""
-        if not mood and re.match(r"(?:play|put on|start)\s+some\s+\w", t):
-            mood = q                        # "play some jazz"
-        mood = re.sub(r"^(?:something|some|a little|nice|good)\s+", "", mood)
-        mood = mood if mood and len(mood.split()) <= 3 else ""
-        phrase = ("something " + mood) if q.startswith("something") else ("some " + q) if mood else ""
-        return {"do": "play", "query": q, "playlist": best, "mood": mood, "phrase": phrase}
-
-    if re.search(r"\bspotify\b", t):
-        return {"do": "unknown", "text": t}        # something about music that isn't a plain command: Claude
+        return {"do": "play", "query": q, "playlist": best}
 
     # ---------------------------------------------------------------- lights
-    lightish = re.search(r"\b(cozy|cosy|lights?|lamps?|bulbs?|brightness|bright|dim|dimmer|brighter|warmer|cooler|colder|on|off|percent|colou?r|"
+    lightish = re.search(r"\b(lights?|lamps?|bulbs?|brightness|bright|dim|dimmer|brighter|warmer|cooler|colder|on|off|percent|colou?r|"
                          + "|".join(COLOURS) + "|" + "|".join(WARMTH) + r"|mode|scene)\b", t)
     room = match_room(t, rooms)
     if lightish or room:

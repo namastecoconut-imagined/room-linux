@@ -280,10 +280,12 @@ class Speaker:
         except Exception as e:
             out.put((tag, None, repr(e)))
 
-    def _fetch(self, text, t0):
-        """Aura's answer as (first bytes, the rest). Deepgram's first sound is usually ~0.7 s but now and then 2–2.5 s:
-        if nothing has come back after 1.1 s, a second request goes out on a fresh connection and whichever answers
-        first is used. None if it couldn't be reached."""
+    def _deepgram(self, text, g) -> bool:
+        """Aura, streamed: playback starts with the first bytes. False if it couldn't be reached (→ Kokoro).
+        Deepgram's first sound is usually ~0.7 s but now and then 2–2.5 s: if nothing has come back after 1.1 s, a
+        second request goes out on a fresh connection and whichever answers first is played."""
+        self.busy = True
+        t0 = time.time()
         out: queue.Queue = queue.Queue()
         threading.Thread(target=Speaker._aura, args=(HTTP, text, out, "kept"), daemon=True).start()
         sent, errors, got = 1, [], None
@@ -307,11 +309,10 @@ class Speaker:
             got = (tag, res, first)
         if got is None:
             log("aura:", "; ".join(errors) or "no answer")
-            return None
+            return False
         tag, (r, chunks), head = got
         if sent == 2:
-            log(f"aura: the {tag} request answered first ({time.time() - t0:.2f} s)")
-
+            log(f"aura: the {tag} request answered first")
             def drop():                     # the slower one, when it comes
                 try:
                     _, res2, _ = out.get(timeout=20)
@@ -320,35 +321,10 @@ class Speaker:
                 except Exception:
                     pass
             threading.Thread(target=drop, daemon=True).start()
-        return head, chunks, r
-
-    def _deepgram(self, text, g) -> bool:
-        """Aura, streamed: playback starts with the first bytes. A short line said before is played from the Surface
-        (saved the first time it was spoken) — no waiting at all. False if Aura couldn't be reached (→ Kokoro)."""
-        self.busy = True
-        t0 = time.time()
-        saved = line_path(text)
-        r, keep = None, None
-        if os.path.exists(saved):
-            with open(saved, "rb") as f:
-                data = f.read()
-            head, chunks, src = data[:4800], (data[i:i + 4800] for i in range(4800, len(data), 4800)), "saved"
-            try:
-                os.utime(saved)
-            except OSError:
-                pass
-        else:
-            got = self._fetch(text, t0)
-            if got is None:
-                return False
-            head, chunks, r = got
-            src = "aura"
-            keep = [] if keepable(text) else None
         with self.lock:
             if g != self.gen:
                 log(f"aura: dropped — something new started {time.time() - t0:.1f} s in")
-                if r is not None:
-                    r.close()
+                r.close()
                 return True
             self.proc = subprocess.Popen(["pw-play", *voice_out(), "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -363,9 +339,7 @@ class Speaker:
                 if chunk:
                     if first:
                         emit(ev="speaking"); first = False
-                        log(f"{'saved line' if src == 'saved' else 'aura'}: first sound in {time.time() - t0:.2f} s")
-                    if keep is not None:
-                        keep.append(chunk)
+                        log(f"aura: first sound in {time.time() - t0:.2f} s")
                     chunk = odd + chunk
                     cut = len(chunk) // 2 * 2
                     chunk, odd = chunk[:cut], chunk[cut:]
@@ -375,9 +349,6 @@ class Speaker:
                     if DUMP:
                         with open(DUMP, "ab") as f:
                             f.write(out)
-            else:
-                if keep and g == self.gen:
-                    save_line(saved, b"".join(keep))     # heard in full: the next time it's instant
         except Exception as e:
             if g == self.gen:
                 log("aura play:", repr(e))
@@ -438,164 +409,7 @@ class Speaker:
 def chime(name):
     f = os.path.join(CUES, f"{name}.wav")
     if os.path.exists(f):
-        # the listening chime is the one you talk over: softer (and taken back out of the mic by the echo canceller)
-        vol = CFG.get("listenChime", 0.5) if name == "listen" else 0.9
-        if vol:
-            subprocess.Popen(["pw-play", *surface_target(), "--volume", str(vol), f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
-# ---------------------------------------------------------------- short lines, kept on the Surface
-LINES = os.path.join(DATA, "lines")
-
-
-def line_path(text):
-    import hashlib
-    key = hashlib.sha1(f"{DG_VOICE}|{' '.join(text.split()).lower()}".encode()).hexdigest()[:20]
-    return os.path.join(LINES, key + ".pcm")
-
-
-def keepable(text):
-    return len(text) <= 70 and text.count(".") + text.count("?") <= 2
-
-
-def save_line(path, data):
-    try:
-        os.makedirs(LINES, exist_ok=True)
-        tmp = path + ".part"
-        with open(tmp, "wb") as f:
-            f.write(data)
-        os.replace(tmp, path)
-        files = sorted((os.path.getmtime(os.path.join(LINES, x)), x) for x in os.listdir(LINES) if x.endswith(".pcm"))
-        for _, x in files[:-500]:
-            os.remove(os.path.join(LINES, x))
-    except Exception as e:
-        log("lines:", repr(e))
-
-
-def prepare(lines):
-    """Fetch the everyday confirmations ahead of time, quietly, so even the first "Lights off." is instant."""
-    def go():
-        for text in lines:
-            path = line_path(text)
-            if not DG_KEY or os.path.exists(path):
-                continue
-            q: queue.Queue = queue.Queue()
-            Speaker._aura(requests.Session(), text, q, "prep")
-            _, res, head = q.get()
-            if not res:
-                continue
-            try:
-                save_line(path, head + b"".join(c for c in res[1] if c))
-            except Exception:
-                pass
-            time.sleep(0.2)
-    threading.Thread(target=go, daemon=True).start()
-
-
-# ---------------------------------------------------------------- Room's own sound out of the mic
-def default_source():
-    try:
-        out = subprocess.run(["wpctl", "inspect", "@DEFAULT_AUDIO_SOURCE@"], capture_output=True, text=True, timeout=3).stdout
-        m = re.search(r'node\.name = "([^"]+)"', out)
-        return m.group(1) if m else ""
-    except Exception:
-        return ""
-
-
-def node_id(name):
-    try:
-        for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
-            if ((n.get("info") or {}).get("props") or {}).get("node.name") == name:
-                return str(n["id"])
-    except Exception:
-        pass
-    return ""
-
-
-def echo_cancel():
-    """PipeWire's echo canceller (WebRTC), run by Room as its own small PipeWire process: it takes the default mic
-    and what the Surface is playing (Room's voice, chimes, anything through its speakers) and makes "room_aec_source"
-    — the mic with that sound taken out. Nothing in the system's own setup changes; it stops when Room stops."""
-    if CFG.get("echoCancel", True) is False or not shutil.which("pipewire"):
-        return
-    conf = os.path.join(DATA, "echo-cancel.conf")
-    os.makedirs(DATA, exist_ok=True)
-    mic = CFG.get("mic") or default_source()
-    if not mic or mic == "room_aec_source":
-        log("echo canceller: couldn't tell which mic is the default — listening to the plain default mic")
-        return
-    target = f'target.object = "{mic}"'
-    with open(conf, "w") as f:
-        f.write("""# written by Room (voice/roomvoice.py) — run as its own process; delete freely
-context.properties = { log.level = 2 }
-context.spa-libs = {
-    audio.convert.* = audioconvert/libspa-audioconvert
-    support.*       = support/libspa-support
-}
-context.modules = [
-    { name = libpipewire-module-rt args = { nice.level = -11 } flags = [ ifexists nofail ] }
-    { name = libpipewire-module-protocol-native }
-    { name = libpipewire-module-client-node }
-    { name = libpipewire-module-adapter }
-    { name = libpipewire-module-echo-cancel
-      args = {
-        library.name = aec/libspa-aec-webrtc
-        monitor.mode = true
-        audio.channels = 1
-        audio.position = [ MONO ]
-        aec.args = {
-            webrtc.extended_filter = true
-            webrtc.delay_agnostic = true
-            webrtc.high_pass_filter = true
-            webrtc.noise_suppression = false
-            webrtc.gain_control = false
-            webrtc.voice_detection = false
-        }
-        capture.props = { node.name = "room_aec_capture" node.description = "Room echo canceller (mic in)" %TARGET% }
-        source.props = { node.name = "room_aec_source" node.description = "Room mic (its own sound taken out)"
-                         priority.session = 0 priority.driver = 0 }
-        sink.props = { node.name = "room_aec_reference" node.description = "Room echo canceller (what's playing)" }
-        playback.props = { node.name = "room_aec_playback" }
-      }
-    }
-]
-""".replace("%TARGET%", target))
-    subprocess.run(["pkill", "-f", "pipewire -c " + conf], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    def die_with_me():
-        try:
-            import ctypes, signal
-            ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM)       # PR_SET_PDEATHSIG: goes when Room's voice goes
-        except Exception:
-            pass
-
-    def keep_default():
-        # Room's mic is only for Room: if the system ever falls back to it as everyone's default, put theirs back
-        while True:
-            time.sleep(10)
-            try:
-                if default_source() == "room_aec_source":
-                    nid = node_id(mic)
-                    if nid:
-                        subprocess.run(["wpctl", "set-default", nid], timeout=3)
-                        log(f"the system's default mic had become Room's — put back to {mic}")
-            except Exception:
-                pass
-    threading.Thread(target=keep_default, daemon=True).start()
-
-    def run():
-        while True:
-            t = time.time()
-            p = subprocess.Popen(["pipewire", "-c", conf], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                                 preexec_fn=die_with_me)
-            err = p.stderr.read().decode(errors="replace")[-400:]
-            p.wait()
-            log("echo canceller stopped:", err.strip() or f"exit {p.returncode}")
-            if time.time() - t < 20:
-                log("echo canceller isn't working here — listening to the plain default mic")
-                return
-            time.sleep(3)
-    threading.Thread(target=run, daemon=True).start()
+        subprocess.Popen(["pw-play", *surface_target(), "--volume", "0.9", f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():
@@ -610,7 +424,6 @@ def main():
         pass
     ears = None
     if CFG.get("listen") is not False:
-        echo_cancel()
         try:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from ears import Ears
@@ -638,10 +451,6 @@ def main():
                     ears.cancel()
             elif cmd == "listen" and ears:
                 ears.begin(follow=bool(c.get("follow")))
-            elif cmd == "quick" and ears:
-                ears.set_quick(c.get("on", True))
-            elif cmd == "prepare":
-                prepare([x for x in c.get("lines", []) if isinstance(x, str)][:200])
             elif cmd == "words" and ears:
                 ears.words = [w for w in c.get("words", []) if isinstance(w, str)][:40]
         except Exception as e:

@@ -141,7 +141,6 @@ class Assistant(QObject):
         if ev == "ready":
             self._fails = 0; self.error = ""; self.state = "idle"
             self._send(cmd="words", words=self._words())
-            self._send(cmd="prepare", lines=self._everyday_lines())
         elif ev == "error":
             self.error = e.get("msg", "")
         elif ev in ("wake", "listening"):
@@ -150,7 +149,6 @@ class Assistant(QObject):
             if ev == "wake":
                 self.following = False; self._follow_turns = 0
             self.state = "listening"; self.heard = ""; self.reply = ""; self.error = ""; self.line = ""; self.card = ""
-            self._quick = False
             self.stage = "follow" if self.following else "wake"
             self._duck(True)
             if self.brain:
@@ -159,14 +157,6 @@ class Assistant(QObject):
             self.heard = (e.get("text") or "").strip()        # words as they're recognised
             if self.heard:
                 self.stage = "heard"
-                # already a whole, plain command ("turn off the lights")? Then Room needn't wait for a long silence
-                try:
-                    q = self._fast(self.heard, self._parse(self.heard))
-                    if q != getattr(self, "_quick", False):
-                        self._quick = q
-                        self._send(cmd="quick", on=q)       # and back off if it grows into something more
-                except Exception:
-                    pass
         elif ev == "thinking":
             self.state = "thinking"; self.stage = "think"
         elif ev == "heard":
@@ -289,7 +279,7 @@ class Assistant(QObject):
                         except Exception:
                             continue
                         saved[sid] = v
-                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.4:.2f}"], timeout=2)    # ≈ −24 dB: clear of your words
+                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.55:.2f}"], timeout=2)   # ≈ −15 dB
                 elif not on and saved is not None:
                     for sid, v in saved.items():
                         subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.2f}"], timeout=2)
@@ -336,27 +326,24 @@ class Assistant(QObject):
             self._pending = None
             if not re.search(r"\b(timer|alarm|remind)\b", text.lower()):
                 text = lead + text
-        it = self._parse(text)
-        # plain commands run on the Surface at once — a chime, or a short line it already has (no Claude, no waiting)
+        r = self.room
+        rooms = [x["name"] for x in r.lights.snapshot()]
+        pls = [p.get("name", "") for p in (r.spotify.snapshot().get("playlists") or [])]
+        it = intents.parse(text, rooms, pls)
+        # short, plain commands run at once — a chime instead of a sentence (the phone's fast path)
         if self._fast(text, it):
             try:
                 line, _ = self._do(it)
             except Exception as e:
                 line = ""
                 print(f"[room] fast path: {e!r}")
-            print(f"[room] on the Surface: {it.get('do')} → {line!r}", flush=True)
+            self.chime("done")
             if self.brain:
-                self.brain.remember(text, line, did=line)
+                self.brain.remember(text, "", did=line)
             self.following = False
-            if it.get("do") in self.SPOKEN and line:
-                self._finish("done", line.rstrip(".").lower(), line)
-                self.say(line)
-            else:
-                if it.get("do") != "dismiss":
-                    self.chime("done")
-                self.state = "idle"
-                self._finish("done" if it.get("do") != "dismiss" else "idle", (line or "done").rstrip(".").lower())
-                QTimer.singleShot(1200, lambda: self._duck(False))
+            self.state = "idle"
+            self._finish("done", (line or "done").rstrip(".").lower())
+            QTimer.singleShot(1200, lambda: self._duck(False))
             return
         if self.brain:
             self.state = "thinking"; self.stage = "think"; self.changed.emit()
@@ -387,53 +374,16 @@ class Assistant(QObject):
         self.stage, self.line, self.card = ("miss" if it.get("do") == "unknown" else "done"), reply.rstrip(".").lower(), ""
         self.say(reply, listen)
 
-    def _parse(self, text):
-        r = self.room
-        rooms = [x["name"] for x in r.lights.snapshot()]
-        pls = [p.get("name", "") for p in (r.spotify.snapshot().get("playlists") or [])]
-        return intents.parse(text, rooms, pls)
-
-    # what the Surface does by itself, at once (the phone's fast path, and how Alexa does it): plain commands and the
-    # clock. Everything else — questions, chat, anything unusual — goes to Claude.
-    QUIET = ("lights", "scene", "pause", "resume", "next", "previous", "volume")          # a chime, no words
-    SPOKEN = ("timer_start", "timer_cancel", "timer_pause", "timer_resume", "timer_add", "alarm_set", "time", "date",
-              "play", "dismiss")
-
     @staticmethod
     def _fast(text, it) -> bool:
-        d = it.get("do")
-        low = " " + intents.clean(text) + " "
-        if len(low.split()) > 10:
+        low = " " + text.lower() + " "
+        if len(text.split()) > 10:
             return False
-        if d in ("time", "date"):
-            return True
-        if d == "dismiss":
-            return True
-        if d == "play" and not (it.get("playlist") or it.get("mood")):
-            return False                    # a song or an artist by name: Claude picks the right kind of search
-        if d == "alarm_set" and "h" not in it and "in" not in it:
+        if re.match(r"\s*(is|are|what|how|did|does|do|can|could|will|would|why|when|which|who|should)\b", text.lower()):
             return False
-        if re.match(r"\s*(is|are|what|how|did|does|do|can|could|will|would|why|when|which|who|should)\b", low):
+        if any(w in low for w in (" not ", " don't ", " no ", " never ", " except ", " but ", " and then ", " after ", " in ")):
             return False
-        if any(w in low for w in (" not ", " don't ", " no ", " never ", " except ", " but ", " and ", " then ",
-                                  " after ", " before ", " if ", " unless ")):
-            return False
-        if re.search(r"\bin (\d|a |an |half|the next|ten|five|twenty|thirty)", low) and d not in ("timer_start", "alarm_set"):
-            return False                    # "…in 20 minutes" — something for later: Claude
-        return d in Assistant.QUIET + Assistant.SPOKEN
-
-    def _everyday_lines(self):
-        lines = ["Lights off.", "Lights on.", "Okay.", "Timer cancelled.", "Timers cancelled.", "Paused.", "Resumed.",
-                 "There's no timer running.", "Saved.", "Putting on something chill.", "Putting on something relaxing.",
-                 "I couldn't find that on Spotify."]
-        lines += [f"Timer for {dur_text(n)}, starting now." for n in (30, 60, 120, 180, 240, 300, 360, 420, 480, 600, 900,
-                                                                       1200, 1500, 1800, 2700, 3600, 5400, 7200)]
-        lines += [f"Added {dur_text(n)}." for n in (60, 120, 300, 600)]
-        try:
-            lines += [f"{x['name']} off." for x in self.room.lights.snapshot()] + [f"{x['name']} on." for x in self.room.lights.snapshot()]
-        except Exception:
-            pass
-        return lines
+        return it.get("do") in ("lights", "scene", "pause", "resume", "next", "previous", "volume")
 
     # ---------------------------------------------------------------- Claude's answer → the home
     def _deliver(self, text, out, spoken_early, it, turn):
@@ -868,16 +818,6 @@ class Assistant(QObject):
                 if uri:
                     r.playUri(uri)
                     return f"Playing {pl}.", False
-            if it.get("mood"):
-                mood = it["mood"]
-
-                def rep(name, why):
-                    if not name:
-                        self._main.emit(lambda: self.say("I couldn't find that on Spotify."))
-                    else:
-                        print(f"[room] playing {name!r} for {mood!r}", flush=True)
-                r.spotify.play_search(mood, "playlist", None, rep)
-                return f"Putting on {it.get('phrase') or 'something ' + mood}.", False
             return f"I couldn't find {it.get('query')} in your playlists.", False
 
         if d == "ask":

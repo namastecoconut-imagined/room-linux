@@ -640,10 +640,10 @@ class Ears:
         g = getattr(self, "g", 3.0)
         top = float(CFG.get("maxGain", 8.0))
         if rms > max(self.floor * 3, 0.0015):
+            # follows the voice's loudness (not single peaks — a loud "Alexa" or a tap on the keyboard used to drop the
+            # boost for seconds and leave the question after it too quiet); the soft limiter below catches peaks
             want = float(np.clip(0.1 / rms, 1.0, top))
-            g += (want - g) * (0.5 if want < g else 0.03)
-        if pk * g > 0.9:
-            g = max(1.0, 0.9 / pk)
+            g += (want - g) * (0.35 if want < g else 0.08)
         self.g = g
         self.gain = g
         y = x * g

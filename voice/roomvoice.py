@@ -1,9 +1,9 @@
-"""Room's voice — a separate process, so a sound problem can never take the panel down. Speaking only: listening
-(wake word, mic processing, speech recognition) was removed to be rebuilt from scratch.
+"""Room's voice and ears — a separate process, so a sound problem can never take the panel down.
 
 Started by Room (room/assistant.py) with its own Python (voice/.venv). Talks over stdin/stdout, one JSON object a line.
-  out → {"ev": "ready"} · {"ev": "speaking"} · {"ev": "spoken"} · {"ev": "error", "msg"}
-  in  ← {"cmd": "say", "text": "..."} · {"cmd": "chime", "name": "done|miss|listen"} · {"cmd": "cancel"}
+  out → ready · level · wake · listening · partial · heard · speaking · spoken · error
+  in  ← say {text} · chime {name} · listen {follow} · cancel · words {words}
+Listening is in ears.py; "listen": false in voiceSettings turns it off (speaking still works).
 
 Speaking: Deepgram's Aura voice, streamed straight to the speaker; Kokoro (af_heart) when there's no key or no internet.
 """
@@ -195,6 +195,16 @@ def main():
         emit(ev="error", msg="pw-play is missing (pipewire-utils)")
         return
     speaker = Speaker()
+    ears = None
+    if CFG.get("listen") is not False:
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from ears import Ears
+            ears = Ears(CFG, speaker, emit, chime)
+            threading.Thread(target=ears.run, daemon=True).start()
+        except Exception as e:
+            log("listening couldn't start:", repr(e))
+            emit(ev="error", msg=f"Listening couldn't start: {e}")
     emit(ev="ready")
     for line in sys.stdin:
         try:
@@ -209,6 +219,12 @@ def main():
                 chime(c.get("name", ""))
             elif cmd == "cancel":
                 speaker.stop()
+                if ears:
+                    ears.cancel()
+            elif cmd == "listen" and ears:
+                ears.begin(follow=bool(c.get("follow")))
+            elif cmd == "words" and ears:
+                ears.words = [w for w in c.get("words", []) if isinstance(w, str)][:40]
         except Exception as e:
             log("cmd:", repr(e))
     # Room went away

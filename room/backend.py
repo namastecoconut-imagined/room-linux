@@ -240,7 +240,7 @@ class Room(QObject):
     @Property(bool, notify=voiceChanged)
     def micOn(self):
         """Whether the room's sound is being listened to (it drives the standby ripple and the music beat)."""
-        return os.environ.get("ROOM_MIC") == "1"          # nothing listens to the mic for now (listening is being rebuilt)
+        return self.assistant.state != "off" or os.environ.get("ROOM_MIC") == "1"
 
     @Property("QVariantMap", notify=voiceChanged)
     def voice(self):

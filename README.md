@@ -49,14 +49,16 @@ Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
 
 ## Voice
 
-Set up once with `bash scripts/voice.sh` (install.sh runs it too). **Listening is off for now** — the wake word, mic
-processing and speech recognition were removed to be rebuilt from scratch (`scripts/cleanup-listening.sh` cleared
-what they had put on the Surface and put the mics back to Fedora's defaults).
+Set up once with `bash scripts/voice.sh` (install.sh runs it too).
 
+- **Listening** (`voice/ears.py`) — the system's default mic as it is (on the Surface: the noise-suppressed "Surface
+  Mic"), no processing of Room's own. "Alexa" is spotted on the Surface (openWakeWord) and Room reacts at once; what
+  follows streams to Deepgram (nova-3, en-IN), one stream per request. You've finished when Deepgram says so or after
+  ~0.8 s without speech (Silero VAD).
 - **Understanding** — Claude (`room/brain.py`, the iPhone panel's prompt and tool) with a snapshot of the home;
   `room/intents.py`, plain rules, when there's no key or no internet. `room/assistant.py` carries out the actions.
 - **Answers** — Deepgram's Aura voice, streamed (`deepgramKey`); Kokoro (`af_heart`) offline. Chimes in `voice/cues`.
 
 The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on.
-Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"voice": "bf_emma", "speed": 1.05,
-"loudness": 1.0, "voiceVolume": 1.0}`.
+Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"listen": true, "wakeThreshold": 0.4,
+"bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "loudness": 1.0, "voiceVolume": 1.0}`.

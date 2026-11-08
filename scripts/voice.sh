@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Room's voice — speaking only (Deepgram's Aura online, Kokoro offline). Listening is being rebuilt. Safe to run again.
+# Room's voice and ears — speaking (Deepgram's Aura online, Kokoro offline) and listening ("Alexa" on the Surface,
+# Deepgram for what follows). Safe to run again.
 set -euo pipefail
 trap 'echo "✗ Voice setup stopped at line $LINENO — paste the lines above to Claude"' ERR
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
@@ -20,9 +21,13 @@ cd "$HERE/voice"
 uv python install -q 3.12
 [ -x .venv/bin/python ] || uv venv -q --python 3.12 .venv
 uv pip install -q --python .venv/bin/python -r requirements.txt
+uv pip install -q --python .venv/bin/python --no-deps "openwakeword==0.6.0"
 
-echo "▸ Voice: the offline speaking voice"
+echo "▸ Voice: the wake word and the offline speaking voice"
 get() { if [ ! -s "$2" ]; then curl -fL --retry 3 -# -o "$2.part" "$1" && mv "$2.part" "$2"; fi; }
+mkdir -p "$DATA/oww"
+OWW=https://github.com/dscripka/openWakeWord/releases/download/v0.5.1
+for f in alexa_v0.1.onnx melspectrogram.onnx embedding_model.onnx silero_vad.onnx; do get "$OWW/$f" "$DATA/oww/$f"; done
 K=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
 get "$K/kokoro-v1.0.int8.onnx" "$DATA/kokoro.onnx"
 get "$K/voices-v1.0.bin" "$DATA/voices.bin"
@@ -35,4 +40,4 @@ UPD
 chmod +x ~/.local/bin/room-update
 
 systemctl --user restart room.service 2>/dev/null || true
-echo "✓ Room’s voice is set up."
+echo "✓ Room’s voice and ears are set up — say “Alexa”."

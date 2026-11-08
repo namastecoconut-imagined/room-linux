@@ -548,6 +548,7 @@ class Ears:
             self.chime("listen")
         self.wait = 8.0 if follow else 6.0
         self.state = "listening"
+        self.rec_pre = list(self.ring[-25:])            # the 2 s before (the "Alexa"), for the saved recording
         self.provisional = False
         self.spoke_at = getattr(self, "clock", 0.0)
         self.rec = []
@@ -569,6 +570,23 @@ class Ears:
                         self.dg.push(c)
         warm_speech()
         emit(ev="listening", follow=follow)
+
+    def keep_turn(self, text):
+        """Keep what the panel heard for each request (exactly what went to recognition), so it can be listened to:
+        ~/room-heard/<time> <what it understood>.wav — the last 15. "keepAudio": false in config.json turns it off."""
+        if CFG.get("keepAudio") is False or not self.rec:
+            return
+        try:
+            d = os.path.expanduser("~/room-heard"); os.makedirs(d, exist_ok=True)
+            slug = re.sub(r"[^a-z0-9 ']+", "", (text or "nothing heard").lower())[:50].strip() or "nothing heard"
+            path = os.path.join(d, time.strftime("%H-%M-%S ") + slug + ".wav")
+            with wave.open(path, "wb") as w:
+                w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
+                w.writeframes(np.concatenate(getattr(self, "rec_pre", []) + self.rec).astype("<i2").tobytes())
+            for old in sorted(os.listdir(d))[:-15]:
+                os.unlink(os.path.join(d, old))
+        except Exception as e:
+            log("keep audio:", e)
 
     def _dg_done(self, text, src=None):
         if src is not None and src is not self.dg:
@@ -599,6 +617,7 @@ class Ears:
             return
         self.dg = None
         self.state = "idle"
+        self.keep_turn(text)
         emit(ev="heard", text=text, quiet=bool(getattr(self, "provisional", False) and not text))
 
     # ---------------------------------------------------------------- the mic, evened out
@@ -842,6 +861,7 @@ class Ears:
             emit(ev="error", msg="Speech recognition isn't running (whisper)")
             log("whisper:", e)
         self.state = "idle"
+        self.keep_turn(text)
         emit(ev="heard", text=text)
 
     # ---------------------------------------------------------------- commands from Room

@@ -4,7 +4,8 @@ import QtQuick.Shapes
 // The music player — the iPhone panel's MusicScreen at Surface scale (×2.6 on the 568 × 320 phone layout).
 // The cover is the controller (Car Thing + cover flow): tap it to pause, swipe it to skip, slide up or down anywhere
 // for volume. The song's progress runs round the cover's edge; a glow in its colour pulses behind it to the beat.
-// Left: song, next, time, the dot equaliser, the speaker. Right: previous, play, next, like. Top: back, library.
+// Laid out for the Surface's wider screen: the cover in its ring on the left with the equaliser and speaker under it;
+// on the right the song (and like), what's next (tap to skip to it) and the controls. Top: back, library.
 Item {
     id: mp
     width: Theme.stageW; height: Theme.stageH
@@ -18,11 +19,14 @@ Item {
     property bool library: false
 
     // ---------------------------------------------------------------- geometry (stage px)
-    readonly property real cx: 684                  // cover centre
-    readonly property real cy: 456
-    readonly property real cs: 660                  // cover size
+    // the grid: 64 px margins; cover column 64–648 (the ring's box), info column 720–1304; content between y 152 and 848
+    readonly property real cx: 356                  // cover centre
+    readonly property real cy: 444
+    readonly property real cs: 540                  // cover size
     readonly property real ringPad: 22              // the ring runs this far outside the cover
-    readonly property real ringR: 62                // ring corner radius
+    readonly property real ringR: 56                // ring corner radius
+    readonly property real col: 720                 // the info column
+    readonly property real colR: 1304
     readonly property real rw: cs + 2 * ringPad     // ring box
     readonly property real ringL: 4 * (rw - 2 * ringR) + 2 * Math.PI * ringR
 
@@ -115,20 +119,10 @@ Item {
             GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.64) }
         }
     }
-    // a faint dark wash behind the words on the left
-    Rectangle {
-        x: 0; y: 0; width: 600; height: parent.height
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.42) }
-            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.28) }
-            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0) }
-        }
-    }
     // the glow in the cover's colour, pulsing with the beat
     Shape {
         id: glow
-        width: 1830; height: 1830
+        width: 1500; height: 1500
         x: mp.cx - width / 2; y: mp.cy - height / 2
         scale: 0.94 + 0.3 * mp.beatNow
         opacity: music.playing ? 0.62 + 0.38 * mp.beatNow : 0
@@ -138,13 +132,13 @@ Item {
         ShapePath {
             strokeColor: "transparent"
             fillGradient: RadialGradient {
-                centerX: 915; centerY: 915; centerRadius: 915; focalX: 915; focalY: 915
+                centerX: 750; centerY: 750; centerRadius: 750; focalX: 750; focalY: 750
                 GradientStop { position: 0.0; color: Qt.rgba(glow.c.r, glow.c.g, glow.c.b, 0.95) }
                 GradientStop { position: 0.34; color: Qt.rgba(glow.c.r, glow.c.g, glow.c.b, 0.7) }
                 GradientStop { position: 0.54; color: Qt.rgba(glow.c.r, glow.c.g, glow.c.b, 0.28) }
                 GradientStop { position: 0.72; color: Qt.rgba(glow.c.r, glow.c.g, glow.c.b, 0) }
             }
-            PathRectangle { x: 0; y: 0; width: 1830; height: 1830; radius: 915 }
+            PathRectangle { x: 0; y: 0; width: 1500; height: 1500; radius: 750 }
         }
     }
 
@@ -200,8 +194,8 @@ Item {
         var art = dir > 0 ? (nx ? nx.art : "") : (pv ? pv.art : "")
         flyArt = art || music.art || ""
         flyUntil = now + 5
-        flyOut.to = dir > 0 ? -990 : 990
-        flyIn.from = dir > 0 ? 364 : -364
+        flyOut.to = dir > 0 ? -820 : 820
+        flyIn.from = dir > 0 ? 300 : -300
         fly.start()
         if (dir > 0) room.next(); else room.previous()
     }
@@ -216,21 +210,6 @@ Item {
 
     // ================================================================= the covers
     readonly property bool fade: sliding
-    // the previous and next songs, tilted behind
-    Repeater {
-        model: [{ k: -1, art: recent.length ? recent[0].art : "" }, { k: 1, art: nextUp.length ? nextUp[0].art : "" }]
-        Cover {
-            visible: modelData.art !== "" && music.exists
-            width: 540; height: 540
-            x: mp.cx + (modelData.k < 0 ? -437 : -114); y: mp.cy - 270 + 62
-            rotation: modelData.k * 6
-            opacity: mp.fade ? 0 : 0.42
-            Behavior on opacity { NumberAnimation { duration: 200 } }
-            radius: 40
-            source: modelData.art
-            rgb: [90, 84, 78]; rgb2: [30, 28, 26]
-        }
-    }
     // the cover, with a soft shadow under it
     Item {
         id: box
@@ -244,7 +223,7 @@ Item {
         }
         Cover {
             anchors.fill: parent
-            radius: 42
+            radius: 40
             source: mp.flyArt && mp.now < mp.flyUntil ? mp.flyArt : (music.exists ? (music.art || "") : "")
             rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34]
             opacity: music.exists ? 1 : 0.3
@@ -319,39 +298,12 @@ Item {
         return Qt.point(w / 2, 0)
     }
 
-    // ================================================================= left: the song
-    Column {
-        x: 48; y: 216; width: 262
-        opacity: mp.fade ? 0 : 1
-        Behavior on opacity { NumberAnimation { duration: 200 } }
-        T { width: parent.width; text: music.exists ? music.title : "Nothing playing"; font.pixelSize: 46; maximumLineCount: 2; wrapMode: Text.WordWrap; lineHeight: 0.95 }
-        Item { width: 1; height: 14 }
-        T {
-            width: parent.width; maximumLineCount: 2; wrapMode: Text.WordWrap
-            text: music.exists ? music.artist : (music.error || (music.enabled ? "pick a playlist in your library" : "spotify isn’t linked yet"))
-            font.pixelSize: 30; color: Qt.rgba(0.96, 0.95, 0.94, 0.78)
-        }
-        Item { width: 1; height: 28; visible: nx.visible }
-        T {
-            id: nx
-            visible: nextUp.length > 0 && music.exists
-            width: parent.width; maximumLineCount: 2; wrapMode: Text.WordWrap
-            text: "next · " + (nextUp.length ? nextUp[0].title : ""); font.pixelSize: 26; color: Qt.rgba(0.96, 0.95, 0.94, 0.6)
-        }
-        Item { width: 1; height: 22; visible: tm.visible }
-        T {
-            id: tm
-            visible: music.exists && music.duration > 0
-            text: Theme.mmss(mp.f * music.duration) + "  ·  -" + Theme.mmss(music.duration - mp.f * music.duration)
-            font.pixelSize: 26; color: Qt.rgba(0.96, 0.95, 0.94, 0.72)
-        }
-    }
-
+    // ================================================================= under the cover: equaliser and speaker
     // the dot equaliser: 7 columns × 5 dots, about 12 steps a second, each column following the beat with a bit of
     // its own life, up to two dots per step; the top lit dot is amber
     Item {
         id: eq
-        x: 48; y: 624; width: 6 * 36 + 16; height: 4 * 23 + 16
+        x: 64; y: 848 - height; width: 6 * 28 + 12; height: 4 * 16 + 12
         opacity: mp.fade ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 200 } }
         property var levels: [0, 0, 0, 0, 0, 0, 0]
@@ -375,45 +327,95 @@ Item {
                 readonly property int c: Math.floor(index / 5)
                 readonly property int r: index % 5
                 readonly property int n: eq.levels[c]
-                x: c * 36; y: (4 - r) * 23
-                width: 16; height: 16; radius: 8
+                x: c * 28; y: (4 - r) * 16
+                width: 12; height: 12; radius: 6
                 color: r < n ? (r === n - 1 ? Theme.accent : Theme.tx) : Qt.rgba(0.96, 0.95, 0.94, 0.16)
                 Behavior on color { ColorAnimation { duration: 120 } }
             }
         }
     }
-
-    // the speaker line — tap it to move the music somewhere else
+    // the speaker — tap it to move the music somewhere else; right edge of the cover column
     Press {
-        x: 22; y: 756; width: 360; height: 98; pressScale: 0.97
+        x: 648 - width; y: 848 - height + 18; width: spk.implicitWidth + 62; height: 64; pressScale: 0.97
         opacity: mp.fade ? 0 : 1
         enabled: mp.spotify
+        Icon { x: 10; anchors.verticalCenter: parent.verticalCenter; name: "speaker"; size: 24; color: Qt.rgba(0.96, 0.95, 0.94, 0.65) }
         T {
-            x: 26; anchors.verticalCenter: parent.verticalCenter; width: 330
+            id: spk; x: 46; anchors.verticalCenter: parent.verticalCenter
             text: music.exists && music.device ? "on " + music.device.toLowerCase() + "  ›" : "Choose a speaker  ›"
-            font.pixelSize: 26; color: Qt.rgba(0.96, 0.95, 0.94, 0.6)
+            font.pixelSize: 24; color: Qt.rgba(0.96, 0.95, 0.94, 0.65)
         }
         onTapped: { room.refreshDevices(); mp.picking = true }
     }
 
     // ================================================================= top: back, library
-    RoundBtn { x: 24; y: 24; size: 110; iconSize: 40; icon: "back"; fill: "transparent"; opacity: mp.fade ? 0 : 1; onTapped: mp.back() }
-    RoundBtn { x: 1368 - 24 - 110; y: 24; size: 110; iconSize: 40; icon: "lib"; fill: "transparent"; opacity: mp.fade ? 0 : 1; onTapped: mp.library = true }
+    RoundBtn { x: 28; y: 28; size: 96; iconSize: 36; icon: "back"; fill: "transparent"; opacity: mp.fade ? 0 : 1; onTapped: mp.back() }
+    RoundBtn { x: 1368 - 28 - 96; y: 28; size: 96; iconSize: 36; icon: "lib"; fill: "transparent"; opacity: mp.fade ? 0 : 1; onTapped: mp.library = true }
 
-    // ================================================================= right: previous, play, next, like
+    // ================================================================= right: the song, what's next, the controls
     Item {
-        x: 1150; y: 0; width: 176; height: parent.height
+        id: info
+        x: mp.col; y: 0; width: mp.colR - mp.col; height: parent.height
         opacity: mp.fade ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 200 } }
-        RoundBtn { anchors.horizontalCenter: parent.horizontalCenter; y: 200; size: 120; iconSize: 40; icon: "prev"; fill: "transparent"; onTapped: mp.skip(-1) }
-        RoundBtn { anchors.horizontalCenter: parent.horizontalCenter; y: 368; size: 172; iconSize: 56; icon: music.playing ? "pause" : "play"; fill: Theme.tx; ink: "black"; onTapped: room.playPause() }
-        RoundBtn { anchors.horizontalCenter: parent.horizontalCenter; y: 586; size: 120; iconSize: 40; icon: "next"; fill: "transparent"; onTapped: mp.skip(1) }
+
+        T {
+            y: 160; width: parent.width - 100
+            text: !music.exists ? "Nothing playing" : (music.context ? "PLAYING FROM · " + music.context.toUpperCase() : (mp.spotify ? "SPOTIFY" : (music.device || "").toUpperCase()))
+            font.pixelSize: 15; font.letterSpacing: 2.4; color: Qt.rgba(0.96, 0.95, 0.94, 0.55)
+        }
+        T {
+            x: -2; y: 186; width: parent.width - 100
+            text: music.exists ? music.title : "Nothing playing"
+            font.pixelSize: 68; font.weight: Font.Medium; font.letterSpacing: -0.6
+            fontSizeMode: Text.HorizontalFit; minimumPixelSize: 44
+        }
+        // like, beside the title
         RoundBtn {
-            anchors.horizontalCenter: parent.horizontalCenter; y: 737; size: 104; iconSize: 44
+            x: parent.width - 80; y: 196; size: 80; iconSize: 32
             visible: music.exists && mp.spotify && music.liked !== null && music.liked !== undefined
             icon: music.liked ? "heartOn" : "heart"; fill: "transparent"
             ink: music.liked ? Theme.accent : Theme.tx
             onTapped: room.toggleLiked()
+        }
+        T {
+            y: 270; width: parent.width
+            text: music.exists ? music.artist : (music.error || (music.enabled ? "Pick a playlist in your library" : "Spotify isn’t linked yet"))
+            font.pixelSize: 30; color: Qt.rgba(0.96, 0.95, 0.94, 0.65)
+        }
+        T {
+            y: 316; visible: music.exists && music.duration > 0
+            text: Theme.mmss(mp.f * music.duration) + "  ·  -" + Theme.mmss(music.duration - mp.f * music.duration)
+            font.pixelSize: 22; color: Qt.rgba(0.96, 0.95, 0.94, 0.45)
+        }
+
+        // up next: tap one to skip straight to it
+        Rectangle { y: 384; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.1); visible: nextUp.length > 0 }
+        T {
+            y: 408; visible: nextUp.length > 0
+            text: "UP NEXT"; font.pixelSize: 15; font.letterSpacing: 2.4; color: Qt.rgba(0.96, 0.95, 0.94, 0.55)
+        }
+        Column {
+            y: 442; width: parent.width; spacing: 12
+            Repeater {
+                model: nextUp.slice(0, 4)
+                Press {
+                    width: info.width; height: 56; pressScale: 0.98
+                    Cover { width: 56; height: 56; radius: 12; source: modelData.art || ""; rgb: [[110, 138, 138], [140, 94, 78], [122, 106, 140], [94, 140, 132]][index % 4]; rgb2: [30, 28, 26] }
+                    T { x: 76; y: 3; width: parent.width - 76; text: modelData.title; font.pixelSize: 22 }
+                    T { x: 76; y: 31; width: parent.width - 76; text: modelData.artist || ""; font.pixelSize: 17; color: Qt.rgba(0.96, 0.95, 0.94, 0.65) }
+                    onTapped: { for (var i = 0; i <= index; i++) room.next() }
+                }
+            }
+        }
+
+        // previous · play · next, centred in the column with equal gaps, on the bottom line
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 848 - 116; height: 116; spacing: 68
+            RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 88; iconSize: 30; icon: "prev"; fill: Qt.rgba(1, 1, 1, 0.09); onTapped: mp.skip(-1) }
+            RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 116; iconSize: 40; icon: music.playing ? "pause" : "play"; fill: Theme.tx; ink: "black"; onTapped: room.playPause() }
+            RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 88; iconSize: 30; icon: "next"; fill: Qt.rgba(1, 1, 1, 0.09); onTapped: mp.skip(1) }
         }
     }
 

@@ -46,6 +46,7 @@ PV_KEY = CFG.get("picovoiceKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 # with Deepgram: a lenient local trigger, then Deepgram checks it really was "Alexa" before Room reacts
 CANDIDATE = float(CFG.get("wakeCandidate", 0.12))
+CONFIDENT = float(CFG.get("wakeConfident", 0.5))          # above this, wake straight away without asking Deepgram
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
 WHISPER = CFG.get("whisperURL", "http://127.0.0.1:8910/inference")
@@ -263,6 +264,69 @@ class Wake:
             self.oww.reset()
 
 
+def dg_url(words):
+    params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", "en"), ("encoding", "linear16"),
+              ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"), ("smart_format", "true"),
+              ("endpointing", str(CFG.get("endpointMs", 400))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
+    params += [("keyterm", w) for w in (["Alexa"] + list(words))[:50]]
+    from urllib.parse import urlencode
+    return DG_LISTEN + "?" + urlencode(params)
+
+
+class Warm:
+    """One Deepgram connection kept open and ready (KeepAlive every few seconds, no audio — nothing to pay for), so a
+    "maybe Alexa" starts streaming at once instead of first spending ~0.5 s connecting from India to Deepgram."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.spare = None            # (ctx, ws, url, opened_at)
+        self.words: list[str] = []
+        if DG_KEY:
+            threading.Thread(target=self._keep, daemon=True).start()
+
+    def take(self, words):
+        with self.lock:
+            sp, self.spare = self.spare, None
+        if sp and sp[2] == dg_url(words) and time.time() - sp[3] < 480:
+            return sp
+        if sp:
+            threading.Thread(target=self._close, args=(sp,), daemon=True).start()
+        return None
+
+    @staticmethod
+    def _close(sp):
+        try:
+            sp[1].send(json.dumps({"type": "CloseStream"})); sp[0].__exit__(None, None, None)
+        except Exception:
+            pass
+
+    def _keep(self):
+        from websockets.sync.client import connect
+        while True:
+            with self.lock:
+                sp = self.spare
+            try:
+                if sp is None or time.time() - sp[3] > 420 or sp[2] != dg_url(self.words):
+                    url = dg_url(self.words)
+                    ctx = connect(url, additional_headers={"Authorization": f"Token {DG_KEY}"}, open_timeout=5, max_size=None)
+                    ws = ctx.__enter__()
+                    with self.lock:
+                        old, self.spare = self.spare, (ctx, ws, url, time.time())
+                    if old:
+                        self._close(old)
+                else:
+                    sp[1].send(json.dumps({"type": "KeepAlive"}))
+            except Exception as e:
+                log("deepgram warm:", repr(e))
+                with self.lock:
+                    self.spare = None
+                time.sleep(10)
+            time.sleep(3)
+
+
+WARM = None
+
+
 class Deepgram:
     """One live recognition: audio goes in as it's heard, words come back as they're recognised. on_partial(text) while
     talking; on_done(text) once — when Deepgram says the speaker finished, or close() is called."""
@@ -274,12 +338,8 @@ class Deepgram:
         self.interim = ""
         self.done = False
         self.opened = threading.Event()
-        params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", "en"), ("encoding", "linear16"),
-                  ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"), ("smart_format", "true"),
-                  ("endpointing", str(CFG.get("endpointMs", 400))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
-        params += [("keyterm", w) for w in (["Alexa"] + list(words))[:50]]
-        from urllib.parse import urlencode
-        self.url = DG_LISTEN + "?" + urlencode(params)
+        self.url = dg_url(words)
+        self.spare = WARM.take(words) if WARM else None
         threading.Thread(target=self._run, daemon=True).start()
 
     def push(self, pcm: np.ndarray):
@@ -302,14 +362,17 @@ class Deepgram:
         from websockets.sync.client import connect
         t0 = time.time()
         try:
-            ctx = connect(self.url, additional_headers={"Authorization": f"Token {DG_KEY}"}, open_timeout=4, max_size=None)
-            ws = ctx.__enter__()
+            if self.spare:
+                ctx, ws = self.spare[0], self.spare[1]
+            else:
+                ctx = connect(self.url, additional_headers={"Authorization": f"Token {DG_KEY}"}, open_timeout=4, max_size=None)
+                ws = ctx.__enter__()
         except Exception as e:
             log("deepgram connect:", repr(e))
             self.failed = True
             self._finish()
             return
-        log(f"deepgram: connected in {time.time() - t0:.2f} s")
+        log("deepgram: ready connection" if self.spare else f"deepgram: connected in {time.time() - t0:.2f} s")
         self.opened.set()
 
         def sender():
@@ -416,7 +479,7 @@ class Ears:
         m = re.search(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b[\s,.!?]*", text, re.I)
         return (text[m.end():] if m else text).strip()
 
-    def begin_listening(self, keep=False):
+    def begin_listening(self, keep=False, preroll=False):
         self.speaker.stop()
         subprocess.Popen(["pw-play", self.cue_on], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.state = "listening"
@@ -432,7 +495,10 @@ class Ears:
             self.dg = None
             if DG_KEY:
                 self.dg = Deepgram(self.words, self._confirm_partial, self._dg_done)
-                self.confirmed = True                # tapped: nothing to check
+                self.confirmed = True                # tapped (or clearly heard): nothing to check
+                if preroll:                          # "Alexa, turn off…" in one breath: the start is already said
+                    for c in self.ring[-12:]:
+                        self.dg.push(c)
         emit(ev="listening")
 
     def _dg_done(self, text):
@@ -532,6 +598,18 @@ class Ears:
             log(f"wake: near miss {score:.2f}")
         if DG_KEY and not self.wake.pv:
             # lenient local trigger → Deepgram decides
+            if score >= CONFIDENT and self.state == "idle" and now - self.last_wake > 1.5:
+                # clearly "Alexa" — wake at once (and if a check was under way, it becomes the command stream)
+                self.last_wake = now
+                self.wake.reset()
+                emit(ev="wake")
+                if self.confirming and self.dg:
+                    self.confirmed = True; self.confirming = False
+                    log(f"wake: sure ({score:.2f})")
+                    self.begin_listening(keep=True)
+                else:
+                    self.begin_listening(preroll=True)
+                return
             if (score >= CANDIDATE and not self.confirming and self.state in ("idle",) and now - self.last_candidate > 2):
                 self.last_candidate = now
                 self.start_confirm()
@@ -637,6 +715,8 @@ class Ears:
             self.state = "idle"
         elif cmd == "words":
             self.words = [w for w in c.get("words", []) if isinstance(w, str)][:40]
+            if WARM:
+                WARM.words = self.words
 
     def _spoken(self):
         emit(ev="spoken")
@@ -649,6 +729,8 @@ def main():
     for tool in ("pw-record", "pw-play"):
         if not shutil.which(tool):
             emit(ev="error", msg=f"{tool} is missing"); return
+    global WARM
+    WARM = Warm() if DG_KEY else None
     try:
         ears = Ears()
     except Exception as e:

@@ -14,35 +14,41 @@ Item {
     signal back()
     property bool picking: false
 
-    // ---------------------------------------------------------------- background: the cover through a grille of dots
-    CoverWash {
-        id: wash
-        anchors.fill: parent; visible: false
-        source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; strength: 1.0
-    }
-    ShaderEffectSource { id: washTex; sourceItem: wash; hideSource: true; live: true; textureSize: Qt.size(342, 228) }
-    ShaderEffect {
-        anchors.fill: parent
-        visible: mp.visible
-        property var src: washTex
-        property real time: mp.t
-        property real pitch: 14 * (width > 0 ? width / Theme.stageW : 1)
-        property real beat: music.playing ? 0.35 : 0
-        property real pad: 0
-        property size res: Qt.size(width, height)
-        vertexShader: shaderDir + "halftone.vert.qsb"
-        fragmentShader: shaderDir + "halftone.frag.qsb"
-        Behavior on beat { NumberAnimation { duration: 800 } }
-    }
-    property real t: 0
-    NumberAnimation on t { running: mp.visible; from: 0; to: 100000; duration: 100000 * 1000; loops: Animation.Infinite }
-    // darker towards the bottom so the title and controls always read
+    // ---------------------------------------------------------------- background: the cover's colours, blurred
+    CoverWash { anchors.fill: parent; source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; strength: 0.85 }
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.10) }
-            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.20) }
-            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.70) }
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.15) }
+            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.30) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.75) }
+        }
+    }
+
+    // ---------------------------------------------------------------- the beat (as on the phone)
+    // The room's sound drives it when the mic is on; otherwise, while music plays, it sits at a steady 0.5 and the
+    // equaliser's own wave keeps it alive. Quick to rise, slower to fall, eased every frame.
+    property real beatTarget: music.playing ? (room.micOn ? beatFromLevel : 0.5) : 0
+    property real beatNow: 0
+    property real beatFloor: -1
+    property real beatV: 0
+    readonly property real beatFromLevel: beatV
+    Connections {
+        target: room
+        enabled: room.micOn && mp.visible
+        function onLevelChanged() {
+            var l = room.level
+            if (mp.beatFloor < 0) mp.beatFloor = l
+            else mp.beatFloor += (l - mp.beatFloor) * (l < mp.beatFloor ? 0.2 : 0.02)
+            var target = Math.max(0, Math.min(1, (l - mp.beatFloor) * 5))
+            mp.beatV += (target - mp.beatV) * (target > mp.beatV ? 0.8 : 0.3)
+        }
+    }
+    FrameAnimation {
+        running: mp.visible && (music.playing || mp.beatNow > 0.002)
+        onTriggered: {
+            var k = mp.beatTarget > mp.beatNow ? 0.32 : 0.1
+            mp.beatNow += (mp.beatTarget - mp.beatNow) * Math.min(1, k * Math.min(0.05, frameTime) * 60)
         }
     }
 
@@ -58,6 +64,16 @@ Item {
         x: mp.m + 84; y: mp.m + 23; width: mp.edge - x
         text: !music.exists ? "Nothing playing"
               : (music.context ? "Playing from · " + music.context : (spotify ? "Spotify" : music.device))
+    }
+
+    // the cover's colour as a soft light behind it, swelling with the beat
+    Glow {
+        readonly property real sc: 0.94 + 0.3 * mp.beatNow
+        width: 1000 * sc; height: width
+        x: mp.m + 228 - width / 2; y: 136 + 228 - height / 2
+        color: Theme.rgb(music.rgb || [200, 185, 163])
+        strength: music.playing ? 0.55 * (0.62 + 0.38 * mp.beatNow) : 0
+        Behavior on strength { NumberAnimation { duration: 600 } }
     }
 
     // ---------------------------------------------------------------- the cover, with what's next stacked behind it
@@ -155,6 +171,40 @@ Item {
         RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 72; icon: "prev"; iconSize: 24; onTapped: room.previous() }
         RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 96; iconSize: 30; icon: music.playing ? "pause" : "play"; fill: Theme.tx; ink: "black"; onTapped: room.playPause() }
         RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 72; icon: "next"; iconSize: 24; onTapped: room.next() }
+    }
+
+    // the dot equaliser: 7 columns × 5 dots, about 12 steps a second, each column following the beat with a bit of
+    // its own life, up to two dots per step; the top lit dot is amber
+    Item {
+        id: eq
+        x: 477; y: 872 - height - 10; width: 6 * 33 + 14; height: 4 * 18 + 14
+        property var levels: [0, 0, 0, 0, 0, 0, 0]
+        Timer {
+            interval: 83; repeat: true
+            running: mp.visible && (music.playing || eq.levels.some(function (n) { return n > 0 }))
+            onTriggered: {
+                var t = Date.now() / 1000, v = music.playing ? mp.beatNow : 0, out = []
+                for (var c = 0; c < 7; c++) {
+                    var wave = 0.55 + 0.25 * Math.sin(t * (1.6 + c * 0.37) + c * 1.7) + 0.2 * Math.random()
+                    var want = v <= 0 ? 0 : Math.max(1, Math.round(v * 5 * wave))
+                    var cur = eq.levels[c]
+                    out.push(want > cur ? Math.min(want, cur + 2) : want < cur ? Math.max(want, cur - 2) : cur)
+                }
+                eq.levels = out
+            }
+        }
+        Repeater {
+            model: 35
+            Rectangle {
+                readonly property int c: Math.floor(index / 5)
+                readonly property int r: index % 5
+                readonly property int n: eq.levels[c]
+                x: c * 33; y: (4 - r) * 18
+                width: 14; height: 14; radius: 7
+                color: r < n ? (r === n - 1 ? Theme.accent : Theme.tx) : Qt.rgba(0.96, 0.95, 0.94, 0.16)
+                Behavior on color { ColorAnimation { duration: 120 } }
+            }
+        }
     }
 
     // the speaker — tap to move the music somewhere else (Spotify); on the right edge, level with the controls

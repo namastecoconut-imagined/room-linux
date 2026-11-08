@@ -140,6 +140,11 @@ class Room(QObject):
     def here(self):
         return self.cfg.get("here", "")
 
+    @Property(bool, constant=True)
+    def micOn(self):
+        """Whether the room's sound is being listened to (it drives the standby ripple and the music beat)."""
+        return os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True
+
     @Property(float, notify=levelChanged)
     def level(self):
         """Room loudness, 0…1 — the standby dots ripple with it."""

@@ -344,6 +344,12 @@ class Warm:
 
 
 WARM = None
+BACKLOG = None          # the mic's queue: how far behind the processing is (each item is 80 ms of sound)
+
+
+def behind() -> str:
+    n = BACKLOG.qsize() if BACKLOG is not None else 0
+    return f" · {n * 80} ms behind the mic" if n else ""
 
 _DANGLE = {"in", "on", "at", "to", "for", "of", "the", "a", "an", "and", "or", "but", "with", "from", "my", "is", "set",
            "play", "turn", "what's", "what", "how", "about", "by", "into", "some", "until", "till"}
@@ -520,7 +526,7 @@ class Ears:
             if WAKE_RE.search(first):
                 self.confirmed = True
                 self.confirming = False
-                log(f"wake: confirmed ({text!r})")
+                log(f"wake: confirmed ({text!r}) {self.clock - self.confirm_started:.1f} s after the first hint{behind()}")
                 emit(ev="wake")
                 self.begin_listening(keep=True)
             return
@@ -755,7 +761,7 @@ class Ears:
                 else:
                     self.begin_listening(preroll=True)
                 self.provisional = provisional
-                log(f"wake: {score:.2f}{' (provisional)' if provisional else ''}")
+                log(f"wake: {score:.2f}{' (provisional)' if provisional else ''}{behind()}")
                 return
             if self.speaker.busy and CFG.get("bargeIn") is False:
                 return                                  # interrupting by voice switched off
@@ -927,7 +933,9 @@ def main():
     raw = ["--raw"] if "--raw" in helptext else []
     # both of the Surface's mics, steered at whoever's talking (voice/beam.py); "beam": false → one mixed channel
     ch = 2 if CFG.get("beam", True) else 1
-    cmd = ["pw-record", *raw, "--rate", str(RATE), "--channels", str(ch), "--format", "s16", "-"]
+    # small buffers: the sound reaches the wake word ~40 ms after it's spoken, not after pw-record's default wait
+    lat = ["--latency", "40ms"] if "--latency" in helptext else []
+    cmd = ["pw-record", *raw, *lat, "--rate", str(RATE), "--channels", str(ch), "--format", "s16", "-"]
     beam = None
     if ch == 2:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -951,6 +959,8 @@ def main():
         # or the screen ever make processing late, the sound arrives late but whole (no gaps, which whisper hears as
         # noise)
         qa: queue.Queue = queue.Queue()
+        global BACKLOG
+        BACKLOG = qa
 
         def reader(proc=rec, swap=swap):
             while True:
@@ -965,6 +975,16 @@ def main():
             chunk = qa.get()
             if chunk is None:
                 break
+            if qa.qsize() > 4 and ears.state == "idle" and not ears.confirming:
+                # fallen behind (the Surface was busy): drop the old sound so "Alexa" is heard now, not seconds late
+                dropped = 0
+                while qa.qsize() > 1:
+                    c = qa.get()
+                    if c is None:
+                        qa.put(None); break
+                    dropped += 1
+                log(f"caught up — skipped {dropped * 80} ms of old sound")
+                ears.wake.reset()
             t0 = time.time()
             try:
                 ears.feed(chunk)

@@ -46,8 +46,15 @@ class Pointer(QObject):
             self.app.restoreOverrideCursor(); self.hidden = False
         self.timer.start(3000)
 
+    room = None          # set once Room exists: every input is noted on it (standby waits for real idleness)
+
     def eventFilter(self, obj, ev):
-        if ev.type() in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
+        t = ev.type()
+        if self.room is not None and t in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel,
+                                           QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate, QEvent.Type.KeyPress):
+            import time
+            self.room.input_at = time.time()
+        if t in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
             dev = ev.device() if hasattr(ev, "device") else None
             if dev is None or dev.type() in (QInputDevice.DeviceType.Mouse, QInputDevice.DeviceType.TouchPad):
                 self.show()
@@ -82,6 +89,7 @@ def main():
         sys.exit(1)
     win = engine.rootObjects()[0]
     pointer = Pointer(app)  # noqa: F841
+    pointer.room = room
 
     room.start()
     code = app.exec()

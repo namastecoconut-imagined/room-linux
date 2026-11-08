@@ -220,7 +220,14 @@ class Room(QObject):
         day = int(c.get("standbySec", 15))
         return {"standbySec": day, "nightStandbySec": int(c.get("nightStandbySec", day)),
                 "idleReturnSec": int(c.get("idleReturnSec", 60)),
+                "menuStandbySec": int(c.get("menuStandbySec", 180)),
                 "nightStart": int(c.get("nightStart", 23)), "nightEnd": int(c.get("nightEnd", 7))}
+
+    input_at = 0.0           # the last touch, click, scroll, mouse move or key (set by the app's event filter)
+
+    @Slot(result=float)
+    def lastInput(self):
+        return self.input_at
 
     @Slot(bool, bool)
     def setScreenState(self, standby, dim):

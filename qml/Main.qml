@@ -6,9 +6,9 @@ import QtQuick.Window
 //
 // Standby follows the iPhone panel exactly (NativePanel.tick, once a second):
 //  • the music player (and any open sheet) keeps the panel awake — it never drops into standby there
-//  • otherwise, standbySec (15 s) untouched → it goes back to home and standby fades in; night hours use
-//    nightStandbySec if config sets one, else the same 15 s
-//  • any other screen left alone for idleReturnSec (60 s) goes back to home
+//  • on home, standbySec (15 s) untouched → standby fades in; night hours use nightStandbySec if config sets one
+//  • in a menu (room, clock, weather, reminders) it waits menuStandbySec (3 min) before standby (then home)
+//  • any touch, click, scroll or mouse movement counts as being used
 //  • a touch only counts while awake; on standby only a real tap wakes it (held ≥ 40 ms, moved < 30 phone pt) —
 //    a brush or a ghost touch doesn't. On music standby, tapping the cover opens the player.
 //  • music standby shows only while music is actually playing
@@ -72,11 +72,14 @@ Window {
         onTriggered: {
             var t = Date.now() / 1000
             if (win.screen === "music" || win.sheetOpen || win.alerting || win.talking) win.lastTouch = t   // the player (and an alert) keeps it awake
-            var wait = win.lateNight ? win.timing.nightStandbySec : win.timing.standbySec
+            // scrolling, mouse moves and keys count as use too (seen by the app itself, so a list that takes the
+            // scroll still counts); on standby only a real tap wakes it
+            if (!win.standbyOn) win.lastTouch = Math.max(win.lastTouch, room.lastInput())
+            var wait = win.screen !== "home" && win.screen !== "assistant" ? win.timing.menuStandbySec
+                     : (win.lateNight ? win.timing.nightStandbySec : win.timing.standbySec)
             var want = t - win.lastTouch > wait
             if (want && !win.standbyOn) win.enterStandby()
             else if (!want && win.standbyOn) win.standbyOn = false
-            if (!win.standbyOn && t - win.lastTouch > win.timing.idleReturnSec && win.screen !== "home") win.screen = "home"
         }
     }
     onStandbyOnChanged: room.setScreenState(standbyOn, standbyOn && lateNight)
@@ -181,6 +184,7 @@ Window {
         acceptedDevices: PointerDevice.AllDevices
         onActiveChanged: if (!win.standbyOn) win.lastTouch = Date.now() / 1000
     }
+
     // standby takes its own touches: only a real tap wakes it, and the tap doesn't also press what's underneath
     MouseArea {
         anchors.fill: parent

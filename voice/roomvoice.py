@@ -38,6 +38,7 @@ CFG = json.loads(os.environ.get("ROOM_VOICE_CFG", "{}"))
 WAKE_THRESHOLD = float(CFG.get("wakeThreshold", 0.5))
 VOICE = CFG.get("voice", "af_heart")
 WHISPER = CFG.get("whisperURL", "http://127.0.0.1:8910/inference")
+DEBUG = os.environ.get("ROOM_VOICE_DEBUG") == "1"        # a line a second: mic level, gain, wake-word score
 
 
 def emit(**ev):
@@ -201,6 +202,12 @@ class Ears:
         if self.level_n % 2 == 0:                     # ~6 a second is plenty for the screen
             emit(ev="level", v=round(level, 5))
         score = max(self.wake.predict(pcm).values() or [0])
+        if DEBUG:
+            self.dbg = getattr(self, "dbg", []) + [(level, score)]
+            if len(self.dbg) >= 12:                   # about once a second
+                lv = max(x[0] for x in self.dbg); sc = max(x[1] for x in self.dbg)
+                log(f"mic {lv:.4f} · gain ×{self.gain:.1f} · wake {sc:.2f} · state {self.state}")
+                self.dbg = []
         # a line in the log now and then about how close the wake word came (helps tune it)
         self.best = max(getattr(self, "best", 0.0), score)
         if now - getattr(self, "said_at", 0.0) > 60:

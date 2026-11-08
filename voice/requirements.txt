@@ -7,3 +7,4 @@ tqdm
 soundfile
 onnxruntime
 kokoro-onnx>=0.4
+scikit-learn

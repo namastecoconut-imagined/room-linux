@@ -53,37 +53,21 @@ def log(*a):
 
 
 class Voicer:
-    """Room's voice, shaped for the Surface's small speakers, which can't play bass and are quiet on Linux:
-      1. the deep lows (under ~120 Hz) taken out — the speakers can't play them, they only use up headroom,
-      2. presence lifted (+4 dB around 2.8 kHz) — where speech is understood, and where small speakers sound loudest,
-      3. an even level (every sentence as loud as the last), then a soft limiter (peaks round off, never crackle).
-    Streaming, so it works on Aura's chunks as they arrive. 'loudness' in voiceSettings scales the drive."""
+    """Room's voice exactly as Deepgram sends it — no gain, no limiter, no EQ (the old level-evening and soft limiter
+    pushed it up to 8× and rounded the peaks off, which the speaker tuning then turned into crackle). Only the deep
+    lows under ~100 Hz are taken out, which the Surface's speakers can't play anyway; that never adds level."""
 
     def __init__(self, rate):
         from scipy.signal import butter
-        self.hp = butter(2, 120, "highpass", fs=rate, output="sos")
-        f0, gain_db, q = 2800.0, 4.0, 0.9                 # RBJ peaking EQ
-        A, w0 = 10 ** (gain_db / 40), 2 * np.pi * f0 / rate
-        al = np.sin(w0) / (2 * q)
-        bb = np.array([1 + al * A, -2 * np.cos(w0), 1 - al * A])
-        aa = np.array([1 + al / A, -2 * np.cos(w0), 1 - al / A])
-        self.pk = np.concatenate([bb / aa[0], aa / aa[0]])[None, :]
-        self.z1 = np.zeros((self.hp.shape[0], 2)); self.z2 = np.zeros((1, 2))
-        self.level = 0.0
-        self.drive = 1.6 * float(CFG.get("loudness", 1.0))
+        self.hp = butter(2, 100, "highpass", fs=rate, output="sos")
+        self.z1 = np.zeros((self.hp.shape[0], 2))
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         from scipy.signal import sosfilt
         if not len(x):
             return x
         y, self.z1 = sosfilt(self.hp, x, zi=self.z1)
-        y, self.z2 = sosfilt(self.pk, y, zi=self.z2)
-        r = float(np.sqrt(np.mean(y ** 2)))
-        if r > 0.004:                                       # speech, not a pause: follow its loudness
-            self.level = r if self.level == 0 else self.level + (r - self.level) * (0.5 if r > self.level else 0.1)
-        g = float(np.clip(0.2 / max(self.level, 1e-4), 1.0, 8.0))
-        d = self.drive
-        return np.tanh(y * g * d) / np.tanh(d) * 0.95          # gentle: clean, never clipped
+        return np.clip(y, -1.0, 1.0)
 
 
 def _sinks():
@@ -342,7 +326,7 @@ class Speaker:
                     cut = len(chunk) // 2 * 2
                     chunk, odd = chunk[:cut], chunk[cut:]
                     x = np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768
-                    out = (shape(x) * 32000).astype("<i2").tobytes()
+                    out = (shape(x) * 32767).astype("<i2").tobytes()
                     self.proc.stdin.write(out)
         except Exception as e:
             if g == self.gen:
@@ -367,9 +351,10 @@ class Speaker:
                 try:
                     a, sr = self._kokoro().create(p, voice=VOICE, speed=float(CFG.get("speed", 1.05)), lang=self.lang)
                     f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-                    # Kokoro comes out quiet: every sentence to the same loudness (by its average, not its peak, so a
-                    # short "Okay." isn't louder than a long answer)
                     a = Voicer(sr)(np.asarray(a, dtype=np.float64))
+                    pk = float(np.abs(a).max()) if len(a) else 0.0
+                    if pk > 0:
+                        a = a * min(4.0, 0.7 / pk)           # the offline voice is quiet: up to a peak of 70 %, never past it
                     sf.write(f.name, a, sr); q.put(f.name)
                 except Exception as e:
                     log("tts:", e)

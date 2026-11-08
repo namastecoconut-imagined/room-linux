@@ -27,7 +27,7 @@ CHUNK = 1280                                 # 80 ms — what openWakeWord wants
 WAKE_RE = re.compile(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa)\b[\s,.!?]*", re.I)
 DANGLE = {"something", "me", "in", "on", "at", "to", "for", "of", "the", "a", "an", "and", "or", "but", "with", "from", "my", "is", "set",
           "play", "turn", "what's", "what", "how", "about", "by", "into", "some", "until", "till"}
-KEYTERMS = ["Alexa", "set a timer", "timer", "minutes", "lights", "bedroom", "living room", "make it cozy", "cozy", "dim",
+KEYTERMS = ["Alexa", "turn off the lights", "turn on the lights", "turn off", "turn on", "set a timer", "timer", "minutes", "lights", "bedroom", "living room", "make it cozy", "cozy", "dim",
             "brightness", "percent", "weather", "Spotify", "play", "pause", "chill"]
 
 

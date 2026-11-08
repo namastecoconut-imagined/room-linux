@@ -207,7 +207,7 @@ answer questions, explain things, help them think, chat. They speak; speech reco
 sometimes mishears (Indian-English accents; names and places get mangled most): read odd words as a mishearing and \
 answer the sensible question — never ask about a strange word that's obviously a mishearing. Go by the sound: \
 "standard time of five minutes" is "set a timer for five minutes"; "make a posing" / "make it cosy" / "make \
-it cause he" is "make it cozy" (a lighting scene); "alarm" can come out as "a lot" or "llama". When a \
+it cause he" is "make it cozy" (a lighting scene); "turn off/on" can come out as "no off", "done off", "turn of"; "set a time" is "set a timer". "alarm" can come out as "a lot" or "llama". When a \
 sound-alike reading is a clear command, just do it — don't ask. \
 Work out what they mean and call control_home exactly once.
 

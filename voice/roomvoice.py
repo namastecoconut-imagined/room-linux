@@ -50,6 +50,9 @@ WAKE_RE = re.compile(r"\b(alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa
 CONFIDENT = float(CFG.get("wakeConfident", 0.2))   # from here Room opens at once (no asking Deepgram first)          # above this, wake straight away without asking Deepgram
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
+# Room's voice always plays at full stream volume, as "Room" — PipeWire remembers a volume per app, and one that got
+# turned down once (say while a Bluetooth speaker was connected) would otherwise stay low on the Surface's speakers
+VOICE_OUT = ["--volume", str(float(CFG.get("voiceVolume", 1.0))), "-P", "{ application.name = \"Room voice\" }"]
 # one kept-alive connection for the voice: from India a fresh TLS handshake to Deepgram costs ~0.5 s per answer
 HTTP = requests.Session()
 
@@ -164,7 +167,7 @@ class Speaker:
         with self.lock:
             if g != self.gen:
                 return True
-            self.proc = subprocess.Popen(["pw-play", "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
+            self.proc = subprocess.Popen(["pw-play", *VOICE_OUT, "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         first = True
         odd = b""
@@ -225,7 +228,7 @@ class Speaker:
             if first:
                 emit(ev="speaking"); first = False
             with self.lock:
-                self.proc = subprocess.Popen(["pw-play", f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.proc = subprocess.Popen(["pw-play", *VOICE_OUT, f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.proc.wait()
             os.unlink(f)
         self.busy = False

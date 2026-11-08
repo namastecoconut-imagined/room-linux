@@ -214,7 +214,7 @@ class Assistant(QObject):
                 if props.get("media.class") != "Stream/Output/Audio":
                     continue
                 app = (props.get("application.name") or props.get("node.name") or "").lower()
-                if "pw-play" in app or "pw-cat" in app:
+                if "pw-play" in app or "pw-cat" in app or "room voice" in app:
                     continue
                 out.append(n["id"])
         except Exception:

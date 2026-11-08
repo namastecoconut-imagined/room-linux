@@ -252,7 +252,8 @@ class Speaker:
         threading.Thread(target=self._say, args=(text, g, done), daemon=True).start()
 
     def _say(self, text, g, done):
-        speakers_full()
+        # the speakers to full alongside the request, not before it (its wpctl/amixer calls were adding to the wait)
+        threading.Thread(target=speakers_full, daemon=True).start()
         try:
             if DG_KEY and self._deepgram(text, g):
                 self.busy = False
@@ -263,32 +264,67 @@ class Speaker:
         finally:
             LEVEL.release()
 
-    def _deepgram(self, text, g) -> bool:
-        """Aura, streamed: playback starts with the first bytes. False if it couldn't be reached (→ Kokoro)."""
-        self.busy = True
+    @staticmethod
+    def _aura(session, text, out: queue.Queue, tag):
+        """One request for the voice; puts (tag, response, first bytes) — or (tag, None, error) — on out."""
         try:
-            t0 = time.time()
-            for attempt in (0, 1):
-                try:
-                    r = HTTP.post(DG_SPEAK,
-                                  params={"model": DG_VOICE, "encoding": "linear16", "sample_rate": 24000, "container": "none"},
-                                  headers={"Authorization": f"Token {DG_KEY}", "Content-Type": "application/json"},
-                                  json={"text": text}, stream=True, timeout=(3, 15))
-                    break
-                except requests.ConnectionError:
-                    # the kept-alive connection had gone stale (Deepgram closes idle ones): once more on a fresh one.
-                    # Without this Room fell back to the offline voice, which is quieter — "the voice went low again"
-                    if attempt:
-                        raise
-                    HTTP.close()
+            r = session.post(DG_SPEAK,
+                             params={"model": DG_VOICE, "encoding": "linear16", "sample_rate": 24000, "container": "none"},
+                             headers={"Authorization": f"Token {DG_KEY}", "Content-Type": "application/json"},
+                             json={"text": text}, stream=True, timeout=(3, 15))
             if r.status_code != 200:
-                log(f"aura: {r.status_code} {r.text[:200]}")
-                return False
+                out.put((tag, None, f"{r.status_code} {r.text[:200]}")); return
+            it = r.iter_content(chunk_size=4800)
+            first = next(it, b"")
+            out.put((tag, (r, it), first))
         except Exception as e:
-            log("aura:", repr(e))
+            out.put((tag, None, repr(e)))
+
+    def _deepgram(self, text, g) -> bool:
+        """Aura, streamed: playback starts with the first bytes. False if it couldn't be reached (→ Kokoro).
+        Deepgram's first sound is usually ~0.7 s but now and then 2–2.5 s: if nothing has come back after 1.1 s, a
+        second request goes out on a fresh connection and whichever answers first is played."""
+        self.busy = True
+        t0 = time.time()
+        out: queue.Queue = queue.Queue()
+        threading.Thread(target=Speaker._aura, args=(HTTP, text, out, "kept"), daemon=True).start()
+        sent, errors, got = 1, [], None
+        while got is None and len(errors) < sent:
+            try:
+                tag, res, first = out.get(timeout=1.1 if sent == 1 else 15)
+            except queue.Empty:
+                if sent == 1:
+                    sent = 2
+                    threading.Thread(target=Speaker._aura, args=(requests.Session(), text, out, "second"), daemon=True).start()
+                    continue
+                break
+            if res is None:
+                errors.append(first)
+                if tag == "kept":
+                    HTTP.close()            # gone stale (Deepgram closes idle ones): the next answer opens a fresh one
+                    if sent == 1:           # once more straight away, on a fresh connection
+                        sent = 2
+                        threading.Thread(target=Speaker._aura, args=(requests.Session(), text, out, "second"), daemon=True).start()
+                continue
+            got = (tag, res, first)
+        if got is None:
+            log("aura:", "; ".join(errors) or "no answer")
             return False
+        tag, (r, chunks), head = got
+        if sent == 2:
+            log(f"aura: the {tag} request answered first")
+            def drop():                     # the slower one, when it comes
+                try:
+                    _, res2, _ = out.get(timeout=20)
+                    if res2:
+                        res2[0].close()
+                except Exception:
+                    pass
+            threading.Thread(target=drop, daemon=True).start()
         with self.lock:
             if g != self.gen:
+                log(f"aura: dropped — something new started {time.time() - t0:.1f} s in")
+                r.close()
                 return True
             self.proc = subprocess.Popen(["pw-play", *voice_out(), "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -296,7 +332,8 @@ class Speaker:
         odd = b""
         shape = Voicer(24000)
         try:
-            for chunk in r.iter_content(chunk_size=4800):
+            import itertools
+            for chunk in itertools.chain([head], chunks):
                 if g != self.gen:
                     break
                 if chunk:
@@ -381,6 +418,10 @@ def main():
         return
     speaker = Speaker()
     speakers_full()
+    try:
+        Voicer(24000)(np.zeros(2400, dtype=np.float32))     # its first use costs ~0.7 s (scipy loading): pay it now
+    except Exception:
+        pass
     ears = None
     if CFG.get("listen") is not False:
         try:

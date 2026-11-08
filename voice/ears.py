@@ -218,7 +218,7 @@ class Spare:
                 print("[voice] deepgram spare:", repr(e), flush=True)
                 with self.lock:
                     self.spare = None
-                time.sleep(8)
+                time.sleep(2)
             self.need.wait(3)
             self.need.clear()
 
@@ -326,7 +326,7 @@ class Ears:
             # minutes", "play something… chill" — was ending requests early)
             still = time.time() - self.text_at
             if said and not s.closing and now - self.started > 1.0 and still > 0.8 and (
-                    (quiet > float(self.cfg.get("endQuiet", 1.1)) and not unfinished(said)) or quiet > 2.5):
+                    (quiet > float(self.cfg.get("endQuiet", 0.8)) and not unfinished(said)) or quiet > 2.5):
                 s.finish()
             # nothing said: close after `wait` — but not while someone is talking and the words just haven't come
             # back yet ("set a timer…" was cut to "set a" when the first words took 5 s to arrive)

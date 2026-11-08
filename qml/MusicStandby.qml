@@ -19,7 +19,8 @@ Item {
     readonly property color soft: Qt.rgba(0.96, 0.95, 0.94, 0.55)
     readonly property var next: music.nextUp && music.nextUp.length ? music.nextUp[0] : null
     readonly property var lit: Theme.lit(music.rgb || [255, 190, 140])
-    readonly property color glowC: Qt.rgba(lit[0] / 255, lit[1] / 255, lit[2] / 255, 1)
+    // the cover's colour, softened towards warm white so the dots glow, not burn
+    readonly property color glowC: Qt.rgba((lit[0] + 255) / 510, (lit[1] + 235) / 510, (lit[2] + 215) / 510, 1)
     readonly property int rainAt: Theme.rainAt(wx.hours)
 
     // ---------------------------------------------------------------- the beat: the room's sound, while music plays
@@ -44,12 +45,12 @@ Item {
         onTriggered: {
             var dt = Math.min(0.05, frameTime)
             ms.gt += dt
-            var k = ms.beatTarget > ms.beatNow ? 0.32 : 0.08
+            var k = ms.beatTarget > ms.beatNow ? 0.12 : 0.035      // eased: it swells with the music, never flickers
             ms.beatNow += (ms.beatTarget - ms.beatNow) * Math.min(1, k * dt * 60)
         }
     }
     readonly property real breath: 0.5 - 0.5 * Math.cos(2 * Math.PI * (gt % 12) / 12)       // 0…1 every 12 s
-    readonly property real glow: (ms.night ? 0.6 : 1) * (0.75 + 0.15 * breath + 0.5 * beatNow)
+    readonly property real glow: (ms.night ? 0.6 : 1) * (0.28 + 0.08 * breath + 0.3 * beatNow)
 
     // ---------------------------------------------------------------- the room: the cover's wash, darkened at the edges
     Rectangle { anchors.fill: parent; color: "black" }
@@ -59,6 +60,8 @@ Item {
         smooth: true; fillMode: Image.Stretch
         opacity: ms.night ? 0.3 : 0.5
         visible: status === Image.Ready
+        layer.enabled: true                          // softened further: a wash of colour, no blocks or edges
+        layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 64 }
     }
     Rectangle {
         anchors.fill: parent
@@ -73,8 +76,8 @@ Item {
     Image {
         id: haloSrc
         source: music.art || ""
-        sourceSize: Qt.size(16, 16)
-        width: 16; height: 16
+        sourceSize: Qt.size(8, 8)
+        width: 8; height: 8
         smooth: true; visible: false
     }
     ShaderEffect {
@@ -83,9 +86,10 @@ Item {
         width: sz; height: sz * 0.72
         visible: haloSrc.status === Image.Ready
         property var source: haloSrc
-        property real sat: 1.6
+        property real sat: 1.4
+        property real spread: 0.11                  // only the cover's colours, none of its shapes
         fragmentShader: shaderDir + "halo.frag.qsb"
-        opacity: (ms.night ? 0.35 : 0.6) * (0.85 + 0.15 * ms.breath + 0.25 * ms.beatNow)
+        opacity: (ms.night ? 0.3 : 0.5) * (0.9 + 0.1 * ms.breath + 0.12 * ms.beatNow)
     }
 
     // ---------------------------------------------------------------- the clock, glowing

@@ -6,6 +6,7 @@ layout(std140, binding = 0) uniform buf {
     mat4 qt_Matrix;
     float qt_Opacity;
     float sat;       // saturation boost (1 = as is)
+    float spread;    // how far apart the blur's samples are (0.035: soft; 0.12: just colour, no shapes)
 };
 layout(binding = 1) uniform sampler2D source;
 void main() {
@@ -14,7 +15,7 @@ void main() {
     vec3 c = vec3(0.0); float w = 0.0;
     for (int y = -2; y <= 2; y++) for (int x = -2; x <= 2; x++) {
         float k = exp(-float(x * x + y * y) / 4.0);
-        c += texture(source, clamp(uv + vec2(x, y) * 0.035, 0.0, 1.0)).rgb * k; w += k;
+        c += texture(source, clamp(uv + vec2(x, y) * spread, 0.0, 1.0)).rgb * k; w += k;
     }
     c /= w;
     float l = dot(c, vec3(0.299, 0.587, 0.114));

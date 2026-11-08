@@ -176,15 +176,38 @@ class Ears:
         self.vad.reset_states()
         emit(ev="listening")
 
-    def feed(self, pcm: np.ndarray):
+    # ---------------------------------------------------------------- the mic, evened out
+    # The Surface's mic is quiet from across a room. A slow automatic gain lifts it (up to 10×) so the wake word, the
+    # pause detection and whisper all get speech at a useful level; `ref` is a slowly-falling peak of what's heard.
+    ref = 0.05
+    floor = 0.002
+    def even(self, pcm: np.ndarray) -> np.ndarray:
+        x = pcm.astype(np.float32) / 32768
+        pk = float(np.max(np.abs(x))) if len(x) else 0.0
+        self.ref = max(pk, self.ref * 0.998, 0.004)
+        g = float(np.clip(0.35 / self.ref, 1.0, float(CFG.get("maxGain", 10))))
+        rms = float(np.sqrt(np.mean(x ** 2))) if len(x) else 0.0
+        self.floor = min(rms, self.floor * 1.002 + 1e-6) if rms > 0 else self.floor     # background noise
+        self.gain = g
+        return (np.clip(x * g, -1, 1) * 32767).astype(np.int16)
+
+    def feed(self, raw: np.ndarray):
         # time is counted in audio, not on the wall clock (the same either way live, and testable from a file)
-        self.clock = getattr(self, "clock", 0.0) + len(pcm) / RATE
+        self.clock = getattr(self, "clock", 0.0) + len(raw) / RATE
         now = self.clock
-        level = float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768) ** 2)))
+        pcm = self.even(raw)
+        level = float(np.sqrt(np.mean((raw.astype(np.float32) / 32768) ** 2)))
         self.level_n = getattr(self, "level_n", 0) + 1
         if self.level_n % 2 == 0:                     # ~6 a second is plenty for the screen
             emit(ev="level", v=round(level, 5))
         score = max(self.wake.predict(pcm).values() or [0])
+        # a line in the log now and then about how close the wake word came (helps tune it)
+        self.best = max(getattr(self, "best", 0.0), score)
+        if now - getattr(self, "said_at", 0.0) > 60:
+            self.said_at = now
+            if self.best > 0.05:
+                log(f"wake: best {self.best:.2f} in the last minute · gain ×{self.gain:.1f} · noise {self.floor:.4f}")
+            self.best = 0.0
         if score >= WAKE_THRESHOLD and now - self.last_wake > 1.5:
             self.last_wake = now
             self.wake.reset()
@@ -194,7 +217,12 @@ class Ears:
         if self.state != "listening":
             return
         self.rec.append(pcm)
-        speech = self.vad.predict(pcm, frame_size=480) > 0.5
+        vp = float(self.vad.predict(pcm, frame_size=480))
+        rms = float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768) ** 2)))
+        self.max_vad = max(getattr(self, "max_vad", 0.0), vp)
+        self.max_rms = max(getattr(self, "max_rms", 0.0), rms)
+        # speech: Silero says so, or it's clearly louder than the room's background
+        speech = vp > 0.35 or rms > max(0.02, self.floor * self.gain * 6)
         if speech:
             self.heard_speech = True
             self.quiet_since = 0.0
@@ -207,6 +235,11 @@ class Ears:
             audio = np.concatenate(self.rec) if self.rec else np.zeros(0, np.int16)
             self.state = "thinking"
             subprocess.Popen(["pw-play", self.cue_off], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            log(f"heard {len(audio) / RATE:.1f} s · speech {'yes' if self.heard_speech else 'no'} · vad max {self.max_vad:.2f}"
+                f" · loudest {self.max_rms:.3f} · gain ×{self.gain:.1f} · noise {self.floor:.4f}")
+            self.max_vad = 0.0; self.max_rms = 0.0
+            if nothing and len(audio) and float(np.sqrt(np.mean((audio.astype(np.float32) / 32768) ** 2))) > 0.01:
+                nothing = False          # something was said even if it never looked like speech — let whisper decide
             if nothing:
                 self.state = "idle"
                 emit(ev="heard", text="")
@@ -220,11 +253,13 @@ class Ears:
             w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(audio.tobytes())
         prompt = "Alexa. " + ", ".join(self.words) + "." if self.words else ""
         text = ""
+        t0 = time.time()
         try:
             r = requests.post(WHISPER, files={"file": ("a.wav", buf.getvalue(), "audio/wav")},
                               data={"response_format": "json", "temperature": "0.0", "prompt": prompt}, timeout=20)
             text = (r.json().get("text") or "").strip()
             text = re.sub(r"\[.*?\]|\(.*?\)", "", text).strip()     # [BLANK_AUDIO], (music)…
+            log(f"whisper ({time.time() - t0:.1f} s): {text!r}")
         except Exception as e:
             emit(ev="error", msg="Speech recognition isn't running (whisper)")
             log("whisper:", e)

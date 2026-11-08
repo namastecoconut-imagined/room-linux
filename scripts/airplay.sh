@@ -9,13 +9,18 @@ set -euo pipefail
 SRC="$HOME/.cache/room-airplay"
 mkdir -p "$SRC"
 
-if /usr/local/bin/shairport-sync -V 2>/dev/null | grep -qi airplay2; then
+SPS=/usr/local/bin/shairport-sync
+# which sound outputs a build has ("Available audio backends" in its help)
+backends() { "$SPS" -h 2>&1 | sed -n '/[Aa]vailable audio backends/,/^$/p' | grep -oE '\b(pw|pipewire|pa|pulseaudio|alsa)\b' | head -5; }
+
+if "$SPS" -V 2>/dev/null | grep -qi airplay2 && [ -n "$(backends)" ]; then
   echo "▸ AirPlay 2 is already built"
 else
   echo "▸ AirPlay 2: build tools and libraries (asks for your password)"
   sudo dnf install -y -q gcc gcc-c++ make autoconf automake libtool git pkgconf-pkg-config xxd \
        popt-devel libconfig-devel openssl-devel avahi-devel pulseaudio-libs-devel soxr-devel \
-       ffmpeg-free-devel libplist-devel libsodium-devel libgcrypt-devel libuuid-devel glib2-devel avahi >/dev/null
+       ffmpeg-free-devel libplist-devel libsodium-devel libgcrypt-devel libuuid-devel glib2-devel avahi \
+       pipewire-devel alsa-lib-devel >/dev/null
 
   echo "▸ AirPlay 2: nqptp (timing)"
   rm -rf "$SRC/nqptp" && git clone -q --depth 1 https://github.com/mikebrady/nqptp.git "$SRC/nqptp"
@@ -26,14 +31,25 @@ else
   echo "▸ AirPlay 2: shairport-sync (a few minutes)"
   rm -rf "$SRC/shairport-sync" && git clone -q --depth 1 https://github.com/mikebrady/shairport-sync.git "$SRC/shairport-sync"
   ( cd "$SRC/shairport-sync" && autoreconf -fi >/dev/null 2>&1 && \
-    ./configure --sysconfdir=/etc --with-pa --with-soxr --with-avahi --with-ssl=openssl \
-                --with-airplay-2 --with-metadata --with-mpris-interface --with-dbus-interface >/dev/null && \
+    # sound output: the option names changed between versions (4.x: --with-pw/--with-pa, 5.x: --with-pipewire/
+    # --with-pulseaudio), so ask for all of them — configure ignores the ones it doesn't know. ALSA is the fallback.
+    ./configure --sysconfdir=/etc --with-pw --with-pipewire --with-pa --with-pulseaudio --with-alsa \
+                --with-soxr --with-avahi --with-ssl=openssl \
+                --with-airplay-2 --with-metadata --with-mpris-interface --with-dbus-interface >/dev/null 2>&1 && \
     make -s -j"$(nproc)" >/dev/null && sudo make -s install >/dev/null )
   # the AirPlay 1 package from before would clash — remove it
   sudo systemctl disable --now shairport-sync >/dev/null 2>&1 || true
   sudo dnf remove -y -q shairport-sync >/dev/null 2>&1 || true
 fi
-/usr/local/bin/shairport-sync -V
+"$SPS" -V
+# play through PipeWire if that got built, then PulseAudio (PipeWire's stand-in), then ALSA
+OUT=""
+for b in pw pipewire pa pulseaudio alsa; do backends | grep -qx "$b" && { OUT=$b; break; }; done
+if [ -z "$OUT" ]; then
+   echo "✗ This build has no sound output. Its options were:"; "$SPS" -h 2>&1 | sed -n '/[Aa]vailable audio backends/,/^$/p'
+  exit 1
+fi
+echo "▸ AirPlay will play through: $OUT"
 
 echo "▸ AirPlay: making Room findable on the network"
 sudo systemctl enable --now avahi-daemon >/dev/null
@@ -47,12 +63,13 @@ mkdir -p ~/.config/room ~/.config/systemd/user
 cat > ~/.config/room/shairport-sync.conf <<'CONF'
 general = {
   name = "Room";
-  output_backend = "pa";
+  output_backend = "__OUT__";
   volume_range_db = 50;
   mpris_service_bus = "Session";
   dbus_service_bus = "Session";
 };
 pa = { application_name = "Room · AirPlay"; };
+pw = { application_name = "Room · AirPlay"; node_name = "Room AirPlay"; };
 metadata = {
   enabled = "yes";
   include_cover_art = "yes";
@@ -61,6 +78,7 @@ metadata = {
 };
 mpris = { enabled = "yes"; };
 CONF
+sed -i "s/__OUT__/$OUT/" ~/.config/room/shairport-sync.conf
 
 cat > ~/.config/systemd/user/room-airplay.service <<'UNIT'
 [Unit]

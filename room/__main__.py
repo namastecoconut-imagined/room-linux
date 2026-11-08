@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parent.parent
 # Wayland first (Fedora's default), with the GPU scene graph; fall back to X11 if Wayland isn't there.
 os.environ.setdefault("QT_QPA_PLATFORM", "wayland;xcb")
 os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
+# a harmless Wayland text-input warning GNOME triggers on every tap — hide it so real errors stand out
+os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.wayland.textinput=false")
 
 from PySide6.QtCore import QEvent, QObject, QTimer, QUrl, Qt  # noqa: E402
 from PySide6.QtGui import QFontDatabase, QGuiApplication, QCursor, QInputDevice  # noqa: E402

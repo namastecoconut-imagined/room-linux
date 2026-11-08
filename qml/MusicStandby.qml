@@ -1,12 +1,10 @@
 import QtQuick
-import QtQuick.Shapes
+import QtQuick.Effects
 
-// Music standby — "Ambient · reflection" (M4c). The cover sits in the middle of the screen, lit by its own colours,
-// standing on a dark floor with a faint mirror image under it. Round it, in the corners:
-//   top left: the dot clock (rearranges each minute, as on the phone) · top right: ⚡ and how warm it is
-//   bottom left: the song, artist · what's next, and its progress · bottom right: the weather
-// Behind: the cover's 6 × 4 wash, darkened towards the edges, and two soft glows in its colours drifting very slowly.
-// Anything that isn't there (no next track, no weather) simply leaves its corner empty. Tap the cover for the player.
+// Music standby — "B3". The dot clock, large and centred, glowing in the cover's colours; the glow breathes with the
+// music (the room's sound through the mic, as the player's beat does) and a soft light of the cover's colours sits
+// behind it. Under it, the date. Along the bottom: the song (a small cover, title, artist · next, progress) on the
+// left, the weather (now, high/low, when rain is due) on the right; ⚡ status top right. Tap the song for the player.
 Item {
     id: ms
     width: Theme.stageW; height: Theme.stageH
@@ -16,46 +14,62 @@ Item {
     property var music: room.music
     property var wx: room.weather
 
-    readonly property real cs: 470                         // the cover
-    readonly property real cx: 684
-    readonly property real ctop: 196
-    readonly property rect coverRect: Qt.rect(cover.x, cover.y, cover.width, cover.height)
+    readonly property rect coverRect: Qt.rect(song.x, song.y, song.width, song.height)
     readonly property color ink: Qt.rgba(0.96, 0.95, 0.94, 1)
     readonly property color soft: Qt.rgba(0.96, 0.95, 0.94, 0.55)
     readonly property var next: music.nextUp && music.nextUp.length ? music.nextUp[0] : null
+    readonly property var lit: Theme.lit(music.rgb || [255, 190, 140])
+    readonly property color glowC: Qt.rgba(lit[0] / 255, lit[1] / 255, lit[2] / 255, 1)
+    readonly property int rainAt: Theme.rainAt(wx.hours)
 
-    // ---------------------------------------------------------------- near-black, with only a hint of the cover's wash
+    // ---------------------------------------------------------------- the beat: the room's sound, while music plays
+    property real beatNow: 0
+    property real beatFloor: -1
+    property real beatV: 0
+    readonly property real beatTarget: music.playing ? (room.micOn ? beatV : 0.35) : 0
+    Connections {
+        target: room
+        enabled: room.micOn && ms.visible
+        function onLevelChanged() {
+            var l = room.level
+            if (ms.beatFloor < 0) ms.beatFloor = l
+            else ms.beatFloor += (l - ms.beatFloor) * (l < ms.beatFloor ? 0.2 : 0.02)
+            var target = Math.max(0, Math.min(1, (l - ms.beatFloor) * 5))
+            ms.beatV += (target - ms.beatV) * (target > ms.beatV ? 0.8 : 0.3)
+        }
+    }
+    property real gt: 0
+    FrameAnimation {
+        running: ms.visible
+        onTriggered: {
+            var dt = Math.min(0.05, frameTime)
+            ms.gt += dt
+            var k = ms.beatTarget > ms.beatNow ? 0.32 : 0.08
+            ms.beatNow += (ms.beatTarget - ms.beatNow) * Math.min(1, k * dt * 60)
+        }
+    }
+    readonly property real breath: 0.5 - 0.5 * Math.cos(2 * Math.PI * (gt % 12) / 12)       // 0…1 every 12 s
+    readonly property real glow: (ms.night ? 0.6 : 1) * (0.75 + 0.15 * breath + 0.5 * beatNow)
+
+    // ---------------------------------------------------------------- the room: the cover's wash, darkened at the edges
+    Rectangle { anchors.fill: parent; color: "black" }
     Image {
         anchors.fill: parent
         source: music.wash || ""
         smooth: true; fillMode: Image.Stretch
-        opacity: ms.night ? 0.22 : 0.32
+        opacity: ms.night ? 0.3 : 0.5
         visible: status === Image.Ready
     }
-    Shape {
+    Rectangle {
         anchors.fill: parent
-        preferredRendererType: Shape.CurveRenderer
-        ShapePath {
-            strokeColor: "transparent"
-            fillGradient: RadialGradient {
-                centerX: ms.cx; centerY: 400; centerRadius: 900
-                focalX: centerX; focalY: centerY
-                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.3) }
-                GradientStop { position: 0.7; color: Qt.rgba(0, 0, 0, 0.85) }
-                GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.96) }
-            }
-            PathRectangle { x: 0; y: 0; width: ms.width; height: ms.height }
+        gradient: Gradient {
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.55) }
+            GradientStop { position: 0.4; color: Qt.rgba(0, 0, 0, 0.35) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.9) }
         }
     }
 
-    // ---------------------------------------------------------------- the glow: the cover itself, blurred into light
-    // behind it, breathing very slowly — the art lights the room in its own colours
-    property real gt: 0
-    Timer {
-        interval: ms.night ? 125 : 100; repeat: true; running: ms.visible
-        onTriggered: ms.gt += interval / 1000
-    }
-    readonly property real breath: 0.5 - 0.5 * Math.cos(2 * Math.PI * (gt % 14) / 14)       // 0…1 every 14 s
+    // ---------------------------------------------------------------- the light behind the clock: the cover, blurred
     Image {
         id: haloSrc
         source: music.art || ""
@@ -64,86 +78,102 @@ Item {
         smooth: true; visible: false
     }
     ShaderEffect {
-        readonly property real sz: ms.cs * (2.1 + 0.08 * ms.breath)
-        x: ms.cx - sz / 2; y: ms.ctop + ms.cs / 2 - sz / 2
-        width: sz; height: sz
+        readonly property real sz: 760 * (1 + 0.05 * ms.breath + 0.08 * ms.beatNow)
+        x: ms.width / 2 - sz / 2; y: 360 - sz * 0.36
+        width: sz; height: sz * 0.72
         visible: haloSrc.status === Image.Ready
         property var source: haloSrc
-        property real sat: 1.5
+        property real sat: 1.6
         fragmentShader: shaderDir + "halo.frag.qsb"
-        opacity: (ms.night ? 0.55 : 0.85) * (0.9 + 0.1 * ms.breath)
+        opacity: (ms.night ? 0.35 : 0.6) * (0.85 + 0.15 * ms.breath + 0.25 * ms.beatNow)
     }
 
-    // ---------------------------------------------------------------- the reflection: faint, fading fast
+    // ---------------------------------------------------------------- the clock, glowing
     Item {
-        x: ms.cx - ms.cs / 2; y: ms.ctop + ms.cs + 8
-        width: ms.cs; height: ms.cs * 0.3
-        clip: true
-        opacity: ms.night ? 0.06 : 0.1
+        id: clockBox
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 220
+        width: clock.width + 160; height: clock.height + 160
+        ClockDots {
+            id: clock
+            x: 80; y: 80
+            pitch: 36
+            ink: Qt.rgba(1, 0.985, 0.96, ms.night ? 0.7 : 1)
+            text: Theme.clock(new Date(ms.now * 1000), room.clock24)
+        }
         layer.enabled: true
-        layer.effect: ShaderEffect {
-            property real reach: 1.0
-            fragmentShader: shaderDir + "fade.frag.qsb"
+        layer.effect: MultiEffect {
+            shadowEnabled: true
+            shadowColor: ms.glowC
+            shadowBlur: 1.0
+            shadowHorizontalOffset: 0; shadowVerticalOffset: 0
+            shadowOpacity: Math.min(1, ms.glow)
+            blurMax: 64
+            shadowScale: 1.04
         }
-        Cover {
-            width: ms.cs; height: ms.cs; radius: 12
-            source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34]
-            transform: Scale { origin.y: ms.cs / 2; yScale: -1 }
-        }
-    }
-
-    // ---------------------------------------------------------------- the cover
-    Item {
-        id: cover
-        x: ms.cx - ms.cs / 2; y: ms.ctop
-        width: ms.cs; height: ms.cs
-        Cover { anchors.fill: parent; radius: 12; source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34] }
-        Rectangle { anchors.fill: parent; radius: 12; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.08); border.width: 1 }
-        Rectangle { anchors.fill: parent; radius: 12; color: Qt.rgba(0, 0, 0, ms.night ? 0.3 : 0.08) }
-    }
-
-    // ---------------------------------------------------------------- top
-    ClockDots {
-        x: 64; y: 64
-        pitch: 14
-        ink: Qt.rgba(0.96, 0.95, 0.94, 0.88)
-        text: Theme.clock(new Date(ms.now * 1000), room.clock24)
     }
     T {
-        anchors.right: parent.right; anchors.rightMargin: 64; y: 70
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: clockBox.y + clockBox.height - 40
+        text: Qt.formatDate(new Date(ms.now * 1000), "dddd, d MMMM")
+        font.pixelSize: 26; color: ms.soft
+    }
+    T {
+        anchors.right: parent.right; anchors.rightMargin: 72; y: 64
         visible: text !== ""
         text: room.status
-        font.pixelSize: 24; color: ms.soft
+        font.pixelSize: 22; color: Qt.rgba(0.96, 0.95, 0.94, 0.4)
     }
 
     // ---------------------------------------------------------------- bottom left: the song
-    T {
-        x: 64; y: 742; width: 620
-        text: music.title || ""
-        font.pixelSize: 50; font.weight: Font.Light; color: ms.ink
-    }
-    T {
-        x: 64; y: 806; width: 620
-        text: (music.artist || "") + (ms.next ? "   ·   next: " + ms.next.title : "")
-        font.pixelSize: 26; color: ms.soft
-    }
     Item {
-        x: 64; y: 854; width: 300; height: 3
-        readonly property real pos: Math.min(music.duration || 0, (music.position || 0) + (music.playing ? ms.now - music.at : 0))
-        visible: (music.duration || 0) > 0
-        Rectangle { anchors.fill: parent; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.14) }
-        Rectangle { height: parent.height; radius: height / 2; width: parent.width * (music.duration > 0 ? parent.pos / music.duration : 0); color: Qt.rgba(1, 1, 1, 0.8) }
+        id: song
+        x: 72; y: 912 - 72 - 92
+        width: 560; height: 92
+        Item {
+            id: thumb
+            width: 92; height: 92
+            Cover { anchors.fill: parent; radius: 10; source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34] }
+            Rectangle { anchors.fill: parent; radius: 10; color: Qt.rgba(0, 0, 0, ms.night ? 0.3 : 0); border.color: Qt.rgba(1, 1, 1, 0.08); border.width: 1 }
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                shadowEnabled: true; shadowColor: ms.glowC; shadowBlur: 0.8; shadowOpacity: 0.35 * ms.glow
+                shadowHorizontalOffset: 0; shadowVerticalOffset: 0
+            }
+        }
+        Column {
+            x: 92 + 26; anchors.verticalCenter: parent.verticalCenter
+            width: song.width - x
+            spacing: 6
+            T { width: parent.width; text: music.title || ""; font.pixelSize: 34; color: ms.ink }
+            T {
+                width: parent.width
+                text: (music.artist || "") + (ms.next ? "   ·   next: " + ms.next.title : "")
+                font.pixelSize: 22; color: ms.soft
+            }
+            Item {
+                width: 320; height: 14
+                readonly property real pos: Math.min(music.duration || 0, (music.position || 0) + (music.playing ? ms.now - music.at : 0))
+                visible: (music.duration || 0) > 0
+                Rectangle { y: 8; width: parent.width; height: 3; radius: 1.5; color: Qt.rgba(1, 1, 1, 0.14) }
+                Rectangle { y: 8; height: 3; radius: 1.5; width: parent.width * (music.duration > 0 ? parent.pos / music.duration : 0); color: Qt.rgba(1, 1, 1, 0.8) }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- bottom right: the weather
     Column {
-        anchors.right: parent.right; anchors.rightMargin: 64; y: 752
+        anchors.right: parent.right; anchors.rightMargin: 72
+        anchors.bottom: song.bottom; anchors.bottomMargin: 2
         visible: wx.ok === true
-        T { anchors.right: parent.right; text: (wx.t || 0) + "°"; font.pixelSize: 44; font.weight: Font.Light; color: ms.ink }
+        spacing: 4
+        T { anchors.right: parent.right; text: (wx.t !== undefined ? wx.t : "–") + "°"; font.pixelSize: 52; font.weight: Font.Light; color: ms.ink }
         T {
             anchors.right: parent.right
+            textFormat: Text.StyledText
             text: Theme.cap(wx.d || "") + (wx.hi !== null && wx.hi !== undefined ? "  ·  " + wx.hi + "° / " + wx.lo + "°" : "")
-            font.pixelSize: 24; color: ms.soft
+                  + (ms.rainAt >= 0 ? "  ·  <font color='#7fb4ff'>rain " + Theme.hourText(wx.hours[ms.rainAt].h, room.clock24) + "</font>" : "")
+            font.pixelSize: 22; color: ms.soft
         }
     }
 }

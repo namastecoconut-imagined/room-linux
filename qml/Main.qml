@@ -104,7 +104,7 @@ Window {
             onOpenClock: win.screen = "clock"
             onOpenWeather: win.screen = "weather"
             onOpenReminders: win.screen = "reminders"
-            onOpenAssistant: { win.beforeVoice = "home"; win.screen = "assistant"; room.listen() }
+            onOpenAssistant: room.listen()          // listening is being rebuilt: nothing to open for now
         }
         RoomScreen {
             name: win.roomName

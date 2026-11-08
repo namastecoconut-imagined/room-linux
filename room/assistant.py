@@ -137,7 +137,6 @@ class Assistant(QObject):
             self.level = float(e.get("v", 0)); self.levelChanged.emit(); return      # raw RMS 0…1
         if ev == "ready":
             self._fails = 0; self.error = ""; self.state = "idle"
-            self._send(cmd="words", words=self._words())
         elif ev == "error":
             self.error = e.get("msg", "")
         elif ev in ("wake", "listening"):
@@ -167,20 +166,14 @@ class Assistant(QObject):
             self._talking = False
             if self.state == "speaking":
                 self.state = "idle"
-                if self._follow_next:
-                    # it asked something: keep the mic open a few seconds, no wake word needed (like the phone)
-                    self._follow_next = False
-                    self.following = True
-                    self._send(cmd="listen", follow=True)
-                else:
-                    self._duck(False)
+                self._follow_next = False          # (listening is being rebuilt — no follow-up mic for now)
+                self._duck(False)
         self.changed.emit()
 
     def listen(self):
-        """Tap to talk."""
-        if self.state == "off":
-            return
-        self._send(cmd="listen")
+        """Tap to talk — listening (wake word, mic, recognition) was removed to be rebuilt from scratch."""
+        self.error = "Listening is off while it's rebuilt"
+        self.changed.emit()
 
     def cancel(self):
         self._send(cmd="cancel")
@@ -282,11 +275,6 @@ class Assistant(QObject):
         self.stage, self.line, self.card = stage, line, card
         self.reply = spoken or line
         self._follow_next = follow
-        if follow and not self._talking and self.state != "speaking":
-            # the question was already spoken (it streamed out early) — open the mic now
-            self._follow_next = False
-            self.following = True
-            self._send(cmd="listen", follow=True)
         self.changed.emit()
 
     def _act(self, text: str):

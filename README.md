@@ -49,17 +49,14 @@ Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it (same f
 
 ## Voice
 
-Set up once with `bash scripts/voice.sh` (install.sh runs it too). Everything runs on the Surface, offline:
+Set up once with `bash scripts/voice.sh` (install.sh runs it too). **Listening is off for now** — the wake word, mic
+processing and speech recognition were removed to be rebuilt from scratch (`scripts/cleanup-listening.sh` cleared
+what they had put on the Surface and put the mics back to Fedora's defaults).
 
-- **Wake word** "Alexa" — openWakeWord's pretrained model, listening all the time (and while Room talks, so "Alexa"
-  cuts an answer off). Reads the echo-cancelled mic PipeWire provides (`room-ec-source`), so music playing from the
-  Surface is taken out of what it hears.
-- **Speech** — whisper.cpp's server (`room-whisper.service`, model base.en; `WHISPER_MODEL=small.en bash
-  scripts/voice.sh` for the more accurate one), primed with your room and playlist names.
-- **Understanding** — `room/intents.py`, plain rules: lights, scenes, timers, alarms, reminders, weather, time, calendar,
-  music. `room/assistant.py` acts on them and answers.
-- **Answers** — Kokoro (voice `af_heart`), sentence by sentence through `pw-play`. Music is turned down while you talk.
+- **Understanding** — Claude (`room/brain.py`, the iPhone panel's prompt and tool) with a snapshot of the home;
+  `room/intents.py`, plain rules, when there's no key or no internet. `room/assistant.py` carries out the actions.
+- **Answers** — Deepgram's Aura voice, streamed (`deepgramKey`); Kokoro (`af_heart`) offline. Chimes in `voice/cues`.
 
-The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on
-and restarts it. Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"voice": "bf_emma",
-"wakeThreshold": 0.5, "speed": 1.05, "mic": "<pipewire node>"}`.
+The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on.
+Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"voice": "bf_emma", "speed": 1.05,
+"loudness": 1.0, "voiceVolume": 1.0}`.

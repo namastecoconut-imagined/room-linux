@@ -753,14 +753,21 @@ def main():
     helptext = subprocess.run(["pw-record", "--help"], capture_output=True, text=True).stdout + \
                subprocess.run(["pw-record", "--help"], capture_output=True, text=True).stderr
     raw = ["--raw"] if "--raw" in helptext else []
-    cmd = ["pw-record", *raw, "--rate", str(RATE), "--channels", "1", "--format", "s16", "-"]
+    # both of the Surface's mics, steered at whoever's talking (voice/beam.py); "beam": false → one mixed channel
+    ch = 2 if CFG.get("beam", True) else 1
+    cmd = ["pw-record", *raw, "--rate", str(RATE), "--channels", str(ch), "--format", "s16", "-"]
+    beam = None
+    if ch == 2:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from beam import Beam
+        beam = Beam()
     if target:
         cmd[1:1] = ["--target", target]
-    log("mic:", target or "default")
+    log("mic:", target or "default", "· two mics, steered" if beam else "")
     emit(ev="ready", mic=target or "default")
     while True:
         rec = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-        n = CHUNK * 2
+        n = CHUNK * 2 * ch
         swap = False
         if not raw:
             head = rec.stdout.read(24)                       # an .au header? (magic, data offset, …)
@@ -778,7 +785,8 @@ def main():
                 b = proc.stdout.read(n)
                 if not b or len(b) < n:
                     qa.put(None); return
-                qa.put(np.frombuffer(b, dtype=">i2" if swap else "<i2").astype(np.int16))
+                a = np.frombuffer(b, dtype=">i2" if swap else "<i2").astype(np.int16)
+                qa.put(beam.mix(a.reshape(-1, 2)) if beam else a)
         threading.Thread(target=reader, daemon=True).start()
         slow, count, behind_said = 0.0, 0, 0.0
         while True:
@@ -795,6 +803,8 @@ def main():
                 avg = slow / count * 1000
                 if avg > 40 or qa.qsize() > 6:
                     log(f"working {avg:.0f} ms per 80 ms of sound · {qa.qsize()} waiting")
+                if beam and DEBUG:
+                    log(f"steering: {beam.lag:+d} samples")
                 slow, count = 0.0, 0
         log("mic stopped — reopening in 2 s")
         time.sleep(2)

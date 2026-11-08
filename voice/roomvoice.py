@@ -28,6 +28,18 @@ DG_KEY = CFG.get("deepgramKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
 HTTP = requests.Session()                      # kept alive: from India a fresh TLS handshake costs ~0.5 s per answer
+
+
+def warm_voice():
+    """Open the connection to Deepgram's voice while the person is still talking, so the answer's first sound isn't
+    held up by a fresh connection (it measured 1.2–3 s to first sound without this)."""
+    def go():
+        try:
+            HTTP.head(DG_SPEAK.rsplit("/v1/", 1)[0] + "/", timeout=4)
+        except Exception:
+            pass
+    if DG_KEY:
+        threading.Thread(target=go, daemon=True).start()
 DUMP = os.environ.get("ROOM_VOICE_DUMP")          # (checks) a copy of exactly what's sent to the speakers
 CUES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cues")
 
@@ -375,6 +387,7 @@ def main():
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from ears import Ears
             ears = Ears(CFG, speaker, emit, chime)
+            ears.on_begin = warm_voice
             threading.Thread(target=ears.run, daemon=True).start()
         except Exception as e:
             log("listening couldn't start:", repr(e))

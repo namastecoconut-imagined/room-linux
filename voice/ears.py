@@ -233,6 +233,7 @@ class Ears:
         self.mine_first = False             # Room was talking when it woke: its own words come before "Alexa"
         self.best = 0.0
         self.best_at = 0.0
+        self.on_begin = None
 
     # ---------------------------------------------------------------- the mic
     def run(self):
@@ -312,6 +313,8 @@ class Ears:
     # ---------------------------------------------------------------- a request
     def begin(self, preroll=False, follow=False, mine_first=False):
         self.speaker.stop()
+        if self.on_begin:
+            self.on_begin()                 # warm the voice's connection while they talk
         if not follow:
             self.chime("listen")
         if self.stream and not self.stream.ended:

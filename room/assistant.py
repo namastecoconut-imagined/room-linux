@@ -116,6 +116,9 @@ class Assistant(QObject):
     def _send(self, **cmd):
         if cmd.get("cmd") == "say" and cmd.get("text"):
             self._talking = True
+            if not getattr(self, "_t_say", 0):
+                import time as _t
+                self._t_say = _t.time()
         if self.proc and self.proc.state() == QProcess.ProcessState.Running:
             self.proc.write((json.dumps(cmd) + "\n").encode())
 
@@ -157,12 +160,22 @@ class Assistant(QObject):
         elif ev == "thinking":
             self.state = "thinking"; self.stage = "think"
         elif ev == "heard":
+            import time as _t
+            self._t_heard, self._t_say = _t.time(), 0
             self.heard = (e.get("text") or "").strip()
             if not self.heard and e.get("quiet"):
                 self.following = True             # a "maybe Alexa" with nothing after it: close without the miss chime
             self._act(self.heard)
         elif ev == "speaking":
             self.state = "speaking"
+            import time as _t
+            if getattr(self, "_t_heard", 0):
+                n = _t.time()
+                say = getattr(self, "_t_say", 0)
+                print(f"[room] timing after your words came through: "
+                      f"{(say - self._t_heard) if say else 0:.1f} s to the answer, "
+                      f"{(n - say) if say else 0:.1f} s to its voice · {n - self._t_heard:.1f} s in all", flush=True)
+                self._t_heard = 0
         elif ev == "spoken":
             self._talking = False
             if self.state == "speaking":

@@ -118,10 +118,20 @@ class Room(QObject):
             # AirPlay never says what's next. But if it's Spotify on the phone being AirPlayed here, Spotify's own
             # account still knows the queue — borrow it whenever the two agree on the song.
             sp = self.spotify.snapshot()
-            if sp.get("exists") and sp.get("title", "").strip().lower() == m.get("title", "").strip().lower():
+            same = self._same_song(m, sp)
+            if same:
                 m["nextUp"] = sp.get("nextUp", [])
+                m["recent"] = sp.get("recent", [])
                 m["context"] = sp.get("context", "")
                 m["canSeek"] = True          # AirPlay can't seek, but Spotify on the phone can — seek through it
+                # AirPlay 2 often sends no progress at all; Spotify always knows where the song is
+                if sp.get("duration"):
+                    m["duration"], m["position"], m["at"], m["playing"] = sp["duration"], sp["position"], sp["at"], sp["playing"]
+            key = (m.get("title"), sp.get("title"), same)
+            if key != getattr(self, "_match_said", None):
+                self._match_said = key
+                print(f"[room] airplay {m.get('title')!r} · spotify {sp.get('title')!r} ({sp.get('device') or 'no device'})"
+                      f" → {'same song: queue, progress and seek from Spotify' if same else 'not the same song'}", flush=True)
         m.setdefault("nextUp", [])
         m.setdefault("canSeek", m.get("source") != "airplay")
         if m.get("source") == "airplay":
@@ -131,6 +141,27 @@ class Room(QObject):
             m["volume"] = self.airplay.volume
             m["playlists"] = self.spotify.playlists
         return m
+
+    @staticmethod
+    def _same_song(a: dict, sp: dict) -> bool:
+        """Is AirPlay playing the song Spotify's account is on? Titles differ in small ways between the two ("Song -
+        Remastered", "(feat. X)", censored words, punctuation), so compare the cleaned-up words, and the artist."""
+        import re
+        if not sp.get("exists") or not a.get("title"):
+            return False
+        def words(t):
+            t = re.sub(r"\s*[\(\[].*?[\)\]]", "", (t or "").lower())        # (feat …), [Remastered]
+            t = re.split(r"\s+-\s+", t)[0]                                   # "Song - Remastered 2011"
+            return re.sub(r"[^a-z0-9]+", " ", t).split()
+        x, y = words(a["title"]), words(sp.get("title"))
+        if not x or not y:
+            return False
+        n = min(len(x), len(y))
+        title_ok = x == y or x[:n] == y[:n] or (n >= 2 and sum(w in y for w in x) >= len(x) - 1)
+        if not title_ok:
+            return False
+        aa, sa = set(words(a.get("artist"))), set(words(sp.get("artist")))
+        return not aa or not sa or bool(aa & sa)
 
     # ---- the Surface's own output volume (PipeWire), for AirPlay
     def _read_out_volume(self):

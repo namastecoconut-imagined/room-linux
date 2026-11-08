@@ -114,7 +114,15 @@ class AirPlay(QObject):
     def _item(self, t, c, d) -> bool:
         s = lambda: d.decode("utf-8", "replace")
         if t == "core":
-            if c == "minm": self.title = s(); return True
+            if c == "astm" and len(d) == 4:              # the song's length in ms (AirPlay 2 sends this, not prgr)
+                ms = int.from_bytes(d, "big")
+                if ms > 0 and not self.duration:
+                    self.duration = ms / 1000
+                return True
+            if c == "minm":
+                if s() != self.title:                    # a new song starts at 0
+                    self.duration = 0.0; self.position = 0.0; self.at = time.time()
+                self.title = s(); return True
             if c == "asar": self.artist = s(); return True
             if c == "asal": self.album = s(); return True
             return False

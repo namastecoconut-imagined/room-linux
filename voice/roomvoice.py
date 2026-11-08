@@ -98,7 +98,7 @@ def voice_out():
     """Where Room's voice plays, and how loud: always the Surface's own speakers — even while music goes to a Bluetooth
     speaker (AirPlay follows the system's output; Room's answers and chimes stay on the panel). Straight to the
     speakers, not through the speaker tuning (made for music, it turned speech down). As loud as the volume slider when
-    the Surface is the output, but never below voiceMinLevel (75 %); with music on another speaker, at voiceMinLevel.
+    the Surface is the output, but never below voiceMinLevel (75 %); with music on another speaker, at full.
     "voiceDirect": false sends it wherever the system's output is instead."""
     props = ["-P", "{ application.name = \"Room voice\" }"]
     floor = float(CFG.get("voiceMinLevel", 0.75))
@@ -111,7 +111,8 @@ def voice_out():
         LEVEL.lift()
         return ["--volume", str(float(CFG.get("voiceVolume", 1.0))), *props]
     elsewhere = bool(default) and (default.startswith("bluez") or default.startswith("alsa_output.usb"))
-    v = (floor if elsewhere else max(vol, floor)) * float(CFG.get("voiceVolume", 1.0))
+    # music on another speaker: the slider is that speaker's, so the Surface plays Room at full
+    v = (1.0 if elsewhere else max(vol, floor)) * float(CFG.get("voiceVolume", 1.0))
     return ["--target", raw, "--volume", f"{min(1.0, v):.2f}", *props]
 
 

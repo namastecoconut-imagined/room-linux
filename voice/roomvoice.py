@@ -1,17 +1,20 @@
 """Room's ears and voice — a separate process so a mic or model problem can never take the panel down.
 
-Started by Room (room/voice.py) with its own Python (voice/.venv). Talks over stdin/stdout, one JSON object a line.
+Started by Room (room/assistant.py) with its own Python (voice/.venv). Talks over stdin/stdout, one JSON object a line.
 
-  out → {"ev": "ready"} · {"ev": "level", "v": 0..1} · {"ev": "wake"} · {"ev": "listening"} · {"ev": "thinking"}
-        {"ev": "heard", "text": "..."} · {"ev": "speaking"} · {"ev": "spoken"} · {"ev": "error", "msg": "..."}
+  out → {"ev": "ready"} · {"ev": "level", "v": rms} · {"ev": "wake"} · {"ev": "listening"} · {"ev": "partial", "text"}
+        {"ev": "thinking"} · {"ev": "heard", "text": "..."} · {"ev": "speaking"} · {"ev": "spoken"} · {"ev": "error"}
   in  ← {"cmd": "listen"} (tap to talk) · {"cmd": "say", "text": "...", "listen": false} · {"cmd": "cancel"}
-        {"cmd": "words", "words": ["Living room", ...]} (names whisper should expect)
+        {"cmd": "words", "words": ["Living room", ...]} (names to expect)
 
-Hearing: the mic (the echo-cancelled one when PipeWire's echo-cancel is set up, so music playing from the Surface is
-taken out) is read with pw-record at 16 kHz. openWakeWord's "alexa" model listens all the time, also while Room is
-talking — saying "Alexa" again cuts the answer off. After the wake word: a soft tone, then what's said is recorded
-until a pause (Silero VAD), up to 8 s, and sent to whisper.cpp's server on 127.0.0.1:8910.
-Speaking: Kokoro (voice af_heart unless set), sentence by sentence so the first words start quickly, through pw-play.
+Set up like the iPhone panel, where it felt quick: the heavy lifting isn't done on the Surface.
+  • Wake word "Alexa": Picovoice Porcupine (built for far-field, tiny on the CPU) when there's a picovoiceKey;
+    openWakeWord's "alexa" model otherwise. It listens all the time, also while Room talks ("Alexa" cuts an answer off).
+  • Hearing what's said: Deepgram's live recognition when there's a deepgramKey — the sound streams from the moment
+    "Alexa" is heard, words come back while you talk, and Deepgram says when you've finished (like Apple's recogniser
+    on the phone). Without a key (or offline): Silero VAD + whisper.cpp on 127.0.0.1:8910.
+  • Speaking: Deepgram's Aura voice, streamed straight to the speaker (starts in ~0.2 s, even loudness); Kokoro
+    (af_heart) when there's no key or no internet.
 """
 import io
 import json
@@ -37,7 +40,12 @@ DATA = os.path.expanduser(os.environ.get("ROOM_VOICE_DATA", "~/.local/share/room
 CFG = json.loads(os.environ.get("ROOM_VOICE_CFG", "{}"))
 # "Alexa" from across the room scores lower than up close; 0.35 still ignores ordinary talk (it scored ~0 in tests)
 WAKE_THRESHOLD = float(CFG.get("wakeThreshold", 0.35))
-VOICE = CFG.get("voice", "af_heart")
+VOICE = CFG.get("voice", "af_heart")                    # Kokoro (offline) voice
+DG_KEY = CFG.get("deepgramKey") or ""
+PV_KEY = CFG.get("picovoiceKey") or ""
+DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
+DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
+DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
 WHISPER = CFG.get("whisperURL", "http://127.0.0.1:8910/inference")
 DEBUG = os.environ.get("ROOM_VOICE_DEBUG") == "1"        # a line a second: mic level, gain, wake-word score
 
@@ -84,22 +92,70 @@ def mic_target():
 
 
 class Speaker:
-    """Kokoro, sentence by sentence; pw-play for output. stop() cuts it off at once."""
+    """Deepgram Aura, streamed into pw-play; Kokoro sentence by sentence when that isn't possible. stop() cuts it off."""
 
     def __init__(self):
-        from kokoro_onnx import Kokoro
-        self.k = Kokoro(os.path.join(DATA, "kokoro.onnx"), os.path.join(DATA, "voices.bin"))
+        self.k = None
         self.lang = "en-gb" if VOICE.startswith("b") else "en-us"
         self.proc = None
         self.gen = 0
         self.busy = False
         self.lock = threading.Lock()
 
+    def _kokoro(self):
+        if self.k is None:
+            from kokoro_onnx import Kokoro
+            self.k = Kokoro(os.path.join(DATA, "kokoro.onnx"), os.path.join(DATA, "voices.bin"))
+        return self.k
+
     def say(self, text, done):
         self.stop()
         self.gen += 1
         g = self.gen
-        threading.Thread(target=self._run, args=(text, g, done), daemon=True).start()
+        threading.Thread(target=self._say, args=(text, g, done), daemon=True).start()
+
+    def _say(self, text, g, done):
+        if DG_KEY and self._deepgram(text, g):
+            self.busy = False
+            if g == self.gen:
+                done()
+            return
+        self._run(text, g, done)
+
+    def _deepgram(self, text, g) -> bool:
+        """Aura, streamed: playback starts with the first bytes. False if it couldn't be reached (→ Kokoro)."""
+        self.busy = True
+        try:
+            r = requests.post(DG_SPEAK,
+                              params={"model": DG_VOICE, "encoding": "linear16", "sample_rate": 24000, "container": "none"},
+                              headers={"Authorization": f"Token {DG_KEY}", "Content-Type": "application/json"},
+                              json={"text": text}, stream=True, timeout=(3, 15))
+            if r.status_code != 200:
+                log(f"aura: {r.status_code} {r.text[:200]}")
+                return False
+        except Exception as e:
+            log("aura:", repr(e))
+            return False
+        with self.lock:
+            if g != self.gen:
+                return True
+            self.proc = subprocess.Popen(["pw-play", "--raw", "--rate", "24000", "--channels", "1", "--format", "s16",
+                                          "--volume", str(float(CFG.get("loudness", 1.0))), "-"],
+                                         stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        first = True
+        try:
+            for chunk in r.iter_content(chunk_size=4800):
+                if g != self.gen:
+                    break
+                if chunk:
+                    if first:
+                        emit(ev="speaking"); first = False
+                    self.proc.stdin.write(chunk)
+            self.proc.stdin.close()
+        except Exception:
+            pass
+        self.proc.wait()
+        return True
 
     def _run(self, text, g, done):
         import soundfile as sf
@@ -112,12 +168,13 @@ class Speaker:
                 if g != self.gen:
                     break
                 try:
-                    a, sr = self.k.create(p, voice=VOICE, speed=float(CFG.get("speed", 1.05)), lang=self.lang)
+                    a, sr = self._kokoro().create(p, voice=VOICE, speed=float(CFG.get("speed", 1.05)), lang=self.lang)
                     f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-                    # Kokoro comes out quiet: bring every sentence up to just under full scale
-                    pk = float(np.max(np.abs(a))) if len(a) else 0.0
-                    if pk > 0:
-                        a = np.clip(a * (0.95 / pk) * float(CFG.get("loudness", 1.0)), -1, 1)
+                    # Kokoro comes out quiet: every sentence to the same loudness (by its average, not its peak, so a
+                    # short "Okay." isn't louder than a long answer)
+                    rms = float(np.sqrt(np.mean(a ** 2))) if len(a) else 0.0
+                    if rms > 0:
+                        a = np.clip(a * (0.12 / rms) * float(CFG.get("loudness", 1.0)), -1, 1)
                     sf.write(f.name, a, sr); q.put(f.name)
                 except Exception as e:
                     log("tts:", e)
@@ -145,18 +202,155 @@ class Speaker:
         self.gen += 1
         with self.lock:
             if self.proc and self.proc.poll() is None:
-                self.proc.terminate()
+                self.proc.kill()
+
+
+class Wake:
+    """'Alexa': Porcupine with a picovoiceKey (512-sample frames), openWakeWord otherwise. hit(pcm) → (heard, score)."""
+
+    def __init__(self):
+        self.pv = None
+        if PV_KEY:
+            try:
+                import pvporcupine
+                self.pv = pvporcupine.create(access_key=PV_KEY, keywords=["alexa"],
+                                             sensitivities=[float(CFG.get("wakeSensitivity", 0.6))])
+                self.buf = np.zeros(0, np.int16)
+                log("wake word: Porcupine")
+            except Exception as e:
+                log("porcupine:", repr(e), "— using openWakeWord")
+                self.pv = None
+        if not self.pv:
+            from openwakeword.model import Model
+            mdir = os.path.join(DATA, "oww")
+            self.oww = Model(wakeword_models=[os.path.join(mdir, "alexa_v0.1.onnx")], inference_framework="onnx",
+                             melspec_model_path=os.path.join(mdir, "melspectrogram.onnx"),
+                             embedding_model_path=os.path.join(mdir, "embedding_model.onnx"))
+            log("wake word: openWakeWord")
+
+    def hit(self, pcm: np.ndarray):
+        if self.pv:
+            self.buf = np.concatenate([self.buf, pcm])
+            heard = False
+            n = self.pv.frame_length
+            while len(self.buf) >= n:
+                if self.pv.process(self.buf[:n].tolist()) >= 0:
+                    heard = True
+                self.buf = self.buf[n:]
+            return heard, 1.0 if heard else 0.0
+        score = max(self.oww.predict(pcm).values() or [0])
+        return score >= WAKE_THRESHOLD, score
+
+    def reset(self):
+        if not self.pv:
+            self.oww.reset()
+
+
+class Deepgram:
+    """One live recognition: audio goes in as it's heard, words come back as they're recognised. on_partial(text) while
+    talking; on_done(text) once — when Deepgram says the speaker finished, or close() is called."""
+
+    def __init__(self, words, on_partial, on_done):
+        self.q: queue.Queue = queue.Queue()
+        self.on_partial, self.on_done = on_partial, on_done
+        self.finals: list[str] = []
+        self.interim = ""
+        self.done = False
+        self.opened = threading.Event()
+        params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", "en"), ("encoding", "linear16"),
+                  ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"), ("smart_format", "true"),
+                  ("endpointing", str(CFG.get("endpointMs", 400))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
+        params += [("keyterm", w) for w in (["Alexa"] + list(words))[:50]]
+        from urllib.parse import urlencode
+        self.url = DG_LISTEN + "?" + urlencode(params)
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def push(self, pcm: np.ndarray):
+        if not self.done:
+            self.q.put(pcm.tobytes())
+
+    def close(self):
+        """Out of time: ask for what's been heard so far."""
+        self.q.put(None)
+
+    def text(self):
+        return " ".join([*self.finals, self.interim]).strip()
+
+    def _finish(self):
+        if not self.done:
+            self.done = True
+            self.on_done(" ".join(self.finals).strip() or self.interim.strip())
+
+    def _run(self):
+        from websockets.sync.client import connect
+        t0 = time.time()
+        try:
+            ctx = connect(self.url, additional_headers={"Authorization": f"Token {DG_KEY}"}, open_timeout=4, max_size=None)
+            ws = ctx.__enter__()
+        except Exception as e:
+            log("deepgram connect:", repr(e))
+            self.failed = True
+            self._finish()
+            return
+        log(f"deepgram: connected in {time.time() - t0:.2f} s")
+        self.opened.set()
+
+        def sender():
+            try:
+                while not self.done:
+                    try:
+                        b = self.q.get(timeout=5)
+                    except queue.Empty:
+                        ws.send(json.dumps({"type": "KeepAlive"})); continue
+                    if b is None:
+                        ws.send(json.dumps({"type": "Finalize"}))
+                        time.sleep(1.2)
+                        ws.send(json.dumps({"type": "CloseStream"}))
+                        return
+                    ws.send(b)
+            except Exception:
+                pass
+        threading.Thread(target=sender, daemon=True).start()
+        try:
+            for msg in ws:
+                if isinstance(msg, bytes):
+                    continue
+                m = json.loads(msg)
+                kind = m.get("type")
+                if kind == "Results":
+                    alt = (m.get("channel", {}).get("alternatives") or [{}])[0]
+                    t = (alt.get("transcript") or "").strip()
+                    if m.get("is_final"):
+                        if t:
+                            self.finals.append(t)
+                        self.interim = ""
+                    else:
+                        self.interim = t
+                    if self.text():
+                        self.on_partial(self.text())
+                    if (m.get("speech_final") or m.get("from_finalize")) and self.finals:
+                        break
+                elif kind == "UtteranceEnd" and self.finals:
+                    break
+        except Exception as e:
+            log("deepgram:", repr(e))
+        log(f"deepgram: {self.text()!r} in {time.time() - t0:.1f} s")
+        self._finish()
+        try:
+            self.done = True
+            ws.send(json.dumps({"type": "CloseStream"}))
+            ctx.__exit__(None, None, None)
+        except Exception:
+            pass
 
 
 class Ears:
     def __init__(self):
-        from openwakeword.model import Model
         from openwakeword.vad import VAD
         mdir = os.path.join(DATA, "oww")
-        self.wake = Model(wakeword_models=[os.path.join(mdir, "alexa_v0.1.onnx")], inference_framework="onnx",
-                          melspec_model_path=os.path.join(mdir, "melspectrogram.onnx"),
-                          embedding_model_path=os.path.join(mdir, "embedding_model.onnx"))
+        self.wake = Wake()
         self.vad = VAD(model_path=os.path.join(mdir, "silero_vad.onnx"))
+        self.dg: Deepgram | None = None
         self.speaker = Speaker()
         self.state = "idle"            # idle · listening · thinking
         self.rec: list[np.ndarray] = []
@@ -180,7 +374,24 @@ class Ears:
         self.started = getattr(self, "clock", 0.0)
         self.quiet_since = 0.0
         self.vad.reset_states()
+        self.dg = None
+        if DG_KEY:
+            self.dg = Deepgram(self.words, lambda t: emit(ev="partial", text=t), self._dg_done)
         emit(ev="listening")
+
+    def _dg_done(self, text):
+        dg = self.dg
+        if getattr(dg, "failed", False):
+            # Deepgram couldn't be reached — carry on listening the offline way (pause detection, then whisper);
+            # what's been recorded so far is kept
+            self.dg = None
+            log("deepgram unreachable — listening offline")
+            return
+        self.dg = None
+        if self.state == "listening":
+            subprocess.Popen(["pw-play", self.cue_off], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.state = "idle"
+        emit(ev="heard", text=text)
 
     # ---------------------------------------------------------------- the mic, evened out
     # The Surface's mic is quiet from across a room. A slow automatic gain lifts it (up to 10×) so the wake word, the
@@ -228,7 +439,7 @@ class Ears:
         self.level_n = getattr(self, "level_n", 0) + 1
         if self.level_n % 2 == 0:                     # ~6 a second is plenty for the screen
             emit(ev="level", v=round(level, 5))
-        score = max(self.wake.predict(pcm).values() or [0])
+        heard_wake, score = self.wake.hit(pcm)
         if DEBUG:
             self.dbg = getattr(self, "dbg", []) + [(level, score)]
             if len(self.dbg) >= 12:                   # about once a second
@@ -245,13 +456,22 @@ class Ears:
         if 0.15 <= score < WAKE_THRESHOLD and now - getattr(self, "miss_at", -9) > 2:
             self.miss_at = now
             log(f"wake: near miss {score:.2f}")
-        if score >= WAKE_THRESHOLD and now - self.last_wake > 1.5:
+        if heard_wake and now - self.last_wake > 1.5:
             self.last_wake = now
             self.wake.reset()
             emit(ev="wake")
             self.begin_listening()
             return
         if self.state != "listening":
+            return
+        if self.dg:
+            # live recognition: everything after "Alexa" streams straight to Deepgram (no waiting for the tone);
+            # it decides when you've finished. A copy is kept in case it can't be reached.
+            self.dg.push(pcm)
+            self.rec.append(pcm)
+            if now - self.started > 10 or (now - self.started > 6 and not self.dg.text()):
+                self.dg.close()
+                self.started = now + 999            # don't ask twice
             return
         if now - self.started < 0.35:
             return                                  # the start tone is still playing — don't send it to whisper
@@ -326,6 +546,8 @@ class Ears:
             self.speaker.say(c.get("text", ""), self._spoken)
         elif cmd == "cancel":
             self.speaker.stop()
+            if self.dg:
+                self.dg.done = True; self.dg.close(); self.dg = None
             self.state = "idle"
         elif cmd == "words":
             self.words = [w for w in c.get("words", []) if isinstance(w, str)][:40]

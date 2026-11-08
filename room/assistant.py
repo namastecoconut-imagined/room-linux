@@ -71,7 +71,10 @@ class Assistant(QObject):
             return
         self.proc = QProcess(self)
         env = QProcessEnvironment.systemEnvironment()
-        cfg = self.room.cfg.get("voiceSettings") or {}
+        cfg = dict(self.room.cfg.get("voiceSettings") or {})
+        for k in ("deepgramKey", "picovoiceKey"):          # the two service keys live at the top of config.json
+            if self.room.cfg.get(k):
+                cfg[k] = self.room.cfg[k]
         env.insert("ROOM_VOICE_CFG", json.dumps(cfg))
         self.proc.setProcessEnvironment(env)
         self.proc.setProcessChannelMode(QProcess.ProcessChannelMode.ForwardedErrorChannel)
@@ -121,6 +124,8 @@ class Assistant(QObject):
         elif ev in ("wake", "listening"):
             self.state = "listening"; self.heard = ""; self.reply = ""; self.error = ""
             self._duck(True)
+        elif ev == "partial":
+            self.heard = (e.get("text") or "").strip()        # words as they're recognised
         elif ev == "thinking":
             self.state = "thinking"
         elif ev == "heard":

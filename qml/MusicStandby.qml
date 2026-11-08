@@ -13,12 +13,7 @@ Item {
     signal openMusic()
 
     // the cover, blurred into the background (rendered small — it's a blur, nobody can tell)
-    Item {
-        anchors.fill: parent
-        opacity: 0.5
-        Cover { id: bgSrc; anchors.fill: parent; source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; radius: 0; visible: false; layer.enabled: true; layer.textureSize: Qt.size(160, 107) }
-        MultiEffect { anchors.fill: parent; source: bgSrc; blurEnabled: true; blur: 1.0; blurMax: 32; saturation: 0.1 }
-    }
+    CoverWash { anchors.fill: parent; source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; strength: 0.6 }
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {

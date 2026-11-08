@@ -30,6 +30,13 @@ class Room(QObject):
         self.spotify = Spotify(cfg.get("spotify"))
         self.airplay = AirPlay()
         self.airplay.changed.connect(self.musicChanged)
+        # what played before, whatever the source — the left side of the cover flow
+        self._history: list[dict] = []
+        self._last_key = ""
+        self._settle = QTimer(self); self._settle.setSingleShot(True); self._settle.setInterval(1500)
+        self._settle.timeout.connect(self._settled)
+        self.musicChanged.connect(self._note_track)
+        self._out_volume = None   # the Surface's own output volume (used for AirPlay)
         self.wx.changed.connect(self.weatherChanged)
         self.calendar.changed.connect(self.eventsChanged)
         self.lights.changed.connect(self.roomsChanged)
@@ -45,6 +52,8 @@ class Room(QObject):
         self.lights.start()
         self.spotify.start()
         self.airplay.start()
+        self._read_out_volume()
+        self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(5000)
         # the room-sound ripple on standby: off until it's proven on this machine (opening the mic crashed in testing)
         if os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True:
             self._start_mic()
@@ -69,7 +78,50 @@ class Room(QObject):
             m["playing"] = os.environ.get("ROOM_SCREEN") != "standby"; m["exists"] = m["playing"]
             return m
         # whatever's actually playing: AirPlay while a phone or Mac is sending to Room, otherwise Spotify
-        return self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()
+        m = self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()
+        if not m.get("recent"):
+            m["recent"] = self._history[:2]
+        m.setdefault("nextUp", [])
+        if m.get("source") == "airplay":
+            # AirPlay plays through the Surface itself, so the slider is the Surface's volume
+            m["canVolume"] = self._out_volume is not None
+            m["volume"] = self._out_volume or 0
+            m["playlists"] = self.spotify.playlists
+        return m
+
+    # ---- the Surface's own output volume (PipeWire), for AirPlay
+    def _read_out_volume(self):
+        import subprocess
+        try:
+            out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2).stdout
+            v = int(round(float(out.split()[1]) * 100))   # "Volume: 0.45"
+            if v != self._out_volume:
+                self._out_volume = v
+                self.musicChanged.emit()
+        except Exception:
+            pass
+
+    def _note_track(self):
+        # metadata arrives a field at a time (title, then artist, then cover), so wait for it to settle
+        # (Spotify reports every 1.5 s, so only a change of song restarts the wait)
+        if self.demo:
+            return
+        m = self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()
+        key = f"{m.get('title')}|{m.get('artist')}|{m.get('art')}"
+        if key != getattr(self, "_seen_key", None):
+            self._seen_key = key
+            self._settle.start()
+
+    def _settled(self):
+        m = self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()
+        if not m.get("exists"):
+            return
+        now = {"title": m["title"], "artist": m["artist"], "art": m["art"], "uri": ""}
+        cur = getattr(self, "_now", None)
+        if cur and cur["title"] != now["title"]:
+            self._history = ([cur] + [h for h in self._history if h["title"] != cur["title"]])[:3]
+            self.musicChanged.emit()
+        self._now = now
 
     @Property(bool, constant=True)
     def clock24(self):
@@ -136,7 +188,14 @@ class Room(QObject):
 
     @Slot(int)
     def setVolume(self, v):
-        self.spotify.set_volume(v)
+        if self.airplay.showing:
+            import subprocess
+            v = max(0, min(100, int(v)))
+            self._out_volume = v
+            subprocess.Popen(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{v / 100:.2f}"])
+            self.musicChanged.emit()
+        else:
+            self.spotify.set_volume(v)
 
     @Slot(str)
     def transfer(self, device_id):

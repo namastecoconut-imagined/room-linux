@@ -151,9 +151,9 @@ class AirPlay(QObject):
                 if not img.isNull():
                     path = self.art_dir / f"cover-{int(time.time() * 1000)}.jpg"
                     img.save(str(path), "JPG", 92)
-                    for old in self.art_dir.glob("cover-*.jpg"):   # keep just the newest two
-                        if old != path and old.stat().st_mtime < time.time() - 60:
-                            old.unlink(missing_ok=True)
+                    # keep the newest few — the cover flow still shows the last couple of songs
+                    for old in sorted(self.art_dir.glob("cover-*.jpg"), key=lambda f: f.stat().st_mtime)[:-5]:
+                        old.unlink(missing_ok=True)
                     self.art_url = path.as_uri()
                     self.rgb, self.rgb2 = colours(img)
             return True

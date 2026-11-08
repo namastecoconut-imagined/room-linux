@@ -15,24 +15,19 @@ Item {
     property bool picking: false
 
     // ---------------------------------------------------------------- background: the cover, blurred
-    Item {
-        anchors.fill: parent
-        opacity: 0.55
-        Cover { id: bgSrc; anchors.fill: parent; radius: 0; source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; visible: false; layer.enabled: true; layer.textureSize: Qt.size(160, 107) }
-        MultiEffect { anchors.fill: parent; source: bgSrc; blurEnabled: true; blur: 1.0; blurMax: 40; saturation: 0.15 }
-    }
+    CoverWash { anchors.fill: parent; source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; strength: 0.85 }
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.35) }
-            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.55) }
-            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.85) }
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.15) }
+            GradientStop { position: 0.6; color: Qt.rgba(0, 0, 0, 0.35) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.75) }
         }
     }
 
     // ---------------------------------------------------------------- top
     RoundBtn { x: 40; y: 40; size: 64; icon: "back"; iconSize: 24; onTapped: mp.back() }
-    Cap {
+    Cap { color: Qt.rgba(1, 1, 1, 0.6)
         x: 124; y: 63; width: 900
         text: music.exists ? (spotify ? (music.context ? "Playing from · " + music.context : "Spotify") : music.device) : "Nothing playing"
     }
@@ -105,8 +100,8 @@ Item {
         readonly property real f: sma.pressed ? dragF : (music.duration > 0 ? pos / music.duration : 0)
         Rectangle { y: 8; width: parent.width; height: sma.pressed ? 8 : 4; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.16); Behavior on height { NumberAnimation { duration: 120 } } }
         Rectangle { y: 8; width: parent.width * seek.f; height: sma.pressed ? 8 : 4; radius: height / 2; color: Theme.tx }
-        T { y: 24; text: Theme.mmss(sma.pressed ? seek.dragF * music.duration : seek.pos); font.pixelSize: 16; color: Theme.dim }
-        T { y: 24; anchors.right: parent.right; text: Theme.mmss(music.duration || 0); font.pixelSize: 16; color: Theme.dim }
+        T { y: 24; color: Qt.rgba(1, 1, 1, 0.55); text: Theme.mmss(sma.pressed ? seek.dragF * music.duration : seek.pos); font.pixelSize: 16; color: Theme.dim }
+        T { y: 24; anchors.right: parent.right; text: Theme.mmss(music.duration || 0); font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.55) }
         MouseArea {
             id: sma
             anchors.fill: parent; anchors.topMargin: -16; preventStealing: true
@@ -136,36 +131,51 @@ Item {
     // ---------------------------------------------------------------- right rail: volume + playlists
     Glass {
         x: 1132; y: 40; width: 196; height: 832
-        Cap { anchors.horizontalCenter: parent.horizontalCenter; y: 28; text: "Volume" }
+        // volume: one solid tile that fills from the bottom, like a control-centre slider
         Item {
             id: vol
-            anchors.horizontalCenter: parent.horizontalCenter; y: 68; width: 84; height: 440
-            enabled: mp.spotify && music.canVolume !== false
+            x: 22; y: 22; width: 152
+            height: (music.playlists || []).length > 0 ? 500 : 788
+            enabled: music.canVolume !== false
             opacity: enabled ? 1 : 0.35
             property int local: music.volume || 0
             readonly property int shown: vma.pressed ? local : (music.volume || 0)
-            Rectangle { anchors.fill: parent; radius: 42; color: Qt.rgba(1, 1, 1, 0.07) }
-            Rectangle {
-                anchors.bottom: parent.bottom; width: parent.width; radius: 42
-                height: Math.max(84, parent.height * vol.shown / 100)
-                color: Qt.rgba(0.96, 0.95, 0.94, 0.88)
-                Behavior on height { enabled: !vma.pressed; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            readonly property real fillH: height * shown / 100
+            Item {
+                id: volBody
+                anchors.fill: parent
+                layer.enabled: true
+                layer.effect: MultiEffect { maskEnabled: true; maskSource: volMask; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0 }
+                Rectangle { anchors.fill: parent; color: Qt.rgba(1, 1, 1, 0.08) }
+                Rectangle {
+                    anchors.bottom: parent.bottom; width: parent.width; height: vol.fillH
+                    color: Qt.rgba(0.96, 0.95, 0.94, 0.92)
+                    Behavior on height { enabled: !vma.pressed; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+                }
             }
-            T { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 26; text: vol.shown; color: "black"; font.pixelSize: 21; font.weight: Font.Medium }
+            Rectangle { id: volMask; anchors.fill: parent; radius: 36; visible: false; layer.enabled: true; layer.smooth: true }
+            T {
+                anchors.horizontalCenter: parent.horizontalCenter; y: 26
+                text: vol.shown; font.pixelSize: 26; font.weight: Font.Medium
+                color: vol.fillH > vol.height - 64 ? "black" : Theme.tx
+            }
+            Icon {
+                anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 28
+                name: "speaker"; size: 30; color: vol.fillH > 70 ? "black" : Theme.tx
+            }
             Timer { id: vThrottle; interval: 200; onTriggered: room.setVolume(vol.local) }
             MouseArea {
                 id: vma
-                anchors.fill: parent; anchors.margins: -12; preventStealing: true
-                function at(y) { return Math.max(0, Math.min(100, Math.round((1 - (y - 12) / vol.height) * 100))) }
+                anchors.fill: parent; preventStealing: true
+                function at(y) { return Math.max(0, Math.min(100, Math.round((1 - y / vol.height) * 100))) }
                 onPressed: (e) => vol.local = at(e.y)
                 onPositionChanged: (e) => { vol.local = at(e.y); if (!vThrottle.running) vThrottle.start() }
                 onReleased: { vThrottle.stop(); room.setVolume(vol.local) }
             }
         }
-        Cap { anchors.horizontalCenter: parent.horizontalCenter; y: 540; text: "Playlists"; visible: mp.spotify }
+        Cap { color: Qt.rgba(1, 1, 1, 0.6); anchors.horizontalCenter: parent.horizontalCenter; y: 552; text: "Playlists"; visible: (music.playlists || []).length > 0 }
         GridView {
-            x: 22; y: 574; width: 156; height: 236
-            visible: mp.spotify
+            x: 22; y: 586; width: 156; height: 236
             cellWidth: 78; cellHeight: 78
             clip: true
             boundsBehavior: Flickable.StopAtBounds

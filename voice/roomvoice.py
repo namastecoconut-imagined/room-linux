@@ -194,7 +194,7 @@ class Ears:
         self.clips = getattr(self, "clips", 0) + (1 if clipped > 0.01 else 0)
         self.chunks = getattr(self, "chunks", 0) + 1
         if self.chunks >= 25:                       # every 2 s
-            if self.clips >= 5 and not self.target_set:
+            if self.clips >= 5 and not self.target_set and self._input_volume() > 0.35:
                 subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", "0.1-"], timeout=3)
                 out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], capture_output=True, text=True, timeout=3).stdout.strip()
                 log(f"mic was clipping — input turned down ({out})")
@@ -206,6 +206,13 @@ class Ears:
         self.floor = min(rms, self.floor * 1.002 + 1e-6) if rms > 0 else self.floor     # background noise
         self.gain = g
         return (np.clip(x * g, -1, 1) * 32767).astype(np.int16)
+
+    def _input_volume(self) -> float:
+        try:
+            out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], capture_output=True, text=True, timeout=3).stdout
+            return float(out.split()[1])
+        except Exception:
+            return 0.0
 
     def feed(self, raw: np.ndarray):
         # time is counted in audio, not on the wall clock (the same either way live, and testable from a file)
@@ -243,8 +250,9 @@ class Ears:
         rms = float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768) ** 2)))
         self.max_vad = max(getattr(self, "max_vad", 0.0), vp)
         self.max_rms = max(getattr(self, "max_rms", 0.0), rms)
-        # speech: Silero says so, or it's clearly louder than the room's background
-        speech = vp > 0.35 or rms > max(0.02, self.floor * self.gain * 6)
+        # speech: Silero says so (or half-says so while it's clearly louder than the room) — loudness alone isn't
+        # enough, the Surface's mic is noisy
+        speech = vp > 0.35 or (vp > 0.12 and rms > max(0.02, self.floor * self.gain * 6))
         if speech:
             self.heard_speech = True
             self.quiet_since = 0.0
@@ -282,6 +290,10 @@ class Ears:
             text = (r.json().get("text") or "").strip()
             text = re.sub(r"\[.*?\]|\(.*?\)", "", text).strip()     # [BLANK_AUDIO], (music)…
             log(f"whisper ({time.time() - t0:.1f} s): {text!r}")
+            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            if len(lines) > 1 and all(l.lower() == lines[0].lower() for l in lines):
+                lines = lines[:1]
+            text = " ".join(lines)
         except Exception as e:
             emit(ev="error", msg="Speech recognition isn't running (whisper)")
             log("whisper:", e)

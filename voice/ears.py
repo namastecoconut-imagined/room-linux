@@ -25,10 +25,10 @@ import numpy as np
 RATE = 16000
 CHUNK = 1280                                 # 80 ms — what openWakeWord wants
 WAKE_RE = re.compile(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa)\b[\s,.!?]*", re.I)
-DANGLE = {"in", "on", "at", "to", "for", "of", "the", "a", "an", "and", "or", "but", "with", "from", "my", "is", "set",
+DANGLE = {"something", "me", "in", "on", "at", "to", "for", "of", "the", "a", "an", "and", "or", "but", "with", "from", "my", "is", "set",
           "play", "turn", "what's", "what", "how", "about", "by", "into", "some", "until", "till"}
-KEYTERMS = ["Alexa", "set a timer", "timer", "minutes", "lights", "bedroom", "living room", "cozy", "dim", "brightness",
-            "percent", "weather", "Spotify", "play", "pause"]
+KEYTERMS = ["Alexa", "set a timer", "timer", "minutes", "lights", "bedroom", "living room", "make it cozy", "cozy", "dim",
+            "brightness", "percent", "weather", "Spotify", "play", "pause", "chill"]
 
 
 def after_wake(text: str) -> str:
@@ -66,7 +66,7 @@ class Stream:
         from urllib.parse import urlencode
         p = [("model", cfg.get("deepgramModel", "nova-3")), ("language", cfg.get("language", "en-IN")),
              ("encoding", "linear16"), ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"),
-             ("endpointing", str(cfg.get("endpointMs", 500))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
+             ("endpointing", str(cfg.get("endpointMs", 800))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
         p += [("keyterm", w) for w in (KEYTERMS + list(words))[:50]]
         return cfg.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen") + "?" + urlencode(p)
 
@@ -234,6 +234,7 @@ class Ears:
         self.best = 0.0
         self.best_at = 0.0
         self.on_begin = None
+        self.last_text, self.text_at = "", 0.0
 
     # ---------------------------------------------------------------- the mic
     def run(self):
@@ -304,8 +305,11 @@ class Ears:
                 self.spoke_at = now
             said = s.text()
             quiet = now - self.spoke_at
-            if said and not s.closing and now - self.started > 1.0 and (
-                    (quiet > 0.8 and not unfinished(said)) or quiet > 2.5):
+            # finished: ~1.1 s without speech AND no new words for 0.8 s (a short pause — "set a timer… for five
+            # minutes", "play something… chill" — was ending requests early)
+            still = time.time() - self.text_at
+            if said and not s.closing and now - self.started > 1.0 and still > 0.8 and (
+                    (quiet > float(self.cfg.get("endQuiet", 1.1)) and not unfinished(said)) or quiet > 2.5):
                 s.finish()
             if not s.closing and ((not said and now - self.started > self.wait) or now - self.started > 12):
                 s.finish()
@@ -341,6 +345,8 @@ class Ears:
         if s is not self.stream:
             return
         t = after_wake(text)
+        if text != self.last_text:
+            self.last_text, self.text_at = text, time.time()
         if self.mine_first and not WAKE_RE.search(text):
             return                          # still only Room's own voice before "Alexa"
         if t:

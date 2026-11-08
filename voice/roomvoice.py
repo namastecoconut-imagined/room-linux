@@ -653,11 +653,12 @@ class Ears:
         # the mic can sit far off zero (a DC offset) — take it out so loudness means sound
         self.dc = getattr(self, "dc", float(np.mean(x))) * 0.95 + float(np.mean(x)) * 0.05
         x = x - self.dc
-        # cut the rumble under ~110 Hz: on the Surface it's the loudest thing the mics pick up (more than a voice from
-        # across the room), and the level evening-out was turning the voice down to keep the rumble in check
+        # cut the hum under ~200 Hz: the Surface's mics pick up a strong 100–220 Hz hum (mains, through the charger or
+        # the room) — louder than a voice from across the room, so the level evening-out held the voice down for it,
+        # and the wake word and recognition heard it under every word. Speech is understood from 300 Hz up.
         if not hasattr(self, "hp"):
             from scipy.signal import butter, sosfilt, sosfilt_zi
-            self.hp = butter(2, float(CFG.get("highPassHz", 110)), "highpass", fs=RATE, output="sos")
+            self.hp = butter(4, float(CFG.get("highPassHz", 200)), "highpass", fs=RATE, output="sos")
             self.hp_z = sosfilt_zi(self.hp) * 0.0
             self._sosfilt = sosfilt
         x, self.hp_z = self._sosfilt(self.hp, x, zi=self.hp_z)

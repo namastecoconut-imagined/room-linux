@@ -24,11 +24,12 @@ Item {
     readonly property color soft: Qt.rgba(0.96, 0.95, 0.94, 0.55)
     readonly property var next: music.nextUp && music.nextUp.length ? music.nextUp[0] : null
 
-    // ---------------------------------------------------------------- the wash, darker towards the edges
+    // ---------------------------------------------------------------- near-black, with only a hint of the cover's wash
     Image {
         anchors.fill: parent
         source: music.wash || ""
         smooth: true; fillMode: Image.Stretch
+        opacity: ms.night ? 0.22 : 0.32
         visible: status === Image.Ready
     }
     Shape {
@@ -39,46 +40,46 @@ Item {
             fillGradient: RadialGradient {
                 centerX: ms.cx; centerY: 400; centerRadius: 900
                 focalX: centerX; focalY: centerY
-                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, ms.night ? 0.62 : 0.5) }
-                GradientStop { position: 0.75; color: Qt.rgba(0, 0, 0, ms.night ? 0.92 : 0.86) }
-                GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.94) }
+                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.3) }
+                GradientStop { position: 0.7; color: Qt.rgba(0, 0, 0, 0.85) }
+                GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.96) }
             }
             PathRectangle { x: 0; y: 0; width: ms.width; height: ms.height }
         }
     }
 
-    // ---------------------------------------------------------------- two glows in the cover's colours, behind it
-    readonly property var base: Theme.lit(music.rgb || [255, 140, 110])
-    readonly property var alt: {   // the cover's colour turned a little round the colour wheel
-        var c = Qt.rgba(base[0] / 255, base[1] / 255, base[2] / 255, 1)
-        var h = (c.hsvHue + 0.08) % 1
-        var s = Qt.hsva(h < 0 ? 0 : h, c.hsvSaturation, c.hsvValue, 1)
-        return [s.r * 255, s.g * 255, s.b * 255]
-    }
+    // ---------------------------------------------------------------- the glow: the cover itself, blurred into light
+    // behind it, breathing very slowly — the art lights the room in its own colours
     property real gt: 0
-    readonly property real period: 200 * (night ? 2.5 : 1.5)
     Timer {
-        interval: night ? 125 : 100; repeat: true; running: ms.visible
+        interval: ms.night ? 125 : 100; repeat: true; running: ms.visible
         onTriggered: ms.gt += interval / 1000
     }
-    Repeater {
-        model: [[2, 3, 1], [3, 2, 4]]
-        Glow {
-            readonly property real a: 2 * Math.PI * (ms.gt % ms.period) / ms.period
-            width: 980; height: width
-            x: ms.cx + 120 * Math.sin(modelData[0] * a + modelData[2]) - width / 2
-            y: ms.ctop + ms.cs / 2 + 70 * Math.cos(modelData[1] * a + modelData[2]) - height / 2
-            color: Theme.rgb(index === 0 ? ms.base : ms.alt)
-            strength: ms.night ? 0.2 : 0.27
-        }
+    readonly property real breath: 0.5 - 0.5 * Math.cos(2 * Math.PI * (gt % 14) / 14)       // 0…1 every 14 s
+    Image {
+        id: haloSrc
+        source: music.art || ""
+        sourceSize: Qt.size(16, 16)
+        width: 16; height: 16
+        smooth: true; visible: false
+    }
+    ShaderEffect {
+        readonly property real sz: ms.cs * (2.1 + 0.08 * ms.breath)
+        x: ms.cx - sz / 2; y: ms.ctop + ms.cs / 2 - sz / 2
+        width: sz; height: sz
+        visible: haloSrc.status === Image.Ready
+        property var source: haloSrc
+        property real sat: 1.5
+        fragmentShader: shaderDir + "halo.frag.qsb"
+        opacity: (ms.night ? 0.55 : 0.85) * (0.9 + 0.1 * ms.breath)
     }
 
-    // ---------------------------------------------------------------- the reflection: the cover mirrored, fading out
+    // ---------------------------------------------------------------- the reflection: faint, fading fast
     Item {
-        x: ms.cx - ms.cs / 2; y: ms.ctop + ms.cs + 6
-        width: ms.cs; height: ms.cs * 0.42
+        x: ms.cx - ms.cs / 2; y: ms.ctop + ms.cs + 8
+        width: ms.cs; height: ms.cs * 0.3
         clip: true
-        opacity: ms.night ? 0.22 : 0.32
+        opacity: ms.night ? 0.06 : 0.1
         layer.enabled: true
         layer.effect: ShaderEffect {
             property real reach: 1.0

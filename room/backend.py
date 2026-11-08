@@ -66,7 +66,9 @@ class Room(QObject):
     # ---------------------------------------------------------------- what the screens read
     @Property("QVariantMap", notify=weatherChanged)
     def weather(self):
-        return demo.WEATHER if self.demo else self.wx.snapshot()
+        if self.demo:
+            return {"ok": False} if os.environ.get("ROOM_DEMO_EMPTY") == "1" else demo.WEATHER
+        return self.wx.snapshot()
 
     @Property("QVariantList", notify=eventsChanged)
     def events(self):
@@ -81,6 +83,16 @@ class Room(QObject):
         if self.demo:
             m = dict(demo.MUSIC); m["at"] = time.time() - 4
             m["playing"] = os.environ.get("ROOM_SCREEN") != "standby"; m["exists"] = m["playing"]
+            if os.environ.get("ROOM_DEMO_ART"):          # a cover to check layouts with
+                if not getattr(self, "_demo_art", None):
+                    from PySide6.QtGui import QImage
+                    from . import art
+                    img = QImage(os.environ["ROOM_DEMO_ART"])
+                    w, rgb = art.wash(img)
+                    self._demo_art = ("file://" + os.path.abspath(os.environ["ROOM_DEMO_ART"]), w, rgb)
+                m["art"], m["wash"], m["rgb"] = self._demo_art
+            if os.environ.get("ROOM_DEMO_EMPTY") == "1":
+                m["nextUp"] = []
             return m
         # whatever's actually playing: AirPlay while a phone or Mac is sending to Room, otherwise Spotify
         m = self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()

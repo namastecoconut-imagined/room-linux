@@ -1,9 +1,12 @@
 import QtQuick
+import QtQuick.Shapes
 
-// Music standby — the iPhone panel's music face of StandbyView. Still a standby: near-black, the cover's colours only
-// a hint behind (the 6 × 4 wash under an 80% shade, and two soft glows in the cover's colour drifting very slowly).
-// The artist's name in huge, faint Inter Tight slides left forever across the middle. Left: the dot clock, the
-// weather, the song, its progress, ⚡ status. Right: the cover, a touch dimmed. Tap the cover for the player.
+// Music standby — "Ambient · reflection" (M4c). The cover sits in the middle of the screen, lit by its own colours,
+// standing on a dark floor with a faint mirror image under it. Round it, in the corners:
+//   top left: the dot clock (rearranges each minute, as on the phone) · top right: ⚡ and how warm it is
+//   bottom left: the song, artist · what's next, and its progress · bottom right: the weather
+// Behind: the cover's 6 × 4 wash, darkened towards the edges, and two soft glows in its colours drifting very slowly.
+// Anything that isn't there (no next track, no weather) simply leaves its corner empty. Tap the cover for the player.
 Item {
     id: ms
     width: Theme.stageW; height: Theme.stageH
@@ -12,21 +15,39 @@ Item {
     property bool dayTime: true
     property var music: room.music
     property var wx: room.weather
-    readonly property real k: 1368 / 568
-    readonly property real dy: ((912 / k) - 320) / 2         // the extra height, split above and below
-    function px(pt) { return pt * k }
-    readonly property rect coverRect: Qt.rect(cover.x, cover.y, cover.width, cover.height)
 
-    // ---------------------------------------------------------------- the wash, pulled almost to black
+    readonly property real cs: 470                         // the cover
+    readonly property real cx: 684
+    readonly property real ctop: 196
+    readonly property rect coverRect: Qt.rect(cover.x, cover.y, cover.width, cover.height)
+    readonly property color ink: Qt.rgba(0.96, 0.95, 0.94, 1)
+    readonly property color soft: Qt.rgba(0.96, 0.95, 0.94, 0.55)
+    readonly property var next: music.nextUp && music.nextUp.length ? music.nextUp[0] : null
+
+    // ---------------------------------------------------------------- the wash, darker towards the edges
     Image {
         anchors.fill: parent
         source: music.wash || ""
         smooth: true; fillMode: Image.Stretch
         visible: status === Image.Ready
     }
-    Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.8) }
+    Shape {
+        anchors.fill: parent
+        preferredRendererType: Shape.CurveRenderer
+        ShapePath {
+            strokeColor: "transparent"
+            fillGradient: RadialGradient {
+                centerX: ms.cx; centerY: 400; centerRadius: 900
+                focalX: centerX; focalY: centerY
+                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, ms.night ? 0.62 : 0.5) }
+                GradientStop { position: 0.75; color: Qt.rgba(0, 0, 0, ms.night ? 0.92 : 0.86) }
+                GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.94) }
+            }
+            PathRectangle { x: 0; y: 0; width: ms.width; height: ms.height }
+        }
+    }
 
-    // ---------------------------------------------------------------- two glows in the cover's colours
+    // ---------------------------------------------------------------- two glows in the cover's colours, behind it
     readonly property var base: Theme.lit(music.rgb || [255, 140, 110])
     readonly property var alt: {   // the cover's colour turned a little round the colour wheel
         var c = Qt.rgba(base[0] / 255, base[1] / 255, base[2] / 255, 1)
@@ -44,85 +65,84 @@ Item {
         model: [[2, 3, 1], [3, 2, 4]]
         Glow {
             readonly property real a: 2 * Math.PI * (ms.gt % ms.period) / ms.period
-            width: px(640); height: width
-            x: px(230 + 170 * Math.sin(modelData[0] * a + modelData[2])) - width / 2
-            y: px(160 + ms.dy + 100 * Math.cos(modelData[1] * a + modelData[2])) - height / 2
+            width: 980; height: width
+            x: ms.cx + 120 * Math.sin(modelData[0] * a + modelData[2]) - width / 2
+            y: ms.ctop + ms.cs / 2 + 70 * Math.cos(modelData[1] * a + modelData[2]) - height / 2
             color: Theme.rgb(index === 0 ? ms.base : ms.alt)
-            strength: 0.3 * 0.9
+            strength: ms.night ? 0.2 : 0.27
         }
     }
 
-    // ---------------------------------------------------------------- the artist's name, sliding left forever
+    // ---------------------------------------------------------------- the reflection: the cover mirrored, fading out
     Item {
-        id: marquee
-        anchors.left: parent.left; anchors.right: parent.right
-        y: px(200 + ms.dy) - name.font.pixelSize * 0.97
-        height: name.implicitHeight
-        clip: false
-        readonly property string label: (music.artist || music.title || "") + "     "
-        property real off: 0
-        Timer {
-            interval: 33; repeat: true; running: ms.visible && name.implicitWidth > 0
-            onTriggered: marquee.off = (marquee.off + ms.px(26) * 0.033) % Math.max(1, name.implicitWidth)
+        x: ms.cx - ms.cs / 2; y: ms.ctop + ms.cs + 6
+        width: ms.cs; height: ms.cs * 0.42
+        clip: true
+        opacity: ms.night ? 0.22 : 0.32
+        layer.enabled: true
+        layer.effect: ShaderEffect {
+            property real reach: 1.0
+            fragmentShader: shaderDir + "fade.frag.qsb"
         }
-        Row {
-            x: -marquee.off
-            Repeater {
-                model: Math.ceil(1368 / Math.max(1, name.implicitWidth)) + 1
-                T {
-                    text: marquee.label
-                    font.family: "Inter Tight"; font.pixelSize: ms.px(170); elide: Text.ElideNone
-                    color: Qt.rgba(1, 1, 1, ms.dayTime ? 0.065 : 0.05)
-                }
-            }
+        Cover {
+            width: ms.cs; height: ms.cs; radius: 12
+            source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34]
+            transform: Scale { origin.y: ms.cs / 2; yScale: -1 }
         }
-        T { id: name; visible: false; text: marquee.label; font.family: "Inter Tight"; font.pixelSize: ms.px(170); elide: Text.ElideNone }
     }
 
-    // ---------------------------------------------------------------- left column
-    DotText {
-        id: mClock
-        x: px(29); y: px(36 + ms.dy)
-        pitch: px(8.5); glide: 0
-        color: Qt.rgba(0.96, 0.95, 0.94, 0.88)
-        text: Theme.clock(new Date(ms.now * 1000), room.clock24)
-    }
-    Item {
-        x: px(31); y: mClock.y + mClock.height + px(26)
-        visible: wx.ok === true
-        width: px(250); height: wd.height
-        DotText { id: wd; pitch: px(2.6); glide: 0; text: "" + (wx.t || 0); color: Qt.rgba(0.96, 0.95, 0.94, 0.8) }
-        Rectangle {
-            id: wdeg
-            x: wd.width + px(2); width: px(4); height: px(4); radius: width / 2
-            color: "transparent"; border.color: Qt.rgba(0.96, 0.95, 0.94, 0.7); border.width: px(1)
-        }
-        T {
-            x: wdeg.x + wdeg.width + px(8); y: (wd.height - height) / 2
-            text: Theme.cap(wx.d || "") + (wx.hi !== null && wx.hi !== undefined ? "  ·  " + wx.hi + "° / " + wx.lo + "°" : "")
-            font.pixelSize: px(12); color: Qt.rgba(0.96, 0.95, 0.94, 0.55)
-        }
-    }
-    T {
-        x: px(31); y: px(198 + ms.dy); width: px(228)
-        text: music.title || ""
-        font.pixelSize: px(24); font.weight: Font.Light; fontSizeMode: Text.HorizontalFit; minimumPixelSize: px(18)
-    }
-    T { x: px(31); y: px(230 + ms.dy); width: px(228); text: music.artist || ""; font.pixelSize: px(13); color: Qt.rgba(0.96, 0.95, 0.94, 0.55) }
-    Item {
-        x: px(31); y: px(262 + ms.dy); width: px(213); height: px(2)
-        readonly property real pos: Math.min(music.duration || 0, (music.position || 0) + (music.playing ? ms.now - music.at : 0))
-        Rectangle { anchors.fill: parent; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.16) }
-        Rectangle { height: parent.height; radius: height / 2; width: parent.width * (music.duration > 0 ? parent.pos / music.duration : 0); color: Qt.rgba(1, 1, 1, 0.85) }
-    }
-    T { x: px(31); y: px(276 + ms.dy); text: room.status; font.pixelSize: px(12); color: Qt.rgba(0.96, 0.95, 0.94, 0.5) }
-
-    // ---------------------------------------------------------------- right half: the cover, a touch dimmed
+    // ---------------------------------------------------------------- the cover
     Item {
         id: cover
-        width: px(268); height: width
-        x: 1368 - px(26) - width; y: (912 - height) / 2
-        Cover { anchors.fill: parent; radius: px(14); source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34] }
-        Rectangle { anchors.fill: parent; radius: px(14); color: Qt.rgba(0, 0, 0, 0.18) }
+        x: ms.cx - ms.cs / 2; y: ms.ctop
+        width: ms.cs; height: ms.cs
+        Cover { anchors.fill: parent; radius: 12; source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34] }
+        Rectangle { anchors.fill: parent; radius: 12; color: "transparent"; border.color: Qt.rgba(1, 1, 1, 0.08); border.width: 1 }
+        Rectangle { anchors.fill: parent; radius: 12; color: Qt.rgba(0, 0, 0, ms.night ? 0.3 : 0.08) }
+    }
+
+    // ---------------------------------------------------------------- top
+    ClockDots {
+        x: 64; y: 64
+        pitch: 14
+        ink: Qt.rgba(0.96, 0.95, 0.94, 0.88)
+        text: Theme.clock(new Date(ms.now * 1000), room.clock24)
+    }
+    T {
+        anchors.right: parent.right; anchors.rightMargin: 64; y: 70
+        visible: text !== ""
+        text: room.status
+        font.pixelSize: 24; color: ms.soft
+    }
+
+    // ---------------------------------------------------------------- bottom left: the song
+    T {
+        x: 64; y: 742; width: 620
+        text: music.title || ""
+        font.pixelSize: 50; font.weight: Font.Light; color: ms.ink
+    }
+    T {
+        x: 64; y: 806; width: 620
+        text: (music.artist || "") + (ms.next ? "   ·   next: " + ms.next.title : "")
+        font.pixelSize: 26; color: ms.soft
+    }
+    Item {
+        x: 64; y: 854; width: 300; height: 3
+        readonly property real pos: Math.min(music.duration || 0, (music.position || 0) + (music.playing ? ms.now - music.at : 0))
+        visible: (music.duration || 0) > 0
+        Rectangle { anchors.fill: parent; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.14) }
+        Rectangle { height: parent.height; radius: height / 2; width: parent.width * (music.duration > 0 ? parent.pos / music.duration : 0); color: Qt.rgba(1, 1, 1, 0.8) }
+    }
+
+    // ---------------------------------------------------------------- bottom right: the weather
+    Column {
+        anchors.right: parent.right; anchors.rightMargin: 64; y: 752
+        visible: wx.ok === true
+        T { anchors.right: parent.right; text: (wx.t || 0) + "°"; font.pixelSize: 44; font.weight: Font.Light; color: ms.ink }
+        T {
+            anchors.right: parent.right
+            text: Theme.cap(wx.d || "") + (wx.hi !== null && wx.hi !== undefined ? "  ·  " + wx.hi + "° / " + wx.lo + "°" : "")
+            font.pixelSize: 24; color: ms.soft
+        }
     }
 }

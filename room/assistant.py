@@ -223,33 +223,49 @@ class Assistant(QObject):
 
     def _duck(self, on: bool):
         """Music down to 30 % while you talk to Room — just the music streams, never the speaker as a whole (turning
-        the whole speaker down also made Room's own answer quiet)."""
-        try:
-            if on and self._ducked is None:
-                saved = {}
-                for sid in self._music_streams():
-                    out = subprocess.run(["wpctl", "get-volume", str(sid)], capture_output=True, text=True, timeout=2).stdout
-                    try:
-                        v = float(out.split()[1])
-                    except Exception:
-                        continue
-                    saved[sid] = v
-                    subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.3:.2f}"], timeout=2)
-                sp = self.room.spotify.snapshot()
-                spv = sp.get("volume") if sp.get("playing") and sp.get("canVolume") and not self.room.airplay.showing else None
-                if spv:
-                    self.room.spotify.set_volume(max(5, int(spv * 0.3)))
-                self._ducked = (saved, spv)
-            elif not on and self._ducked is not None:
-                saved, spv = self._ducked
-                self._ducked = None
-                for sid, v in saved.items():
-                    subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.2f}"], timeout=2)
-                if spv:
-                    self.room.spotify.set_volume(int(spv))
-        except Exception as e:
-            print(f"[room] duck: {e!r}")
-            self._ducked = None
+        the whole speaker down also made Room's own answer quiet). The PipeWire calls run on a worker thread, in
+        order: done on the main thread they held up the screen and the words by about a second after "Alexa"."""
+        if on == getattr(self, "_duck_want", False):
+            return
+        self._duck_want = on
+        if not hasattr(self, "_duckq"):
+            import queue, threading
+            self._duckq = queue.Queue()
+            threading.Thread(target=self._duck_worker, daemon=True).start()
+        sp = self.room.spotify.snapshot()
+        if on:
+            spv = sp.get("volume") if sp.get("playing") and sp.get("canVolume") and not self.room.airplay.showing else None
+            self._spv = spv
+            if spv:
+                self.room.spotify.set_volume(max(5, int(spv * 0.3)))
+        else:
+            spv, self._spv = getattr(self, "_spv", None), None
+            if spv:
+                self.room.spotify.set_volume(int(spv))
+        self._duckq.put(on)
+
+    def _duck_worker(self):
+        saved = None
+        while True:
+            on = self._duckq.get()
+            try:
+                if on and saved is None:
+                    saved = {}
+                    for sid in self._music_streams():
+                        out = subprocess.run(["wpctl", "get-volume", str(sid)], capture_output=True, text=True, timeout=2).stdout
+                        try:
+                            v = float(out.split()[1])
+                        except Exception:
+                            continue
+                        saved[sid] = v
+                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.3:.2f}"], timeout=2)
+                elif not on and saved is not None:
+                    for sid, v in saved.items():
+                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.2f}"], timeout=2)
+                    saved = None
+            except Exception as e:
+                print(f"[room] duck: {e!r}")
+                saved = None
 
     # ---------------------------------------------------------------- doing it
     def say(self, text: str, listen=False):

@@ -76,18 +76,18 @@ Item {
     Image {
         id: haloSrc
         source: music.art || ""
-        sourceSize: Qt.size(8, 8)
-        width: 8; height: 8
+        sourceSize: Qt.size(4, 4)
+        width: 4; height: 4
         smooth: true; visible: false
     }
     ShaderEffect {
-        readonly property real sz: 760 * (1 + 0.05 * ms.breath + 0.08 * ms.beatNow)
+        readonly property real sz: 1000 * (1 + 0.04 * ms.breath + 0.05 * ms.beatNow)
         x: ms.width / 2 - sz / 2; y: 360 - sz * 0.36
         width: sz; height: sz * 0.72
         visible: haloSrc.status === Image.Ready
         property var source: haloSrc
         property real sat: 1.4
-        property real spread: 0.11                  // only the cover's colours, none of its shapes
+        property real spread: 0.22                  // only the cover's colours, none of its shapes
         fragmentShader: shaderDir + "halo.frag.qsb"
         opacity: (ms.night ? 0.3 : 0.5) * (0.9 + 0.1 * ms.breath + 0.12 * ms.beatNow)
     }

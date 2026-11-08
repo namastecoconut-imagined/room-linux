@@ -25,6 +25,6 @@ void main() {
     c *= min(4.0, 0.72 / max(m, 0.01));
     // round falloff: full at the middle, gone at the edge
     float d = length(uv - 0.5) * 2.0;
-    float a = d < 1.0 ? pow(1.0 - d, 1.25) : 0.0;
+    float a = pow(1.0 - smoothstep(0.0, 1.0, d), 1.6);          // no edge anywhere: it just fades
     fragColor = vec4(c * a, a) * qt_Opacity;
 }

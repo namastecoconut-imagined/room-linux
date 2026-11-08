@@ -284,7 +284,8 @@ def dg_url(words):
     params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", CFG.get("language", "en-IN")), ("encoding", "linear16"),
               ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"),
               ("endpointing", str(CFG.get("endpointMs", 500))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
-    params += [("keyterm", w) for w in (["Alexa", "set a timer", "timer", "minutes", "lights", "living room"] + list(words))[:50]]
+    params += [("keyterm", w) for w in (["Alexa", "set a timer", "timer", "minutes", "lights", "living room", "bedroom", "cozy", "make it cozy",
+                                         "dim", "brightness", "percent", "weather", "Spotify", "play", "pause"] + list(words))[:50]]
     from urllib.parse import urlencode
     return DG_LISTEN + "?" + urlencode(params)
 
@@ -747,9 +748,12 @@ class Ears:
             log(f"wake: near miss {score:.2f}")
         if DG_KEY and not self.wake.pv:
             # lenient local trigger → Deepgram decides
-            if score >= CONFIDENT and self.state == "idle" and not self.speaker.busy and now - self.last_wake > 1.5:
+            # while Room talks, its own voice scores up to ~0.3 — so only a clear "Alexa" (0.6+) wakes it at once then
+            if (score >= (0.6 if self.speaker.busy else CONFIDENT) and self.state == "idle"
+                    and not (self.speaker.busy and CFG.get("bargeIn") is False) and now - self.last_wake > 1.5):
                 # clearly "Alexa" — wake at once (and if a check was under way, it becomes the command stream)
                 self.last_wake = now
+                talking = self.speaker.busy
                 self.wake.reset()
                 emit(ev="wake")
                 # under 0.5 it's very likely, not certain: if nothing at all is said, close without a sound
@@ -760,6 +764,7 @@ class Ears:
                     self.begin_listening(keep=True)
                 else:
                     self.begin_listening(preroll=True)
+                    self.need_wake_word = talking        # its own voice is in the pre-roll: only what follows "Alexa"
                 self.provisional = provisional
                 log(f"wake: {score:.2f}{' (provisional)' if provisional else ''}{behind()}")
                 return

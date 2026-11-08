@@ -8,9 +8,14 @@
     it, so a quick "Alexa, lights off" isn't clipped). One stream per request: a pause after "Alexa" or mid-sentence
     ("…tomorrow in") doesn't end it.
   • You've finished when Deepgram says so, or after ~0.8 s without speech (Silero VAD, on the Surface) — whichever
-    is first. Nothing said for 5 s (8 s after a question): it closes.
+    is first. When Room says what you've said so far is already a whole command ("quick"), 0.45 s is enough — and
+    Room doesn't wait more than half a second for Deepgram's last word on it. Nothing said for 6 s: it closes.
+  • Room's own voice and chimes are taken out of the mic (PipeWire's echo canceller, run by Room on top of the
+    default mic — the system's mics are left as they are) when that's on; otherwise the plain default mic.
+  • With ~/room-heard/on present, the last 10 requests are kept there as audio, next to what came back.
 
-Events out: level · wake · listening · partial · heard · error. Commands in: listen (tap, or follow-up) · cancel · words.
+Events out: level · wake · listening · partial · heard · error.
+Commands in: listen (tap, or follow-up) · cancel · words · quick.
 """
 import functools
 import json
@@ -50,6 +55,42 @@ def unfinished(text: str) -> bool:
     return bool(w) and w[-1] in DANGLE and not (text or "").rstrip().endswith((".", "?", "!"))
 
 
+AEC_SOURCE = "room_aec_source"
+HEARD = os.path.expanduser("~/room-heard")
+
+
+def node_exists(name):
+    try:
+        out = subprocess.run(["pw-cli", "ls", "Node"], capture_output=True, text=True, timeout=2).stdout
+        return f'node.name = "{name}"' in out
+    except Exception:
+        return False
+
+
+def keep_heard(s, said, alt):
+    """~/room-heard: NN.wav (exactly what Deepgram got) + NN.txt (what came back) — the last 10."""
+    try:
+        import wave
+        os.makedirs(HEARD, exist_ok=True)
+        old = sorted(f for f in os.listdir(HEARD) if f.endswith(".wav"))
+        n = int(old[-1][:-4]) + 1 if old else 1
+        name = os.path.join(HEARD, f"{n:04d}")
+        with wave.open(name + ".wav", "wb") as w:
+            w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
+            w.writeframes(b"".join(s.audio))
+        with open(name + ".txt", "w") as f:
+            f.write(json.dumps({"heard": said, "full": s.text(), "earlier_guess": alt, "guesses": s.guesses[-6:],
+                                "at": time.strftime("%H:%M:%S")}, indent=1))
+        for f in old[:-9]:
+            for ext in (".wav", ".txt"):
+                try:
+                    os.remove(os.path.join(HEARD, f[:-4] + ext))
+                except OSError:
+                    pass
+    except Exception as e:
+        print("[voice] keeping what was heard:", repr(e))
+
+
 class Stream:
     """One request, live to Deepgram. on_text(text, self) while talking; on_end(text, self) once."""
 
@@ -67,6 +108,9 @@ class Stream:
         self.t0 = time.time()
         self.first_at = 0.0                 # Deepgram's first words back
         self.guesses: list[str] = []        # what it thought along the way (the final can be worse: "please drink chill")
+        self.audio: list[bytes] = []        # what was sent (kept only when ~/room-heard/on is there)
+        self.keep = False
+        self.lock = threading.Lock()
         threading.Thread(target=self._run, daemon=True).start()
 
     @staticmethod
@@ -80,7 +124,10 @@ class Stream:
 
     def push(self, pcm):
         if not self.ended:
-            self.q.put(pcm.tobytes())
+            b = pcm.tobytes()
+            self.q.put(b)
+            if self.keep and len(self.audio) < 250:      # ~20 s
+                self.audio.append(b)
 
     def finish(self):
         """Ask Deepgram for its final words now."""
@@ -92,9 +139,18 @@ class Stream:
         return " ".join([*self.finals, self.interim]).strip()
 
     def _end(self):
-        if not self.ended:
+        with self.lock:
+            if self.ended:
+                return
             self.ended = True
-            self.on_end(self.text() or self.last_guess, self)
+        self.on_end(self.text() or self.last_guess, self)
+
+    def end_soon(self, wait):
+        """Finalize, but don't wait for Deepgram's last word longer than `wait` — go with what's there."""
+        self.finish()
+        t = threading.Timer(wait, self._end)
+        t.daemon = True
+        t.start()
 
     def _run(self):
         from websockets.sync.client import connect
@@ -250,13 +306,24 @@ class Ears:
         self.on_begin = None
         self.last_text, self.text_at = "", 0.0
         self.voice_at = self.closed_at = 0.0
+        self.quick = False
+        self.mic_name = ""
 
     # ---------------------------------------------------------------- the mic
+    def mic(self):
+        """The echo-cancelled mic when Room's canceller is running, else what config.json names, else the default."""
+        if self.cfg.get("echoCancel", True) is not False:
+            for _ in range(20):
+                if node_exists(AEC_SOURCE):
+                    return AEC_SOURCE
+                time.sleep(0.3)
+        return self.cfg.get("mic") or ""
     def run(self):
-        cmd = ["pw-record", "--raw", "--rate", str(RATE), "--channels", "1", "--format", "s16", "--latency", "40ms", "-"]
-        if self.cfg.get("mic"):
-            cmd[1:1] = ["--target", self.cfg["mic"]]
         while True:
+            cmd = ["pw-record", "--raw", "--rate", str(RATE), "--channels", "1", "--format", "s16", "--latency", "40ms", "-"]
+            self.mic_name = self.mic()
+            if self.mic_name:
+                cmd[1:1] = ["--target", self.mic_name]
             rec = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
             q: queue.Queue = queue.Queue()
 
@@ -268,7 +335,8 @@ class Ears:
                         q.put(None); return
                     q.put(np.frombuffer(b, "<i2").copy())
             threading.Thread(target=reader, daemon=True).start()
-            print("[voice] listening to", self.cfg.get("mic") or "the default mic", flush=True)
+            print("[voice] listening to", "the default mic, with Room's own sound taken out" if self.mic_name == AEC_SOURCE
+                  else self.mic_name or "the default mic")
             while True:
                 pcm = q.get()
                 if pcm is None:
@@ -325,7 +393,10 @@ class Ears:
             # finished: ~1.1 s without speech AND no new words for 0.8 s (a short pause — "set a timer… for five
             # minutes", "play something… chill" — was ending requests early)
             still = time.time() - self.text_at
-            if said and not s.closing and now - self.started > 1.0 and still > 0.8 and (
+            if self.quick and said and not s.closing and quiet > float(self.cfg.get("quickQuiet", 0.45)) \
+                    and not unfinished(said):
+                s.end_soon(0.5)             # a whole command: act now (Alexa doesn't wait for a second of silence)
+            elif said and not s.closing and now - self.started > 1.0 and still > 0.8 and (
                     (quiet > float(self.cfg.get("endQuiet", 0.8)) and not unfinished(said)) or quiet > 2.5):
                 s.finish()
             # nothing said: close after `wait` — but not while someone is talking and the words just haven't come
@@ -335,7 +406,7 @@ class Ears:
                 s.finish()
             if s.closing and not self.closed_at:
                 self.closed_at = now
-                print(f"[voice] request: speech from {self.voice_at - self.started if self.voice_at else -1:.1f} s, "
+                print(f"[voice] request{' (whole command)' if self.quick else ''}: speech from {self.voice_at - self.started if self.voice_at else -1:.1f} s, "
                       f"last speech {self.spoke_at - self.started:.1f} s, closed {now - self.started:.1f} s "
                       f"(quiet {quiet:.1f} s)")
 
@@ -351,6 +422,7 @@ class Ears:
         self.state = "listening"
         self.started = self.spoke_at = self.clock
         self.voice_at = self.closed_at = 0.0
+        self.quick = False
         self.wait = 8.0 if follow else 6.0
         self.mine_first = mine_first
         self.vad.reset_states()
@@ -361,6 +433,7 @@ class Ears:
         if self.spare:
             self.spare.words = self.words
         s = Stream(self.cfg, self.words, self._text, self._end, self.spare.take() if self.spare else None)
+        s.keep = os.path.exists(os.path.join(HEARD, "on"))
         self.stream = s
         if preroll:
             for c in self.ring:
@@ -399,6 +472,12 @@ class Ears:
                     and not said.lower().startswith(g.lower().rstrip(".?!")):     # just the start of the same thing
                 alt = g; break
         self.emit(ev="heard", text=said, alt=alt)
+        if s.keep:
+            threading.Thread(target=keep_heard, args=(s, said, alt), daemon=True).start()
+
+    def set_quick(self, on=True):
+        if self.state == "listening":
+            self.quick = bool(on)
 
     def cancel(self):
         if self.stream:

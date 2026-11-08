@@ -18,5 +18,8 @@ if [ -f ~/.config/systemd/user/room-airplay.service ] && [ ! -f "$D/buffers.conf
   systemctl --user daemon-reload
   systemctl --user restart room-airplay.service
 fi
+# the helper commands
+mkdir -p ~/.local/bin
+for c in heard mic-compare stt-bench; do ln -sf "$HERE/scripts/$c.sh" ~/.local/bin/room-$c; done
 systemctl --user restart room.service
 echo "Room updated to $(git log -1 --format='%h · %s')"

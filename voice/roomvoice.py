@@ -43,15 +43,15 @@ def log(*a):
 
 class Voicer:
     """Room's voice, shaped for the Surface's small speakers, which can't play bass and are quiet on Linux:
-      1. the lows (under ~250 Hz) taken out — they only use up the speakers' headroom without being heard,
-      2. presence lifted (+6 dB around 2.8 kHz) — where speech is understood, and where small speakers sound loudest,
+      1. the deep lows (under ~120 Hz) taken out — the speakers can't play them, they only use up headroom,
+      2. presence lifted (+4 dB around 2.8 kHz) — where speech is understood, and where small speakers sound loudest,
       3. an even level (every sentence as loud as the last), then a soft limiter (peaks round off, never crackle).
     Streaming, so it works on Aura's chunks as they arrive. 'loudness' in voiceSettings scales the drive."""
 
     def __init__(self, rate):
         from scipy.signal import butter
-        self.hp = butter(2, 250, "highpass", fs=rate, output="sos")
-        f0, gain_db, q = 2800.0, 6.0, 0.9                 # RBJ peaking EQ
+        self.hp = butter(2, 120, "highpass", fs=rate, output="sos")
+        f0, gain_db, q = 2800.0, 4.0, 0.9                 # RBJ peaking EQ
         A, w0 = 10 ** (gain_db / 40), 2 * np.pi * f0 / rate
         al = np.sin(w0) / (2 * q)
         bb = np.array([1 + al * A, -2 * np.cos(w0), 1 - al * A])
@@ -97,27 +97,20 @@ def _sinks():
 
 
 def voice_out():
-    """Where Room's voice plays, and how loud: always the Surface's own speakers — even while music goes to a Bluetooth
-    speaker (AirPlay follows the system's output; Room's answers and chimes stay on the panel). Straight to the
-    speakers, not through the speaker tuning (made for music, it turned speech down). As loud as the volume slider when
-    the Surface is the output, but never below voiceMinLevel (75 %); with music on another speaker, at full.
-    "voiceDirect": false sends it wherever the system's output is instead."""
-    # state.restore-props off: WirePlumber otherwise puts back a volume it remembered for "Room voice" (a low one, from
-    # earlier versions) over the one asked for here — the chime, a different stream, was loud while the voice was quiet
+    """Where Room's voice plays: always the Surface's own speakers. When they're the system's output, through the same
+    path as everything else (your Dolby tuning — it gives the voice body), at least voiceMinLevel; while music is on
+    a Bluetooth speaker, straight to the Surface's speakers at full. "voiceDirect": false: wherever the output is."""
     props = ["-P", "{ application.name = \"Room voice\" state.restore-props = false state.restore-target = false }"]
-    floor = float(CFG.get("voiceMinLevel", 0.75))
     try:
         default, raw, vol = _sinks()
     except Exception as e:
         log("voice out:", repr(e))
         return ["--volume", "1.0", *props]
-    if CFG.get("voiceDirect") is False or not raw:
-        LEVEL.lift()
-        return ["--volume", str(float(CFG.get("voiceVolume", 1.0))), *props]
     elsewhere = bool(default) and (default.startswith("bluez") or default.startswith("alsa_output.usb"))
-    # music on another speaker: the slider is that speaker's, so the Surface plays Room at full
-    v = (1.0 if elsewhere else max(vol, floor)) * float(CFG.get("voiceVolume", 1.0))
-    return ["--target", raw, "--volume", f"{min(1.0, v):.2f}", *props]
+    if elsewhere and raw and CFG.get("voiceDirect") is not False:
+        return ["--target", raw, "--volume", f"{min(1.0, float(CFG.get('voiceVolume', 1.0))):.2f}", *props]
+    LEVEL.lift()
+    return ["--volume", f"{min(1.0, float(CFG.get('voiceVolume', 1.0))):.2f}", *props]
 
 
 def surface_target():

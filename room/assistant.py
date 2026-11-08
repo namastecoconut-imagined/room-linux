@@ -206,7 +206,9 @@ class Assistant(QObject):
 
     # ---------------------------------------------------------------- music down while talking
     def _music_streams(self):
-        """PipeWire playback streams other than Room's own voice and tones (pw-play) — AirPlay, a browser…"""
+        """Apps playing sound — AirPlay, a browser… — never Room's own voice and tones, and never a filter's output
+        (the Dolby speaker tuning shows up as a playback stream too: ducking it turned everything played through
+        the Surface's speakers, Room's voice included, down to 3 % — the long-running "the voice is so quiet")."""
         out = []
         try:
             nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]")
@@ -215,7 +217,11 @@ class Assistant(QObject):
                 if props.get("media.class") != "Stream/Output/Audio":
                     continue
                 app = (props.get("application.name") or props.get("node.name") or "").lower()
+                node = (props.get("node.name") or "").lower()
                 if "pw-play" in app or "pw-cat" in app or "room voice" in app:
+                    continue
+                if node.startswith(("effect_", "output.", "input.")) or props.get("node.virtual") or \
+                        props.get("factory.name") == "filter-chain" or "filter" in node or "loopback" in node:
                     continue
                 out.append(n["id"])
         except Exception:
@@ -259,7 +265,7 @@ class Assistant(QObject):
                         except Exception:
                             continue
                         saved[sid] = v
-                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.3:.2f}"], timeout=2)
+                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.55:.2f}"], timeout=2)   # ≈ −15 dB
                 elif not on and saved is not None:
                     for sid, v in saved.items():
                         subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.2f}"], timeout=2)

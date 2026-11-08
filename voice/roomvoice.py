@@ -44,6 +44,8 @@ VOICE = CFG.get("voice", "af_heart")                    # Kokoro (offline) voice
 DG_KEY = CFG.get("deepgramKey") or ""
 PV_KEY = CFG.get("picovoiceKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
+# with Deepgram: a lenient local trigger, then Deepgram checks it really was "Alexa" before Room reacts
+CANDIDATE = float(CFG.get("wakeCandidate", 0.12))
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
 WHISPER = CFG.get("whisperURL", "http://127.0.0.1:8910/inference")
@@ -366,6 +368,10 @@ class Ears:
         self.wake = Wake()
         self.vad = VAD(model_path=os.path.join(mdir, "silero_vad.onnx"))
         self.dg: Deepgram | None = None
+        self.ring: list[np.ndarray] = []           # the last 2 s of sound (so a confirmed "Alexa" isn't cut off)
+        self.confirming = False
+        self.confirm_started = 0.0
+        self.last_candidate = -10.0
         self.speaker = Speaker()
         self.state = "idle"            # idle · listening · thinking
         self.rec: list[np.ndarray] = []
@@ -380,7 +386,37 @@ class Ears:
         self.cue_off = tone(os.path.join(self.cues, "off.wav"), [990, 660], vol=0.15)
 
     # ---------------------------------------------------------------- listening
-    def begin_listening(self):
+    # ---------------------------------------------------------------- "Alexa?" — checked by Deepgram
+    def start_confirm(self):
+        """A maybe-"Alexa" from the local detector: stream the last 2 s and what follows to Deepgram, quietly. Only if the
+        words start with Alexa does Room wake (tone, screen); the same stream then carries on with the command."""
+        self.confirming = True
+        self.confirmed = False
+        self.confirm_started = self.clock
+        self.dg = Deepgram(self.words, self._confirm_partial, self._dg_done)
+        for c in self.ring:
+            self.dg.push(c)
+
+    def _confirm_partial(self, text):
+        if self.confirming and not self.confirmed:
+            first = " ".join(text.split()[:4])
+            if re.search(r"\b(alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b", first, re.I):
+                self.confirmed = True
+                self.confirming = False
+                log(f"wake: confirmed ({text!r})")
+                emit(ev="wake")
+                self.begin_listening(keep=True)
+            return
+        cmd = self.strip_wake(text)
+        if cmd:
+            emit(ev="partial", text=cmd)
+
+    @staticmethod
+    def strip_wake(text):
+        m = re.search(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b[\s,.!?]*", text, re.I)
+        return (text[m.end():] if m else text).strip()
+
+    def begin_listening(self, keep=False):
         self.speaker.stop()
         subprocess.Popen(["pw-play", self.cue_on], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.state = "listening"
@@ -389,13 +425,33 @@ class Ears:
         self.started = getattr(self, "clock", 0.0)
         self.quiet_since = 0.0
         self.vad.reset_states()
-        self.dg = None
-        if DG_KEY:
-            self.dg = Deepgram(self.words, lambda t: emit(ev="partial", text=t), self._dg_done)
+        self.confirming = False
+        if not keep:
+            if self.dg:
+                self.dg.done = True; self.dg.close()
+            self.dg = None
+            if DG_KEY:
+                self.dg = Deepgram(self.words, self._confirm_partial, self._dg_done)
+                self.confirmed = True                # tapped: nothing to check
         emit(ev="listening")
 
     def _dg_done(self, text):
         dg = self.dg
+        if self.confirming and not getattr(self, "confirmed", False):
+            # it wasn't "Alexa" after all — drop it quietly
+            log(f"wake: not Alexa ({text!r})")
+            self.confirming = False
+            self.dg = None
+            return
+        cmd = self.strip_wake(text)
+        if not cmd and text and self.state == "listening" and not getattr(dg, "failed", False):
+            # just "Alexa" — now listen for what comes next
+            self.dg = None
+            self.dg = Deepgram(self.words, self._confirm_partial, self._dg_done)
+            self.confirmed = True
+            self.started = self.clock
+            return
+        text = cmd if cmd else text
         if getattr(dg, "failed", False):
             # Deepgram couldn't be reached — carry on listening the offline way (pause detection, then whisper);
             # what's been recorded so far is kept
@@ -455,6 +511,9 @@ class Ears:
         if self.level_n % 2 == 0:                     # ~6 a second is plenty for the screen
             emit(ev="level", v=round(level, 5))
         heard_wake, score = self.wake.hit(pcm)
+        self.ring.append(pcm)
+        if len(self.ring) > 25:
+            self.ring.pop(0)
         if DEBUG:
             self.dbg = getattr(self, "dbg", []) + [(level, score)]
             if len(self.dbg) >= 12:                   # about once a second
@@ -471,7 +530,19 @@ class Ears:
         if 0.15 <= score < WAKE_THRESHOLD and now - getattr(self, "miss_at", -9) > 2:
             self.miss_at = now
             log(f"wake: near miss {score:.2f}")
-        if heard_wake and now - self.last_wake > 1.5:
+        if DG_KEY and not self.wake.pv:
+            # lenient local trigger → Deepgram decides
+            if (score >= CANDIDATE and not self.confirming and self.state in ("idle",) and now - self.last_candidate > 2):
+                self.last_candidate = now
+                self.start_confirm()
+                return
+            if self.confirming:
+                self.dg.push(pcm)
+                if now - self.confirm_started > 4:            # no "Alexa" in time
+                    self.dg.done = True; self.dg.close(); self.dg = None
+                    self.confirming = False
+                return
+        elif heard_wake and now - self.last_wake > 1.5:
             self.last_wake = now
             self.wake.reset()
             emit(ev="wake")

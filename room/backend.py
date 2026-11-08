@@ -76,7 +76,9 @@ class Room(QObject):
 
     @Property("QVariantList", notify=roomsChanged)
     def rooms(self):
-        return demo.ROOMS if self.demo else self.lights.snapshot()
+        if self.demo:
+            return [dict(r, on=0, level=0) for r in demo.ROOMS] if os.environ.get("ROOM_DEMO_EMPTY") == "1" else demo.ROOMS
+        return self.lights.snapshot()
 
     @Property("QVariantMap", notify=musicChanged)
     def music(self):

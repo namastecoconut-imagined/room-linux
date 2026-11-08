@@ -1,11 +1,12 @@
 import QtQuick
 
-// Standby — the iPhone panel's StandbyView on the Surface. The phone's 568-pt-wide layout scaled up (×2.408), with
-// the Surface's extra height going between the top and bottom rows. The breathing dot field and the four drifting
-// colour blobs are one GPU shader, redrawn at the phone's slow rates (12 fps by day, 10 in the evening, 8 when
-// dimmed at night) — everything else is still. The dots fade down around the words; a sound sends a ripple out.
-//   top left: the date · top right: ⚡ and how warm it is · clock under the date
-//   bottom left: today's weather (dot numerals) · bottom right: what's next on the calendar
+// Standby — a calm dashboard for the living room (P3). The iPhone panel's breathing dot field and four drifting
+// colour blobs stay exactly as they were (one GPU shader, 12 fps by day, 10 in the evening, 8 at night; the dots fade
+// down around the words; a sound sends a ripple). On top, in two columns:
+//   left: the date, the dot clock (rearranges each minute), then the weather now and the next 12 hours as dot columns
+//         (taller = warmer, the top dot amber, a blue dot over the first hour rain is likely)
+//   right: what's coming up on the calendar, then which rooms have lights on
+// Anything with nothing to show says so in a line, or (weather) leaves its space empty.
 Item {
     id: sb
     width: Theme.stageW; height: Theme.stageH
@@ -69,8 +70,9 @@ Item {
     // fades down around them
     function rectPt(item, pad) {
         if (!item || !item.visible || item.width <= 0) return Qt.vector4d(0, 0, 0, 0)
-        var p = item.mapToItem(sb, 0, 0)
-        return Qt.vector4d(p.x / k - 8, p.y / k - 6, item.width / k + 16, item.height / k + 12)
+        // (every word block is a direct child of the face, so its own x / y are its place — and they keep the
+        // binding live as the layout settles)
+        return Qt.vector4d(item.x / k - 8, item.y / k - 6, item.width / k + 16, item.height / k + 12)
     }
 
     ShaderEffect {
@@ -95,8 +97,8 @@ Item {
         property vector4d r1: sb.rectPt(dayL, 0)
         property vector4d r2: sb.rectPt(statusL, 0)
         property vector4d r3: sb.rectPt(wxBox, 0)
-        property vector4d r4: sb.rectPt(evBox, 0)
-        property vector4d r5: Qt.vector4d(0, 0, 0, 0)
+        property vector4d r4: sb.rectPt(rightCol, 0)
+        property vector4d r5: sb.rectPt(hoursBox, 0)
         property vector4d rip0: sb.rips[0]
         property vector4d rip1: sb.rips[1]
         property vector4d rip2: sb.rips[2]
@@ -105,73 +107,150 @@ Item {
         fragmentShader: shaderDir + "standby.frag.qsb"
     }
 
-    // ---------------------------------------------------------------- top
+    // ---------------------------------------------------------------- left: date, clock
+    readonly property real colL: 72
+    readonly property real colR: 760
     T {
         id: dayL
-        x: px(28); y: px(26); width: implicitWidth
+        x: sb.colL; y: 64; width: implicitWidth
         text: Qt.formatDate(new Date(sb.now * 1000), "dddd  d MMMM")
-        font.pixelSize: px(15); color: sb.soft
+        font.pixelSize: 30; color: sb.soft
     }
     T {
         id: statusL
-        anchors.right: parent.right; anchors.rightMargin: px(30); y: px(28); width: implicitWidth
+        anchors.right: parent.right; anchors.rightMargin: sb.colL; y: 66; width: implicitWidth
         visible: text !== ""
         text: room.status
-        font.pixelSize: px(13); color: sb.soft
+        font.pixelSize: 26; color: sb.soft
     }
     ClockDots {
         id: clock
-        x: px(28); y: px(72)
-        pitch: px(15)
+        x: sb.colL; y: 150
+        pitch: 22
         ink: sb.ink
         text: Theme.clock(new Date(sb.now * 1000), room.clock24)
     }
 
-    // ---------------------------------------------------------------- bottom left: weather
-    Item {
+    // ---------------------------------------------------------------- left: the weather, now and the next 12 hours
+    readonly property var hours: (wx.hours || []).slice(0, 12)
+    readonly property int rainAt: {
+        for (var i = 0; i < hours.length; i++) if ((hours[i].p || 0) >= 50) return i
+        return -1
+    }
+    function hourLabel(h) { return room.clock24 ? ("" + h) : ("" + ((h % 12) || 12)) }
+    Column {
         id: wxBox
-        x: px(30); y: px(236 + sb.dy)
+        x: sb.colL; y: 390
         visible: wx.ok === true
-        width: Math.max(wxLine.x + wxLine.implicitWidth, wxSub.implicitWidth); height: px(48)
-        DotText { id: wxDots; pitch: px(3.6); text: "" + (wx.t || 0); color: sb.ink; glide: 0 }
-        Rectangle {
-            id: deg
-            x: wxDots.width + px(3); y: 0; width: px(6); height: px(6); radius: width / 2
-            color: "transparent"; border.color: sb.soft; border.width: px(1.2)
+        spacing: 4
+        T { text: "WEATHER"; font.pixelSize: 20; font.weight: Font.Medium; font.letterSpacing: 3.2; color: sb.gold; bottomPadding: 6 }
+        Row {
+            spacing: 18
+            T { text: (wx.t || 0) + "°"; font.pixelSize: 52; font.weight: Font.Light; color: sb.ink }
+            T { anchors.baseline: parent.children[0].baseline; text: Theme.cap(wx.d || ""); font.pixelSize: 30; color: sb.soft }
         }
         T {
-            id: wxLine
-            x: deg.x + deg.width + px(9); y: (wxDots.height - height) / 2
-            text: Theme.cap(wx.d || ""); font.pixelSize: px(15); color: sb.ink
-        }
-        T {
-            id: wxSub
-            y: px(30)
             text: [(wx.hi !== null && wx.hi !== undefined ? wx.hi + "° / " + wx.lo + "°" : ""),
-                   (wx.aqi ? "air " + wx.aqi + " " + Theme.aqiWord(wx.aqi) : "")].filter(function (s) { return s }).join("  ·  ")
-            font.pixelSize: px(13); color: sb.soft
+                   (wx.aqi ? "air " + wx.aqi + " " + Theme.aqiWord(wx.aqi) : ""),
+                   (sb.rainAt >= 0 ? "rain ~" + sb.hourLabel(sb.hours[sb.rainAt].h) + (room.clock24 ? ":00" : (sb.hours[sb.rainAt].h < 12 ? " am" : " pm")) : "")]
+                  .filter(function (s) { return s }).join("  ·  ")
+            font.pixelSize: 24; color: sb.soft
+        }
+    }
+    Item {
+        id: hoursBox
+        x: sb.colL; y: 700 - 6 * 22 - 6
+        visible: wx.ok === true && sb.hours.length > 0
+        width: sb.hours.length * 46; height: 6 * 22 + 6 + 24 + 20
+        readonly property real lo: { var m = 999; for (var i = 0; i < sb.hours.length; i++) m = Math.min(m, sb.hours[i].t); return m }
+        readonly property real hi: { var m = -999; for (var i = 0; i < sb.hours.length; i++) m = Math.max(m, sb.hours[i].t); return m }
+        Repeater {
+            model: sb.hours
+            Item {
+                x: index * 46; width: 12; height: hoursBox.height
+                // 1–6 dots: the day's coolest hour is one dot, its warmest six
+                readonly property int n: hoursBox.hi > hoursBox.lo ? 1 + Math.round(5 * (modelData.t - hoursBox.lo) / (hoursBox.hi - hoursBox.lo)) : 3
+                Repeater {
+                    model: 6
+                    Rectangle {
+                        y: 6 * 22 + 6 - index * 22 - 0
+                        width: 12; height: 12; radius: 6
+                        readonly property bool on: index < parent.n
+                        color: !on ? Qt.rgba(1, 244 / 255, 232 / 255, 0.12)
+                               : index === parent.n - 1 ? Qt.rgba(1, 207 / 255, 156 / 255, 0.95)
+                               : Qt.rgba(1, 244 / 255, 232 / 255, 0.85)
+                    }
+                }
+                Rectangle {
+                    visible: index === sb.rainAt
+                    y: 6 * 22 + 6 - 6 * 22 - 6; width: 12; height: 12; radius: 6
+                    color: "#7fb4ff"
+                }
+                T {
+                    x: -6; width: 24; y: 6 * 22 + 6 + 24
+                    horizontalAlignment: Text.AlignHCenter
+                    text: sb.hourLabel(modelData.h)
+                    font.pixelSize: 17; color: sb.soft
+                }
+            }
         }
     }
 
-    // ---------------------------------------------------------------- bottom right: what's next
+    // ---------------------------------------------------------------- right: coming up, then the house
+    readonly property var lit: room.rooms.filter(function (r) { return r.on > 0 })
+    readonly property var known: room.rooms.filter(function (r) { return r.reachable > 0 })
     Column {
-        id: evBox
-        readonly property var ev: room.events.length ? room.events[0] : null
-        visible: ev !== null
-        anchors.right: parent.right; anchors.rightMargin: px(30)
-        y: px(230 + sb.dy)
-        spacing: px(3)
-        T {
-            anchors.right: parent.right
-            text: evBox.ev ? (evBox.ev.today ? "NEXT  ·  " + evBox.ev.when.toUpperCase() : evBox.ev.when.toUpperCase()) : ""
-            font.pixelSize: px(10); font.weight: Font.Medium; font.letterSpacing: px(1.6); color: sb.gold
+        id: rightCol
+        x: sb.colR; y: 150; width: 1368 - sb.colL - sb.colR
+        spacing: 0
+        T { text: "COMING UP"; font.pixelSize: 20; font.weight: Font.Medium; font.letterSpacing: 3.2; color: sb.gold; bottomPadding: 6 }
+        Repeater {
+            model: room.events.slice(0, 3)
+            Item {
+                width: rightCol.width; height: 72
+                T { x: 0; anchors.verticalCenter: parent.verticalCenter; width: 128; text: modelData.when; font.pixelSize: 26; color: sb.soft }
+                Row {
+                    x: 128; anchors.verticalCenter: parent.verticalCenter; spacing: 10
+                    T { text: modelData.title; font.pixelSize: 28; color: sb.ink; width: Math.min(implicitWidth, rightCol.width - 128 - 160) }
+                    T { visible: (modelData.extra || "") !== ""; anchors.baseline: parent.children[0].baseline; text: "·  " + (modelData.extra || ""); font.pixelSize: 24; color: sb.soft }
+                }
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Qt.rgba(1, 238 / 255, 222 / 255, 0.12) }
+            }
         }
-        T { anchors.right: parent.right; width: Math.min(implicitWidth, px(260)); horizontalAlignment: Text.AlignRight; text: evBox.ev ? evBox.ev.title : ""; font.pixelSize: px(15); color: sb.ink }
         T {
-            anchors.right: parent.right
-            visible: text !== ""
-            text: evBox.ev ? (evBox.ev.extra || "") + (room.events.length > 1 ? (evBox.ev.extra ? "  ·  " : "") + "then " + (room.events.length - 1) + " more" : "") : ""
-            font.pixelSize: px(13); color: sb.soft
+            visible: room.events.length === 0
+            topPadding: 10
+            text: "Nothing coming up"
+            font.pixelSize: 30; color: sb.ink
+        }
+        Item { width: 1; height: 56 }
+        T {
+            visible: sb.known.length > 0
+            text: "AT HOME"; font.pixelSize: 20; font.weight: Font.Medium; font.letterSpacing: 3.2; color: sb.gold; bottomPadding: 16
+        }
+        Flow {
+            visible: sb.lit.length > 0
+            width: rightCol.width; spacing: 12
+            Repeater {
+                model: sb.known
+                Rectangle {
+                    readonly property bool on: modelData.on > 0
+                    height: 50; radius: 25
+                    width: chip.implicitWidth + 40 + 20
+                    color: on ? Qt.rgba(1, 190 / 255, 122 / 255, 0.16) : Qt.rgba(1, 1, 1, 0.05)
+                    Rectangle { x: 20; anchors.verticalCenter: parent.verticalCenter; width: 10; height: 10; radius: 5; color: parent.on ? "#ffbe7a" : Qt.rgba(1, 1, 1, 0.2) }
+                    T {
+                        id: chip
+                        x: 40; anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.name + "  ·  " + (parent.on ? modelData.level + "%" : "off")
+                        font.pixelSize: 22; color: parent.on ? sb.ink : sb.soft
+                    }
+                }
+            }
+        }
+        T {
+            visible: sb.known.length > 0 && sb.lit.length === 0
+            text: "All lights off"; font.pixelSize: 28; color: sb.soft
         }
     }
 }

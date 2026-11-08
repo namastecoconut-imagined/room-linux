@@ -1,9 +1,18 @@
 """Sample data for ROOM_DEMO=1 — lets the screens be checked anywhere, without bulbs, Spotify or a calendar."""
 WEATHER = {"ok": True, "t": 20, "feels": 20, "hum": 78, "d": "Overcast", "hi": 29, "lo": 20, "aqi": 62,
-           "hours": [{"h": 22, "t": 20, "p": 10, "d": "Overcast"}, {"h": 23, "t": 19, "p": 10, "d": "Overcast"},
-                     {"h": 0, "t": 19, "p": 20, "d": "Overcast"}, {"h": 1, "t": 18, "p": 20, "d": "Clear"},
-                     {"h": 2, "t": 18, "p": 0, "d": "Clear"}, {"h": 3, "t": 17, "p": 0, "d": "Clear"}]}
-EVENTS = [{"when": "10 pm", "title": "Dinner", "extra": "", "today": True},
+           "hours": [{"h": 11, "t": 20, "p": 0, "d": "Overcast"},
+                     {"h": 12, "t": 21, "p": 0, "d": "Overcast"},
+                     {"h": 13, "t": 23, "p": 10, "d": "Overcast"},
+                     {"h": 14, "t": 25, "p": 10, "d": "Overcast"},
+                     {"h": 15, "t": 27, "p": 20, "d": "Overcast"},
+                     {"h": 16, "t": 28, "p": 60, "d": "Overcast"},
+                     {"h": 17, "t": 29, "p": 40, "d": "Overcast"},
+                     {"h": 18, "t": 28, "p": 20, "d": "Overcast"},
+                     {"h": 19, "t": 26, "p": 10, "d": "Overcast"},
+                     {"h": 20, "t": 24, "p": 0, "d": "Overcast"},
+                     {"h": 21, "t": 22, "p": 0, "d": "Overcast"},
+                     {"h": 22, "t": 21, "p": 0, "d": "Overcast"}]}
+EVENTS = [] if __import__("os").environ.get("ROOM_DEMO_EMPTY") == "1" else [{"when": "10 pm", "title": "Dinner", "extra": "", "today": True},
           {"when": "Tue", "title": "Team standup", "extra": "10:30 am", "today": False},
           {"when": "Wed", "title": "Dentist", "extra": "5 pm", "today": False}]
 ROOMS = [

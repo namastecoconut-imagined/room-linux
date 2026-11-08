@@ -390,7 +390,7 @@ action (closest name from the speaker list).
                                "answer what they obviously meant. Plain words, numbers as people say them, Celsius and kilometres, "
                                "rupees for prices unless asked otherwise. No lists, no markdown, no caveats."),
                     "messages": [{"role": "user", "content": question}],
-                    "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 2}]}
+                    "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 1}]}
             ans = None
             try:
                 with _post(body, self.key, timeout=25) as r:

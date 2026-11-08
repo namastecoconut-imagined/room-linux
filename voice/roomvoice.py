@@ -46,7 +46,7 @@ PV_KEY = CFG.get("picovoiceKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 # with Deepgram: a lenient local trigger, then Deepgram checks it really was "Alexa" before Room reacts
 CANDIDATE = float(CFG.get("wakeCandidate", 0.12))
-WAKE_RE = re.compile(r"\b(alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b", re.I)
+WAKE_RE = re.compile(r"\b(alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa|alexis's|elexa|a lexa)\b", re.I)
 CONFIDENT = float(CFG.get("wakeConfident", 0.5))          # above this, wake straight away without asking Deepgram
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
@@ -283,7 +283,7 @@ class Wake:
 def dg_url(words):
     params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", "en"), ("encoding", "linear16"),
               ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"),
-              ("endpointing", str(CFG.get("endpointMs", 300))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
+              ("endpointing", str(CFG.get("endpointMs", 500))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
     params += [("keyterm", w) for w in (["Alexa", "set a timer", "timer", "minutes", "lights", "living room"] + list(words))[:50]]
     from urllib.parse import urlencode
     return DG_LISTEN + "?" + urlencode(params)
@@ -342,6 +342,15 @@ class Warm:
 
 WARM = None
 
+_DANGLE = {"in", "on", "at", "to", "for", "of", "the", "a", "an", "and", "or", "but", "with", "from", "my", "is", "set",
+           "play", "turn", "what's", "what", "how", "about", "by", "into", "some", "until", "till"}
+
+
+def dangling(text: str) -> bool:
+    """Ends mid-sentence ("what's the weather tomorrow in") — wait for the rest."""
+    w = re.sub(r"[^a-z' ]", "", (text or "").lower()).split()
+    return bool(w) and w[-1] in _DANGLE and not (text or "").rstrip().endswith((".", "?", "!"))
+
 
 class Deepgram:
     """One live recognition: audio goes in as it's heard, words come back as they're recognised. on_partial(text) while
@@ -372,7 +381,7 @@ class Deepgram:
     def _finish(self):
         if not self.done:
             self.done = True
-            self.on_done(" ".join(self.finals).strip() or self.interim.strip())
+            self.on_done(self.text())
 
     def _run(self):
         from websockets.sync.client import connect
@@ -424,9 +433,11 @@ class Deepgram:
                         self.interim = t
                     if self.text():
                         self.on_partial(self.text())
-                    if (m.get("speech_final") or m.get("from_finalize")) and self.finals:
+                    if m.get("from_finalize") and self.finals:
                         break
-                elif kind == "UtteranceEnd" and self.finals:
+                    if m.get("speech_final") and self.finals and not dangling(self.text()):
+                        break                       # a pause after a whole sentence (not "…tomorrow in")
+                elif kind == "UtteranceEnd" and self.finals and not dangling(self.text()):
                     break
         except Exception as e:
             log("deepgram:", repr(e))
@@ -487,7 +498,7 @@ class Ears:
     def _confirm_partial(self, text):
         if self.confirming and not self.confirmed:
             first = text if self.barge else " ".join(text.split()[:4])
-            if re.search(r"\b(alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b", first, re.I):
+            if WAKE_RE.search(first):
                 self.confirmed = True
                 self.confirming = False
                 log(f"wake: confirmed ({text!r})")
@@ -503,7 +514,7 @@ class Ears:
     @staticmethod
     def strip_wake(text):
         """What was said after the (last) "Alexa" — anything before it is the room, or Room's own voice."""
-        ms = list(re.finditer(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b[\s,.!?]*", text, re.I))
+        ms = list(re.finditer(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa)\b[\s,.!?]*", text, re.I))
         return (text[ms[-1].end():] if ms else text).strip()
 
     def chime(self, name):
@@ -518,6 +529,7 @@ class Ears:
             self.chime("listen")
         self.wait = 8.0 if follow else 6.0
         self.state = "listening"
+        self.spoke_at = getattr(self, "clock", 0.0)
         self.rec = []
         self.heard_speech = False
         self.started = getattr(self, "clock", 0.0)
@@ -568,7 +580,7 @@ class Ears:
         emit(ev="heard", text=text)
 
     # ---------------------------------------------------------------- the mic, evened out
-    # The Surface's mic is quiet from across a room. A fixed boost lifts it so the wake word, the
+    # The Surface's mic is quiet from across a room. An even level (below) lifts it so the wake word, the
     # pause detection and whisper all get speech at a useful level; `ref` is a slowly-falling peak of what's heard.
     ref = 0.05
     floor = 0.002
@@ -578,14 +590,23 @@ class Ears:
         # the mic can sit far off zero (a DC offset) — take it out so loudness means sound
         self.dc = getattr(self, "dc", float(np.mean(x))) * 0.95 + float(np.mean(x)) * 0.05
         x = x - self.dc
-        # a steady boost (no riding up and down): the Surface's mic is quiet from across the room, so lift it a fixed
-        # amount and round off loud peaks softly instead of clipping them. micGain in config.json changes it.
-        g = float(CFG.get("micGain", 4.0))
+        # an even voice level, inside Room only (the system's mic slider is never touched): speech is brought to about
+        # −20 dB whether you're at the panel or across the room. The boost drops at once when you're close and loud (so
+        # nothing distorts), creeps back up slowly, and only moves on speech — silence never gets turned up into hiss.
         rms = float(np.sqrt(np.mean(x ** 2))) if len(x) else 0.0
+        pk = float(np.max(np.abs(x))) if len(x) else 0.0
         self.floor = min(rms, self.floor * 1.002 + 1e-6) if rms > 0 else self.floor     # background noise
+        g = getattr(self, "g", 3.0)
+        top = float(CFG.get("maxGain", 8.0))
+        if rms > max(self.floor * 3, 0.0015):
+            want = float(np.clip(0.1 / rms, 1.0, top))
+            g += (want - g) * (0.5 if want < g else 0.03)
+        if pk * g > 0.9:
+            g = max(1.0, 0.9 / pk)
+        self.g = g
         self.gain = g
         y = x * g
-        y = np.where(np.abs(y) < 0.7, y, np.sign(y) * (0.7 + 0.3 * np.tanh((np.abs(y) - 0.7) / 0.3)))
+        y = np.where(np.abs(y) < 0.8, y, np.sign(y) * (0.8 + 0.2 * np.tanh((np.abs(y) - 0.8) / 0.2)))
         return (y * 32767).astype(np.int16)
 
     @staticmethod
@@ -668,13 +689,25 @@ class Ears:
             return
         if self.state != "listening":
             return
-        if self.dg:
+        dg = self.dg                                 # (Deepgram's thread can finish it at any moment)
+        if dg:
             # live recognition: everything after "Alexa" streams straight to Deepgram (no waiting for the tone);
             # it decides when you've finished. A copy is kept in case it can't be reached.
-            self.dg.push(pcm)
+            dg.push(pcm)
             self.rec.append(pcm)
-            if now - self.started > 10 or (now - self.started > self.wait and not self.dg.text()):
-                self.dg.close()
+            # our own ear for "they've stopped": Deepgram's can wait seconds when the room isn't quiet. After ~0.7 s
+            # without speech (and not mid-sentence — "…tomorrow in"), ask Deepgram to finish now.
+            vp = float(self.vad.predict(pcm, frame_size=480))
+            if vp > 0.4:
+                self.spoke_at = now
+            said = dg.text()
+            quiet = now - getattr(self, "spoke_at", now)
+            if (said and now - self.started > 1.0 and (quiet > 0.7 and not dangling(said) or quiet > 2.0)
+                    and not getattr(dg, "closing", False)):
+                dg.closing = True
+                dg.close()
+            if now - self.started > 10 or (now - self.started > self.wait and not said):
+                dg.close()
                 self.started = now + 999            # don't ask twice
             return
         if now - self.started < 0.35:

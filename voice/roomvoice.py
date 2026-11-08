@@ -27,9 +27,6 @@ VOICE = CFG.get("voice", "af_heart")                    # Kokoro (offline) voice
 DG_KEY = CFG.get("deepgramKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
-# Room's voice always plays at full stream volume, as "Room voice" — PipeWire remembers a volume per app, and one that
-# got turned down once would otherwise stay low
-VOICE_OUT = ["--volume", str(float(CFG.get("voiceVolume", 1.0))), "-P", "{ application.name = \"Room voice\" }"]
 HTTP = requests.Session()                      # kept alive: from India a fresh TLS handshake costs ~0.5 s per answer
 CUES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cues")
 
@@ -46,8 +43,49 @@ def log(*a):
 def louder(x: np.ndarray) -> np.ndarray:
     """Room's voice, made louder for the Surface's small speakers: gain (×2.5 by default, 'loudness' scales it) with a
     soft limiter, so peaks round off instead of crackling. Float in, float out (−1…1)."""
-    g = 2.5 * float(CFG.get("loudness", 1.0))
+    g = 3.5 * float(CFG.get("loudness", 1.0))
     return np.tanh(x * g) / np.tanh(g) if g > 1 else x * g
+
+
+def _sinks():
+    """(default sink name, the Surface's own speaker sink name, the default's volume)."""
+    nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]")
+    raw, default = None, None
+    for n in nodes:
+        props = (n.get("info") or {}).get("props") or {}
+        name = props.get("node.name", "")
+        if props.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.pci") and "hdmi" not in name:
+            raw = name
+        if n.get("type") == "PipeWire:Interface:Metadata" and (n.get("props") or {}).get("metadata.name") == "default":
+            for m in n.get("metadata") or []:
+                if m.get("key") == "default.audio.sink" and isinstance(m.get("value"), dict):
+                    default = m["value"].get("name")
+    out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2).stdout
+    try:
+        vol = 0.0 if "MUTED" in out else float(out.split()[1])
+    except Exception:
+        vol = 1.0
+    return default, raw, vol
+
+
+def voice_out():
+    """Where Room's voice plays, and how loud. On the Surface's own speakers it goes straight to the speakers — not
+    through the speaker tuning, which is made for music (it boosts the bass and turns everything down to make room for
+    it, so speech came out quiet) — at the volume slider's level, but never below voiceMinLevel (75 %). On a Bluetooth
+    speaker or anything else you've picked, it simply plays there. "voiceDirect": false sends it through the tuning."""
+    props = ["-P", "{ application.name = \"Room voice\" }"]
+    floor = float(CFG.get("voiceMinLevel", 0.75))
+    try:
+        default, raw, vol = _sinks()
+    except Exception as e:
+        log("voice out:", repr(e))
+        return ["--volume", "1.0", *props]
+    on_surface = default is None or default == raw or not (default.startswith("bluez") or default.startswith("alsa_output.usb"))
+    if CFG.get("voiceDirect") is not False and on_surface and raw:
+        v = max(vol, floor) * float(CFG.get("voiceVolume", 1.0))
+        return ["--target", raw, "--volume", f"{min(1.0, v):.2f}", *props]
+    LEVEL.lift()
+    return ["--volume", str(float(CFG.get("voiceVolume", 1.0))), *props]
 
 
 class Level:
@@ -135,7 +173,6 @@ class Speaker:
         threading.Thread(target=self._say, args=(text, g, done), daemon=True).start()
 
     def _say(self, text, g, done):
-        LEVEL.lift()
         try:
             if DG_KEY and self._deepgram(text, g):
                 self.busy = False
@@ -173,7 +210,7 @@ class Speaker:
         with self.lock:
             if g != self.gen:
                 return True
-            self.proc = subprocess.Popen(["pw-play", *VOICE_OUT, "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
+            self.proc = subprocess.Popen(["pw-play", *voice_out(), "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         first = True
         odd = b""
@@ -234,7 +271,7 @@ class Speaker:
             if first:
                 emit(ev="speaking"); first = False
             with self.lock:
-                self.proc = subprocess.Popen(["pw-play", *VOICE_OUT, f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.proc = subprocess.Popen(["pw-play", *voice_out(), f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.proc.wait()
             os.unlink(f)
         self.busy = False

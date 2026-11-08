@@ -69,10 +69,11 @@ def _sinks():
 
 
 def voice_out():
-    """Where Room's voice plays, and how loud. On the Surface's own speakers it goes straight to the speakers — not
-    through the speaker tuning, which is made for music (it boosts the bass and turns everything down to make room for
-    it, so speech came out quiet) — at the volume slider's level, but never below voiceMinLevel (75 %). On a Bluetooth
-    speaker or anything else you've picked, it simply plays there. "voiceDirect": false sends it through the tuning."""
+    """Where Room's voice plays, and how loud: always the Surface's own speakers — even while music goes to a Bluetooth
+    speaker (AirPlay follows the system's output; Room's answers and chimes stay on the panel). Straight to the
+    speakers, not through the speaker tuning (made for music, it turned speech down). As loud as the volume slider when
+    the Surface is the output, but never below voiceMinLevel (75 %); with music on another speaker, at voiceMinLevel.
+    "voiceDirect": false sends it wherever the system's output is instead."""
     props = ["-P", "{ application.name = \"Room voice\" }"]
     floor = float(CFG.get("voiceMinLevel", 0.75))
     try:
@@ -80,12 +81,21 @@ def voice_out():
     except Exception as e:
         log("voice out:", repr(e))
         return ["--volume", "1.0", *props]
-    on_surface = default is None or default == raw or not (default.startswith("bluez") or default.startswith("alsa_output.usb"))
-    if CFG.get("voiceDirect") is not False and on_surface and raw:
-        v = max(vol, floor) * float(CFG.get("voiceVolume", 1.0))
-        return ["--target", raw, "--volume", f"{min(1.0, v):.2f}", *props]
-    LEVEL.lift()
-    return ["--volume", str(float(CFG.get("voiceVolume", 1.0))), *props]
+    if CFG.get("voiceDirect") is False or not raw:
+        LEVEL.lift()
+        return ["--volume", str(float(CFG.get("voiceVolume", 1.0))), *props]
+    elsewhere = bool(default) and (default.startswith("bluez") or default.startswith("alsa_output.usb"))
+    v = (floor if elsewhere else max(vol, floor)) * float(CFG.get("voiceVolume", 1.0))
+    return ["--target", raw, "--volume", f"{min(1.0, v):.2f}", *props]
+
+
+def surface_target():
+    """The Surface's own speakers (for chimes), or [] for the system's output."""
+    try:
+        raw = _sinks()[1]
+        return ["--target", raw] if CFG.get("voiceDirect") is not False and raw else []
+    except Exception:
+        return []
 
 
 class Level:
@@ -289,7 +299,7 @@ class Speaker:
 def chime(name):
     f = os.path.join(CUES, f"{name}.wav")
     if os.path.exists(f):
-        subprocess.Popen(["pw-play", "--volume", "0.9", f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["pw-play", *surface_target(), "--volume", "0.9", f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def main():

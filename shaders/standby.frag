@@ -20,6 +20,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 c0; vec4 c1; vec4 c2; vec4 c3;
     vec4 r0; vec4 r1; vec4 r2; vec4 r3; vec4 r4; vec4 r5;   // where the words are (phone points: x, y, w, h)
     vec4 rip0; vec4 rip1; vec4 rip2; vec4 rip3;                // ripples: x = start (glow time), y = strength
+    vec4 home;       // blob 0's resting place (phone points) and how much it drifts (z: 1 = the phone's drift, 0 = still)
 };
 
 const float W = 568.0;
@@ -50,6 +51,7 @@ float ripple(vec4 rp, vec2 pt, float keep) {
 vec3 blob(vec2 p, int i, vec3 col, float a, float e) {
     vec3 f = i == 0 ? vec3(3.0, 4.0, 0.0) : i == 1 ? vec3(4.0, 2.0, 2.0) : i == 2 ? vec3(2.0, 3.0, 4.0) : vec3(2.0, 4.0, 5.5);
     vec2 c = vec2(W / 2.0 + 230.0 * sin(f.x * a + f.z), H / 2.0 + 110.0 * cos(f.y * a + f.z * 1.3));
+    if (i == 0 && home.z < 1.0) c = home.xy + (c - vec2(W, H) / 2.0) * home.z;
     float d = (gday > 0.5 ? 4.0 : 5.5) + float(i) * 1.1;
     float u = mod(e, 2.0 * d) / d;
     float tri = u < 1.0 ? u : 2.0 - u;

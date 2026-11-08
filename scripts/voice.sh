@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Room's voice — wake word, speech recognition, spoken answers, all on the Surface. Safe to run again.
-#   bash scripts/voice.sh                      (whisper model: base.en)
-#   WHISPER_MODEL=small.en bash scripts/voice.sh   (more accurate, ~2× slower)
+#   bash scripts/voice.sh                          (whisper model: small.en, 5-bit — accurate, ~2–3 s)
+#   WHISPER_MODEL=base.en bash scripts/voice.sh    (quicker, makes more mistakes)
 set -euo pipefail
 trap 'echo "✗ Voice setup stopped at line $LINENO — paste the lines above to Claude"' ERR
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 DATA="$HOME/.local/share/room/voice"
 WDIR="$HOME/.local/share/room/whisper"
 SRC="$HOME/.local/src"
-MODEL="${WHISPER_MODEL:-base.en}"
+MODEL="${WHISPER_MODEL:-small.en-q5_1}"
 mkdir -p "$DATA/oww" "$WDIR" "$SRC" "$HOME/.local/bin"
 
 echo "▸ Voice: system packages"

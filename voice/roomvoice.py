@@ -35,7 +35,8 @@ RATE = 16000
 CHUNK = 1280                                   # 80 ms — what openWakeWord wants
 DATA = os.path.expanduser(os.environ.get("ROOM_VOICE_DATA", "~/.local/share/room/voice"))
 CFG = json.loads(os.environ.get("ROOM_VOICE_CFG", "{}"))
-WAKE_THRESHOLD = float(CFG.get("wakeThreshold", 0.5))
+# "Alexa" from across the room scores lower than up close; 0.35 still ignores ordinary talk (it scored ~0 in tests)
+WAKE_THRESHOLD = float(CFG.get("wakeThreshold", 0.35))
 VOICE = CFG.get("voice", "af_heart")
 WHISPER = CFG.get("whisperURL", "http://127.0.0.1:8910/inference")
 DEBUG = os.environ.get("ROOM_VOICE_DEBUG") == "1"        # a line a second: mic level, gain, wake-word score
@@ -113,6 +114,10 @@ class Speaker:
                 try:
                     a, sr = self.k.create(p, voice=VOICE, speed=float(CFG.get("speed", 1.05)), lang=self.lang)
                     f = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                    # Kokoro comes out quiet: bring every sentence up to just under full scale
+                    pk = float(np.max(np.abs(a))) if len(a) else 0.0
+                    if pk > 0:
+                        a = np.clip(a * (0.95 / pk) * float(CFG.get("loudness", 1.0)), -1, 1)
                     sf.write(f.name, a, sr); q.put(f.name)
                 except Exception as e:
                     log("tts:", e)
@@ -237,6 +242,9 @@ class Ears:
             if self.best > 0.05:
                 log(f"wake: best {self.best:.2f} in the last minute · gain ×{self.gain:.1f} · noise {self.floor:.4f}")
             self.best = 0.0
+        if 0.15 <= score < WAKE_THRESHOLD and now - getattr(self, "miss_at", -9) > 2:
+            self.miss_at = now
+            log(f"wake: near miss {score:.2f}")
         if score >= WAKE_THRESHOLD and now - self.last_wake > 1.5:
             self.last_wake = now
             self.wake.reset()
@@ -245,6 +253,8 @@ class Ears:
             return
         if self.state != "listening":
             return
+        if now - self.started < 0.35:
+            return                                  # the start tone is still playing — don't send it to whisper
         self.rec.append(pcm)
         vp = float(self.vad.predict(pcm, frame_size=480))
         rms = float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768) ** 2)))

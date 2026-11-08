@@ -315,7 +315,12 @@ def main():
     threading.Thread(target=stdin_loop, daemon=True).start()
 
     target = mic_target()
-    cmd = ["pw-record", "--rate", str(RATE), "--channels", "1", "--format", "s16", "-"]
+    # raw little-endian samples on stdout. Without --raw, pw-record writes stdout as an .au file — big-endian — which
+    # read as little-endian is loud noise (what the Surface heard at first)
+    helptext = subprocess.run(["pw-record", "--help"], capture_output=True, text=True).stdout + \
+               subprocess.run(["pw-record", "--help"], capture_output=True, text=True).stderr
+    raw = ["--raw"] if "--raw" in helptext else []
+    cmd = ["pw-record", *raw, "--rate", str(RATE), "--channels", "1", "--format", "s16", "-"]
     if target:
         cmd[1:1] = ["--target", target]
     log("mic:", target or "default")
@@ -323,12 +328,19 @@ def main():
     while True:
         rec = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         n = CHUNK * 2
+        swap = False
+        if not raw:
+            head = rec.stdout.read(24)                       # an .au header? (magic, data offset, …)
+            if head[:4] == b".snd":
+                swap = True
+                rec.stdout.read(max(0, int.from_bytes(head[4:8], "big") - 24))
+            log("mic stream:", "au, big-endian" if swap else "raw")
         while True:
             b = rec.stdout.read(n)
             if not b or len(b) < n:
                 break
             try:
-                ears.feed(np.frombuffer(b, dtype=np.int16))
+                ears.feed(np.frombuffer(b, dtype=">i2" if swap else "<i2").astype(np.int16))
             except Exception as e:
                 log("feed:", repr(e))
         log("mic stopped — reopening in 2 s")

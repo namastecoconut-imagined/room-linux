@@ -157,10 +157,19 @@ class Speaker:
         self.busy = True
         try:
             t0 = time.time()
-            r = HTTP.post(DG_SPEAK,
-                              params={"model": DG_VOICE, "encoding": "linear16", "sample_rate": 24000, "container": "none"},
-                              headers={"Authorization": f"Token {DG_KEY}", "Content-Type": "application/json"},
-                              json={"text": text}, stream=True, timeout=(3, 15))
+            for attempt in (0, 1):
+                try:
+                    r = HTTP.post(DG_SPEAK,
+                                  params={"model": DG_VOICE, "encoding": "linear16", "sample_rate": 24000, "container": "none"},
+                                  headers={"Authorization": f"Token {DG_KEY}", "Content-Type": "application/json"},
+                                  json={"text": text}, stream=True, timeout=(3, 15))
+                    break
+                except requests.ConnectionError:
+                    # the kept-alive connection had gone stale (Deepgram closes idle ones): once more on a fresh one.
+                    # Without this Room fell back to the offline voice, which is quieter — "the voice went low again"
+                    if attempt:
+                        raise
+                    HTTP.close()
             if r.status_code != 200:
                 log(f"aura: {r.status_code} {r.text[:200]}")
                 return False
@@ -214,7 +223,7 @@ class Speaker:
                     # short "Okay." isn't louder than a long answer)
                     rms = float(np.sqrt(np.mean(a ** 2))) if len(a) else 0.0
                     if rms > 0:
-                        a = louder(np.clip(a * (0.1 / rms), -1, 1))
+                        a = louder(np.clip(a * (0.16 / rms), -1, 1))
                     sf.write(f.name, a, sr); q.put(f.name)
                 except Exception as e:
                     log("tts:", e)

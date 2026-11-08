@@ -15,7 +15,7 @@ Window {
     // Esc: leave full screen (to reach the desktop); F11: back to full screen
     Shortcut { sequence: "Esc"; onActivated: win.visibility = Window.Windowed }
     Shortcut { sequence: "F11"; onActivated: win.visibility = win.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
-    property string screen: startScreen === "standby" || startScreen === "musicstandby" ? "standby" : "home"
+    property string screen: startScreen === "standby" || startScreen === "musicstandby" ? "standby" : startScreen === "music" ? "music" : "home"
     property real lastTouch: Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing
     readonly property bool night: {
@@ -45,7 +45,14 @@ Window {
             opacity: win.screen === "home" ? 1 : 0
             visible: opacity > 0
             Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
-            onOpenMusic: {}
+            onOpenMusic: win.screen = "music"
+        }
+        MusicPlayer {
+            now: win.now
+            opacity: win.screen === "music" ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
+            onBack: win.screen = "home"
         }
         Standby {
             now: win.now
@@ -75,7 +82,13 @@ Window {
     MouseArea {
         anchors.fill: parent
         enabled: win.screen === "standby"
-        onPressed: { win.lastTouch = Date.now() / 1000; win.screen = "home" }
+        // on music standby, tapping the cover opens the player; anywhere else wakes to home
+        onPressed: (e) => {
+            win.lastTouch = Date.now() / 1000
+            var p = stage.mapFromItem(win.contentItem, e.x, e.y)
+            var onCover = (win.playing || startScreen === "musicstandby") && p.x > 700 && p.x < 1300 && p.y > 96 && p.y < 696
+            win.screen = onCover ? "music" : "home"
+        }
     }
     // ROOM_SHOT: save a picture of the screen and quit (used to check builds)
     Timer {

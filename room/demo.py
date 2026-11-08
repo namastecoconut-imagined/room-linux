@@ -14,4 +14,12 @@ ROOMS = [
 ]
 MUSIC = {"enabled": True, "exists": True, "playing": True, "title": "Fidelio", "artist": "ansh", "album": "Fidelio",
          "duration": 201, "position": 84, "at": 0, "device": "Living room speaker", "volume": 62,
-         "art": "", "rgb": [201, 185, 163], "rgb2": [44, 40, 34], "error": ""}
+         "art": "", "rgb": [201, 185, 163], "rgb2": [44, 40, 34], "error": "", "source": "spotify",
+         "context": "Late night", "canVolume": True,
+         "nextUp": [{"title": "Lowlight", "artist": "Sundays", "art": "", "uri": ""}, {"title": "Weightless", "artist": "Marconi Union", "art": "", "uri": ""}],
+         "recent": [{"title": "Night Owl", "artist": "Galimatias", "art": "", "uri": ""}, {"title": "Nightcall", "artist": "Kavinsky", "art": "", "uri": ""}],
+         "playlists": [{"name": "Late night", "uri": "", "art": ""}, {"name": "Focus", "uri": "", "art": ""}, {"name": "Sunday", "uri": "", "art": ""},
+                       {"name": "Drive", "uri": "", "art": ""}, {"name": "Liked Songs", "uri": "", "art": ""}, {"name": "Dinner", "uri": "", "art": ""}],
+         "devices": [{"id": "a", "name": "Living room speaker", "type": "Speaker", "active": True},
+                     {"id": "b", "name": "Aviral's MacBook Air", "type": "Computer", "active": False},
+                     {"id": "c", "name": "Aviral's iPhone", "type": "Smartphone", "active": False}]}

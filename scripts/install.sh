@@ -53,6 +53,20 @@ fi
 
 bash "$HERE/scripts/airplay.sh"
 
+echo "▸ Room in the app grid"
+mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/scalable/apps
+cp "$HERE/assets/room.svg" ~/.local/share/icons/hicolor/scalable/apps/room-panel.svg
+cat > ~/.local/share/applications/room-panel.desktop <<DESK
+[Desktop Entry]
+Type=Application
+Name=Room
+Comment=The room panel
+Exec=systemctl --user restart room.service
+Icon=room-panel
+Categories=Utility;
+DESK
+update-desktop-database -q ~/.local/share/applications 2>/dev/null || true
+
 echo "▸ room-update command"
 mkdir -p ~/.local/bin
 cat > ~/.local/bin/room-update <<UPD

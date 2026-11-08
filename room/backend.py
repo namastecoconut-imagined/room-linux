@@ -138,6 +138,18 @@ class Room(QObject):
     def setVolume(self, v):
         self.spotify.set_volume(v)
 
+    @Slot(str)
+    def transfer(self, device_id):
+        self.spotify.transfer(device_id)
+
+    @Slot(str)
+    def playUri(self, uri):
+        self.spotify.play_uri(uri)
+
+    @Slot()
+    def refreshDevices(self):
+        self.spotify.refresh_devices()
+
     @Slot(float)
     def seek(self, s):
         self.spotify.seek(s)

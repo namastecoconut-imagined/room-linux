@@ -34,6 +34,14 @@ class Spotify(QObject):
         self.ticks = 0
         self.error = ""
         self._waiting, self._refreshing, self._retry_at, self._fails = [], False, 0.0, 0
+        self.next_up: list[dict] = []      # the next few songs (cover flow, right side)
+        self.recent: list[dict] = []       # the last couple played (cover flow, left side)
+        self.playlists: list[dict] = []
+        self.context_name = ""
+        self._context_uri = ""
+        self._queue_for = ""
+        self._devices_at = 0.0
+        self._playlists_at = 0.0
 
     @property
     def enabled(self):
@@ -115,6 +123,85 @@ class Spotify(QObject):
                     pass
             self.changed.emit()
         self._api("GET", "/me/player?additional_types=episode", got)
+        if time.time() - self._devices_at > 20:
+            self.refresh_devices()
+        if time.time() - self._playlists_at > 600:
+            self.refresh_playlists()
+
+    # ---- what's around the current song, and what you can play
+    @staticmethod
+    def _track(t: dict) -> dict:
+        imgs = (t.get("album") or {}).get("images") or t.get("images") or []
+        art = min(imgs, key=lambda i: abs((i.get("width") or 300) - 300))["url"] if imgs else ""
+        artists = ", ".join(a.get("name", "") for a in t.get("artists", [])) or (t.get("show") or {}).get("name", "")
+        return {"title": t.get("name", ""), "artist": artists, "art": art, "uri": t.get("uri", "")}
+
+    def _refresh_around(self):
+        def q(status, data):
+            if status != 200: return
+            try:
+                obj = json.loads(data)
+                self.next_up = [self._track(t) for t in (obj.get("queue") or [])[:4] if t]
+                self.changed.emit()
+            except Exception:
+                pass
+        self._api("GET", "/me/player/queue", q)
+
+        def r(status, data):
+            if status != 200: return
+            try:
+                cur = ((self.player or {}).get("item") or {}).get("uri")
+                items = [self._track(i["track"]) for i in json.loads(data).get("items", []) if i.get("track")]
+                self.recent = [t for t in items if t["uri"] != cur][:2]
+                self.changed.emit()
+            except Exception:
+                pass
+        self._api("GET", "/me/player/recently-played?limit=4", r)
+
+        ctx = (self.player or {}).get("context") or {}
+        uri = ctx.get("uri", "")
+        if uri != self._context_uri:
+            self._context_uri, self.context_name = uri, ""
+            kind = uri.split(":")[1] if uri.count(":") >= 2 else ""
+            if kind in ("playlist", "album", "artist", "show"):
+                def n(status, data, uri=uri):
+                    if status == 200 and uri == self._context_uri:
+                        try:
+                            self.context_name = json.loads(data).get("name", ""); self.changed.emit()
+                        except Exception:
+                            pass
+                self._api("GET", f"/{kind}s/{uri.split(':')[-1]}?fields=name", n)
+            elif kind == "collection":
+                self.context_name = "Liked Songs"
+
+    def refresh_devices(self):
+        self._devices_at = time.time()
+        def got(status, data):
+            if status != 200: return
+            try:
+                self.devices = [{"id": d.get("id"), "name": d.get("name", ""), "type": d.get("type", ""),
+                                 "active": bool(d.get("is_active"))} for d in json.loads(data).get("devices", []) if d.get("id")]
+                self.changed.emit()
+            except Exception:
+                pass
+        self._api("GET", "/me/player/devices", got)
+
+    def refresh_playlists(self):
+        self._playlists_at = time.time()
+        def got(status, data):
+            if status != 200: return
+            try:
+                out = []
+                for p in json.loads(data).get("items", []):
+                    if not p: continue
+                    imgs = p.get("images") or []
+                    out.append({"name": p.get("name", ""), "uri": p.get("uri", ""),
+                                "art": (min(imgs, key=lambda i: abs((i.get("width") or 300) - 300))["url"] if imgs else "")})
+                self.playlists = out[:12]
+                self.changed.emit()
+            except Exception:
+                pass
+        self._api("GET", "/me/playlists?limit=20", got)
 
     def _update_art(self):
         item = (self.player or {}).get("item") or {}
@@ -124,6 +211,7 @@ class Spotify(QObject):
         imgs = (item.get("album") or {}).get("images") or (item.get("images") or [])
         url = min(imgs, key=lambda i: abs((i.get("width") or 640) - 640))["url"] if imgs else ""
         self.art = {"id": tid, "url": url, "rgb": self.art["rgb"], "rgb2": self.art["rgb2"]}
+        self._refresh_around()
         small = min(imgs, key=lambda i: abs((i.get("width") or 64) - 64))["url"] if imgs else ""
         if small:
             def got(status, data, tid=tid):
@@ -159,6 +247,13 @@ class Spotify(QObject):
             "rgb": self.art["rgb"],
             "rgb2": self.art["rgb2"],
             "error": self.error,
+            "source": "spotify",
+            "context": self.context_name,
+            "nextUp": self.next_up,
+            "recent": self.recent,
+            "playlists": self.playlists,
+            "devices": self.devices,
+            "canVolume": bool(dev.get("supports_volume", True)) and dev.get("volume_percent") is not None,
         }
 
     # ---- commands
@@ -180,6 +275,19 @@ class Spotify(QObject):
 
     def seek(self, seconds: float):
         self._api("PUT", f"/me/player/seek?position_ms={int(seconds * 1000)}", self._soon)
+
+    def transfer(self, device_id: str):
+        self._api("PUT", "/me/player", lambda *_: (self.refresh_devices(), self._soon()), {"device_ids": [device_id], "play": True})
+
+    def play_uri(self, uri: str):
+        body = {"context_uri": uri} if ":track:" not in uri else {"uris": [uri]}
+        def done(status, data):
+            if status == 404:   # nothing active to play on — wake the last speaker we saw
+                if self.devices:
+                    self._api("PUT", f"/me/player/play?device_id={self.devices[0]['id']}", self._soon, body)
+            else:
+                self._soon()
+        self._api("PUT", "/me/player/play", done, body)
 
     def set_volume(self, pct: int):
         pct = max(0, min(100, int(pct)))

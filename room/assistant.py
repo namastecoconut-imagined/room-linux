@@ -158,6 +158,8 @@ class Assistant(QObject):
             self.state = "thinking"; self.stage = "think"
         elif ev == "heard":
             self.heard = (e.get("text") or "").strip()
+            if not self.heard and e.get("quiet"):
+                self.following = True             # a "maybe Alexa" with nothing after it: close without the miss chime
             self._act(self.heard)
         elif ev == "speaking":
             self.state = "speaking"

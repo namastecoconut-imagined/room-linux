@@ -47,7 +47,7 @@ DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 # with Deepgram: a lenient local trigger, then Deepgram checks it really was "Alexa" before Room reacts
 CANDIDATE = float(CFG.get("wakeCandidate", 0.12))
 WAKE_RE = re.compile(r"\b(alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa|alexis's|elexa|a lexa)\b", re.I)
-CONFIDENT = float(CFG.get("wakeConfident", 0.5))          # above this, wake straight away without asking Deepgram
+CONFIDENT = float(CFG.get("wakeConfident", 0.3))          # above this, wake straight away without asking Deepgram
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
 # one kept-alive connection for the voice: from India a fresh TLS handshake to Deepgram costs ~0.5 s per answer
@@ -281,7 +281,7 @@ class Wake:
 
 
 def dg_url(words):
-    params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", "en"), ("encoding", "linear16"),
+    params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", CFG.get("language", "en-IN")), ("encoding", "linear16"),
               ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"),
               ("endpointing", str(CFG.get("endpointMs", 500))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
     params += [("keyterm", w) for w in (["Alexa", "set a timer", "timer", "minutes", "lights", "living room"] + list(words))[:50]]
@@ -297,12 +297,14 @@ class Warm:
         self.lock = threading.Lock()
         self.spare = None            # (ctx, ws, url, opened_at)
         self.words: list[str] = []
+        self.need = threading.Event()  # set when the spare's been taken — open the next one straight away
         if DG_KEY:
             threading.Thread(target=self._keep, daemon=True).start()
 
     def take(self, words):
         with self.lock:
             sp, self.spare = self.spare, None
+        self.need.set()
         if sp and sp[2] == dg_url(words) and time.time() - sp[3] < 480:
             return sp
         if sp:
@@ -337,7 +339,8 @@ class Warm:
                 with self.lock:
                     self.spare = None
                 time.sleep(10)
-            time.sleep(3)
+            self.need.wait(3)
+            self.need.clear()
 
 
 WARM = None
@@ -381,7 +384,10 @@ class Deepgram:
     def _finish(self):
         if not self.done:
             self.done = True
-            self.on_done(self.text())
+            t = self.text()
+            if not t and getattr(self, "last_interim", ""):
+                t = self.last_interim           # Deepgram sometimes finalises a weak line as nothing — keep its guess
+            self.on_done(t, self)
 
     def _run(self):
         from websockets.sync.client import connect
@@ -404,7 +410,7 @@ class Deepgram:
             try:
                 while not self.done:
                     try:
-                        b = self.q.get(timeout=5)
+                        b = self.q.get(timeout=2)
                     except queue.Empty:
                         ws.send(json.dumps({"type": "KeepAlive"})); continue
                     if b is None:
@@ -413,6 +419,7 @@ class Deepgram:
                         ws.send(json.dumps({"type": "CloseStream"}))
                         return
                     ws.send(b)
+                ws.send(json.dumps({"type": "CloseStream"}))     # given up on: let it go now, not in 10 s
             except Exception:
                 pass
         threading.Thread(target=sender, daemon=True).start()
@@ -431,8 +438,10 @@ class Deepgram:
                         self.interim = ""
                     else:
                         self.interim = t
+                        if t:
+                            self.last_interim = " ".join([*self.finals, t])
                     if self.text():
-                        self.on_partial(self.text())
+                        self.on_partial(self.text(), self)
                     if m.get("from_finalize") and self.finals:
                         break
                     if m.get("speech_final") and self.finals and not dangling(self.text()):
@@ -495,7 +504,9 @@ class Ears:
         for c in self.ring:
             self.dg.push(c)
 
-    def _confirm_partial(self, text):
+    def _confirm_partial(self, text, src=None):
+        if src is not None and src is not self.dg:
+            return                                  # an older stream, still finishing — not this turn
         if self.confirming and not self.confirmed:
             first = text if self.barge else " ".join(text.split()[:4])
             if WAKE_RE.search(first):
@@ -529,6 +540,7 @@ class Ears:
             self.chime("listen")
         self.wait = 8.0 if follow else 6.0
         self.state = "listening"
+        self.provisional = False
         self.spoke_at = getattr(self, "clock", 0.0)
         self.rec = []
         self.heard_speech = False
@@ -550,7 +562,9 @@ class Ears:
         warm_speech()
         emit(ev="listening", follow=follow)
 
-    def _dg_done(self, text):
+    def _dg_done(self, text, src=None):
+        if src is not None and src is not self.dg:
+            return                                  # an older stream finishing late — must not end this one
         dg = self.dg
         if self.confirming and not getattr(self, "confirmed", False):
             # it wasn't "Alexa" after all — drop it quietly
@@ -577,7 +591,7 @@ class Ears:
             return
         self.dg = None
         self.state = "idle"
-        emit(ev="heard", text=text)
+        emit(ev="heard", text=text, quiet=bool(getattr(self, "provisional", False) and not text))
 
     # ---------------------------------------------------------------- the mic, evened out
     # The Surface's mic is quiet from across a room. An even level (below) lifts it so the wake word, the
@@ -608,6 +622,7 @@ class Ears:
         y = x * g
         y = np.where(np.abs(y) < 0.8, y, np.sign(y) * (0.8 + 0.2 * np.tanh((np.abs(y) - 0.8) / 0.2)))
         out = (y * 32767).astype(np.int16)
+        self.plain = out
         return self.clean(out)
 
     def clean(self, pcm: np.ndarray) -> np.ndarray:
@@ -670,13 +685,15 @@ class Ears:
         # time is counted in audio, not on the wall clock (the same either way live, and testable from a file)
         self.clock = getattr(self, "clock", 0.0) + len(raw) / RATE
         now = self.clock
-        pcm = self.even(raw)
+        pcm = self.even(raw)                          # cleaned (noise suppressed): for the wake word and the screen
+        plain = self.plain                            # evened but not suppressed: for recognition (suppression's
+                                                      # artefacts cost Deepgram more words than the noise does)
         level = float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768) ** 2))) / max(self.gain, 1.0)
         self.level_n = getattr(self, "level_n", 0) + 1
         if self.level_n % 2 == 0:                     # ~6 a second is plenty for the screen
             emit(ev="level", v=round(level, 5))
         heard_wake, score = self.wake.hit(pcm)
-        self.ring.append(pcm)
+        self.ring.append(plain)
         if len(self.ring) > 25:
             self.ring.pop(0)
         if DEBUG:
@@ -702,19 +719,27 @@ class Ears:
                 self.last_wake = now
                 self.wake.reset()
                 emit(ev="wake")
+                # under 0.5 it's very likely, not certain: if nothing at all is said, close without a sound
+                provisional = score < 0.5
                 if self.confirming and self.dg:
                     self.confirmed = True; self.confirming = False
                     log(f"wake: sure ({score:.2f})")
                     self.begin_listening(keep=True)
                 else:
                     self.begin_listening(preroll=True)
+                self.provisional = provisional
+                log(f"wake: {score:.2f}{' (provisional)' if provisional else ''}")
                 return
-            if (score >= (CANDIDATE * 2 if self.speaker.busy else CANDIDATE) and not self.confirming and self.state in ("idle",) and now - self.last_candidate > 2):
+            if self.speaker.busy and CFG.get("bargeIn") is False:
+                return                                  # interrupting by voice switched off
+            if (score >= (max(0.35, CANDIDATE * 2) if self.speaker.busy else CANDIDATE) and not self.confirming and self.state in ("idle",) and now - self.last_candidate > 2):
                 self.last_candidate = now
                 self.start_confirm()
                 return
-            if self.confirming:
-                self.dg.push(pcm)
+            if self.confirming and not self.dg:
+                self.confirming = False
+            elif self.confirming:
+                self.dg.push(plain)
                 if now - self.confirm_started > 4:            # no "Alexa" in time
                     self.dg.done = True; self.dg.close(); self.dg = None
                     self.confirming = False
@@ -731,8 +756,8 @@ class Ears:
         if dg:
             # live recognition: everything after "Alexa" streams straight to Deepgram (no waiting for the tone);
             # it decides when you've finished. A copy is kept in case it can't be reached.
-            dg.push(pcm)
-            self.rec.append(pcm)
+            dg.push(plain)
+            self.rec.append(plain)
             # our own ear for "they've stopped": Deepgram's can wait seconds when the room isn't quiet. After ~0.7 s
             # without speech (and not mid-sentence — "…tomorrow in"), ask Deepgram to finish now.
             vp = float(self.vad.predict(pcm, frame_size=480))
@@ -750,7 +775,7 @@ class Ears:
             return
         if now - self.started < 0.35:
             return                                  # the start tone is still playing — don't send it to whisper
-        self.rec.append(pcm)
+        self.rec.append(plain)
         vp = float(self.vad.predict(pcm, frame_size=480))
         rms = float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768) ** 2)))
         self.max_vad = max(getattr(self, "max_vad", 0.0), vp)

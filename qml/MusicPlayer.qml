@@ -1,8 +1,9 @@
 import QtQuick
 import QtQuick.Effects
 
-// The music player: cover flow (swipe the covers, or tap one either side), a seek bar you can drag, big controls,
-// a tall volume slider and your playlists on the right, and the speaker it's playing on (tap to move the music).
+// The music player: the cover with what's next trailing to the right (swipe left to skip, right to go back), the
+// cover seen through a breathing grille of dots behind, a seek bar you can drag, big controls, a tall volume slider
+// and your playlists on the right, and the speaker it's playing on (tap to move the music).
 Item {
     id: mp
     width: Theme.stageW; height: Theme.stageH
@@ -10,98 +11,121 @@ Item {
     property var music: room.music
     readonly property bool spotify: music.source !== "airplay"
     readonly property var nextUp: music.nextUp || []
-    readonly property var recent: music.recent || []
     signal back()
     property bool picking: false
 
-    // ---------------------------------------------------------------- background: the cover, blurred
-    CoverWash { anchors.fill: parent; source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; strength: 0.85 }
+    // ---------------------------------------------------------------- background: the cover through a grille of dots
+    CoverWash {
+        id: wash
+        anchors.fill: parent; visible: false
+        source: music.art || ""; rgb: music.rgb || [80, 70, 60]; rgb2: music.rgb2 || [20, 18, 16]; strength: 1.0
+    }
+    ShaderEffectSource { id: washTex; sourceItem: wash; hideSource: true; live: true; textureSize: Qt.size(342, 228) }
+    ShaderEffect {
+        anchors.fill: parent
+        visible: mp.visible
+        property var src: washTex
+        property real time: mp.t
+        property real pitch: 14 * (width > 0 ? width / Theme.stageW : 1)
+        property real beat: music.playing ? 0.35 : 0
+        property real pad: 0
+        property size res: Qt.size(width, height)
+        vertexShader: shaderDir + "halftone.vert.qsb"
+        fragmentShader: shaderDir + "halftone.frag.qsb"
+        Behavior on beat { NumberAnimation { duration: 800 } }
+    }
+    property real t: 0
+    NumberAnimation on t { running: mp.visible; from: 0; to: 100000; duration: 100000 * 1000; loops: Animation.Infinite }
+    // darker towards the bottom so the title and controls always read
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.15) }
-            GradientStop { position: 0.6; color: Qt.rgba(0, 0, 0, 0.35) }
-            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.75) }
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.35) }
+            GradientStop { position: 0.55; color: Qt.rgba(0, 0, 0, 0.40) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.82) }
         }
     }
 
     // ---------------------------------------------------------------- top
-    RoundBtn { x: 40; y: 40; size: 64; icon: "back"; iconSize: 24; onTapped: mp.back() }
-    Cap { color: Qt.rgba(1, 1, 1, 0.6)
-        x: 124; y: 63; width: 900
-        text: music.exists ? (spotify ? (music.context ? "Playing from · " + music.context : "Spotify") : music.device) : "Nothing playing"
+    RoundBtn { x: 48; y: 44; size: 64; icon: "back"; iconSize: 24; onTapped: mp.back() }
+    Cap {
+        color: Qt.rgba(1, 1, 1, 0.65)
+        x: 132; y: 67; width: 960
+        text: !music.exists ? "Nothing playing"
+              : (music.context ? "Playing from · " + music.context : (spotify ? "Spotify" : music.device))
     }
 
-    // ---------------------------------------------------------------- cover flow
+    // ---------------------------------------------------------------- the cover, with what's next trailing to the right
     Item {
         id: flow
-        x: 0; y: 110; width: 1112; height: 470
-        readonly property real cx: 556
+        x: 0; y: 140; width: 1112; height: 450
         property real drag: 0
-        // left: what played before (nearest first); right: what's next
+        // slot k: −1 has just left (off to the left), 0 is playing, 1… are next
+        function px(k) { return k <= 0 ? 120 + k * 520 : k <= 1 ? 120 + k * 480 : k <= 2 ? 600 + (k - 1) * 270 : 870 + (k - 2) * 200 }
+        function sz(k) { return k <= 0 ? 440 : k <= 1 ? 440 - k * 110 : k <= 2 ? 330 - (k - 1) * 110 : 220 - (k - 2) * 60 }
+        function op(k) { return k < 0 ? Math.max(0, 1 + k) : k <= 1 ? 1 : k <= 2 ? 1 - (k - 1) * 0.55 : Math.max(0, 0.45 - (k - 2) * 0.45) }
         readonly property var slots: {
-            var out = []
-            for (var i = Math.min(2, recent.length); i >= 1; i--) out.push({ k: -i, t: recent[i - 1] })
-            out.push({ k: 0, t: { art: music.art, title: music.title } })
-            for (var j = 1; j <= Math.min(2, nextUp.length); j++) out.push({ k: j, t: nextUp[j - 1] })
+            var out = [{ k: 0, t: { art: music.art, title: music.title } }]
+            for (var j = 1; j <= Math.min(3, nextUp.length); j++) out.push({ k: j, t: nextUp[j - 1] })
             return out
         }
         Repeater {
             model: flow.slots
             Press {
-                readonly property real kk: modelData.k + flow.drag / 235
-                readonly property real a: Math.abs(kk)
-                readonly property real sz: a < 1 ? 440 - 100 * a : Math.max(180, 340 - 90 * (a - 1))
-                width: sz; height: sz
-                x: flow.cx + kk * 210 + (kk > 0 ? 1 : -1) * Math.min(a, 1) * 20 - sz / 2
-                y: (440 - sz) / 2 + 10
-                z: 10 - a
-                opacity: a < 0.5 ? 1 : Math.max(0, 1 - 0.32 * a)
+                readonly property real kk: modelData.k + flow.drag / 480
+                width: flow.sz(kk); height: width
+                x: flow.px(kk)
+                y: (440 - width) / 2
+                z: 10 - Math.abs(kk)
+                opacity: flow.op(kk)
                 pressScale: modelData.k === 0 ? 0.985 : 0.97
-                Behavior on x { enabled: !swipe.active; NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
                 Cover {
                     anchors.fill: parent
                     radius: modelData.k === 0 ? 26 : 18
                     source: modelData.t.art || ""
-                    // placeholder colours differ per cover so the flow reads even before art loads
-                    rgb: modelData.k === 0 ? (music.rgb || [200, 185, 163]) : [[122, 106, 140], [154, 138, 110], [0, 0, 0], [110, 138, 138], [140, 94, 78]][modelData.k + 2]
+                    rgb: modelData.k === 0 ? (music.rgb || [200, 185, 163]) : [[110, 138, 138], [140, 94, 78], [122, 106, 140]][(modelData.k - 1) % 3]
                     rgb2: modelData.k === 0 ? (music.rgb2 || [44, 40, 34]) : [30, 28, 26]
-                    opacity: modelData.k === 0 || modelData.t.art ? 1 : 0.7
                 }
-                onTapped: if (modelData.k > 0) room.next(); else if (modelData.k < 0) room.previous()
+                // a hairline label under the next song
+                T {
+                    visible: modelData.k === 1 && flow.drag === 0
+                    anchors.top: parent.bottom; anchors.topMargin: 14; width: parent.width
+                    text: "Next  ·  " + (modelData.t.title || ""); font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.55)
+                }
+                onTapped: if (modelData.k > 0) room.next()
             }
         }
         DragHandler {
             id: swipe
             target: null
             xAxis.enabled: true; yAxis.enabled: false
-            onTranslationChanged: flow.drag = Math.max(-260, Math.min(260, translation.x))
+            onTranslationChanged: flow.drag = Math.max(-480, Math.min(300, translation.x))
             onActiveChanged: if (!active) {
-                if (flow.drag < -110) room.next()
-                else if (flow.drag > 110) room.previous()
+                if (flow.drag < -120) room.next()
+                else if (flow.drag > 120) room.previous()
                 flow.drag = 0
             }
         }
-        Behavior on drag { enabled: !swipe.active; NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+        Behavior on drag { enabled: !swipe.active; NumberAnimation { duration: 320; easing.type: Easing.OutCubic } }
     }
 
-    // ---------------------------------------------------------------- title, seek, controls
+    // ---------------------------------------------------------------- title, seek, controls — all on the cover's left edge
     Column {
-        x: 106; y: 600; width: 900; spacing: 6
-        T { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: music.exists ? music.title : "Nothing playing"; font.pixelSize: 44; font.weight: Font.Medium }
-        T { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: music.exists ? music.artist : (music.error || "Play from Spotify, or AirPlay to Room"); font.pixelSize: 24; color: Theme.mut }
+        x: 120; y: 616; width: 960; spacing: 6
+        T { width: parent.width; text: music.exists ? music.title : "Nothing playing"; font.pixelSize: 42; font.weight: Font.Medium }
+        T { width: parent.width; text: music.exists ? music.artist : (music.error || "Play from Spotify, or AirPlay to Room"); font.pixelSize: 23; color: Qt.rgba(1, 1, 1, 0.65) }
     }
     Item {
         id: seek
-        x: 250; y: 728; width: 700; height: 44
+        x: 120; y: 724; width: 960; height: 40
         visible: music.exists && music.duration > 0
         readonly property real pos: Math.min(music.duration || 0, (music.position || 0) + (music.playing ? mp.now - music.at : 0))
         property real dragF: 0
         readonly property real f: sma.pressed ? dragF : (music.duration > 0 ? pos / music.duration : 0)
-        Rectangle { y: 8; width: parent.width; height: sma.pressed ? 8 : 4; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.16); Behavior on height { NumberAnimation { duration: 120 } } }
-        Rectangle { y: 8; width: parent.width * seek.f; height: sma.pressed ? 8 : 4; radius: height / 2; color: Theme.tx }
-        T { y: 24; color: Qt.rgba(1, 1, 1, 0.55); text: Theme.mmss(sma.pressed ? seek.dragF * music.duration : seek.pos); font.pixelSize: 16 }
-        T { y: 24; anchors.right: parent.right; text: Theme.mmss(music.duration || 0); font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.55) }
+        Rectangle { y: 6; width: parent.width; height: sma.pressed ? 8 : 4; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.18); Behavior on height { NumberAnimation { duration: 120 } } }
+        Rectangle { y: 6; width: parent.width * seek.f; height: sma.pressed ? 8 : 4; radius: height / 2; color: Theme.tx }
+        T { y: 20; text: Theme.mmss(sma.pressed ? seek.dragF * music.duration : seek.pos); font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.55) }
+        T { y: 20; anchors.right: parent.right; text: Theme.mmss(music.duration || 0); font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.55) }
         MouseArea {
             id: sma
             anchors.fill: parent; anchors.topMargin: -16; preventStealing: true
@@ -111,20 +135,20 @@ Item {
             onReleased: room.seek(seek.dragF * music.duration)
         }
     }
-    Item {
-        x: 390; y: 790; width: 420; height: 96
+    Row {
+        x: 120; y: 788; spacing: 20
         RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 72; icon: "prev"; iconSize: 24; onTapped: room.previous() }
-        RoundBtn { anchors.centerIn: parent; size: 96; iconSize: 30; icon: music.playing ? "pause" : "play"; fill: Theme.tx; ink: "black"; onTapped: room.playPause() }
-        RoundBtn { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; size: 72; icon: "next"; iconSize: 24; onTapped: room.next() }
+        RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 96; iconSize: 30; icon: music.playing ? "pause" : "play"; fill: Theme.tx; ink: "black"; onTapped: room.playPause() }
+        RoundBtn { anchors.verticalCenter: parent.verticalCenter; size: 72; icon: "next"; iconSize: 24; onTapped: room.next() }
     }
 
-    // the speaker — tap to move the music somewhere else
+    // the speaker — tap to move the music somewhere else (Spotify)
     Press {
-        x: 40; y: 814; width: 330; height: 56; pressScale: 0.97
+        x: 1080 - width; y: 804; width: Math.min(420, spk.implicitWidth + 98); height: 64; pressScale: 0.97
         enabled: mp.spotify
-        Rectangle { width: 52; height: 52; radius: 26; color: Qt.rgba(1, 1, 1, 0.08) }
-        Icon { x: 16; y: 16; name: "speaker"; size: 20 }
-        T { x: 66; y: 14; width: 260; text: music.device || "Choose a speaker"; font.pixelSize: 19; color: Theme.mut }
+        Rectangle { anchors.fill: parent; radius: 32; color: Qt.rgba(1, 1, 1, 0.09) }
+        Icon { x: 24; anchors.verticalCenter: parent.verticalCenter; name: "speaker"; size: 22 }
+        T { id: spk; x: 62; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 86; text: music.device || "Choose a speaker"; font.pixelSize: 19 }
         onTapped: { room.refreshDevices(); mp.picking = true }
     }
 

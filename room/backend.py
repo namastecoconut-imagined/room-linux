@@ -79,8 +79,6 @@ class Room(QObject):
             return m
         # whatever's actually playing: AirPlay while a phone or Mac is sending to Room, otherwise Spotify
         m = self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()
-        if not m.get("recent"):
-            m["recent"] = self._history[:2]
         m.setdefault("nextUp", [])
         if m.get("source") == "airplay":
             # AirPlay plays through the Surface itself, so the slider is the Surface's volume

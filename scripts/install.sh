@@ -7,7 +7,7 @@ echo "▸ Room → $HERE"
 
 echo "▸ System packages (asks for your password once)"
 sudo dnf install -y -q python3 python3-pip git xcb-util-cursor mesa-dri-drivers mesa-libEGL \
-     pipewire pipewire-pulseaudio libxkbcommon brightnessctl >/dev/null
+     pipewire pipewire-pulseaudio libxkbcommon >/dev/null
 
 echo "▸ Python environment"
 python3 -m venv "$HERE/.venv"

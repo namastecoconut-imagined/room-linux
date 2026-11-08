@@ -100,7 +100,7 @@ Item {
         readonly property real f: sma.pressed ? dragF : (music.duration > 0 ? pos / music.duration : 0)
         Rectangle { y: 8; width: parent.width; height: sma.pressed ? 8 : 4; radius: height / 2; color: Qt.rgba(1, 1, 1, 0.16); Behavior on height { NumberAnimation { duration: 120 } } }
         Rectangle { y: 8; width: parent.width * seek.f; height: sma.pressed ? 8 : 4; radius: height / 2; color: Theme.tx }
-        T { y: 24; color: Qt.rgba(1, 1, 1, 0.55); text: Theme.mmss(sma.pressed ? seek.dragF * music.duration : seek.pos); font.pixelSize: 16; color: Theme.dim }
+        T { y: 24; color: Qt.rgba(1, 1, 1, 0.55); text: Theme.mmss(sma.pressed ? seek.dragF * music.duration : seek.pos); font.pixelSize: 16 }
         T { y: 24; anchors.right: parent.right; text: Theme.mmss(music.duration || 0); font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.55) }
         MouseArea {
             id: sma

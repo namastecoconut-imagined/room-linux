@@ -63,3 +63,9 @@ The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.v
 Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"listen": true, "wakeThreshold": 0.4,
 "bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "loudness": 1.0, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
 Room's voice never plays quieter than voiceMinLevel of the speakers (the output is lifted while it talks, then put back).
+
+## Burn-in care
+
+The Surface's LCD is old, so: everything drifts very slowly round a small loop (±6 px in use, ±28 px on standby), and
+once a night (`"refreshAt": "04:00"`, `""` to turn it off) while on standby a minute of slow full-screen colour washes
+exercises every pixel. A tap stops it.

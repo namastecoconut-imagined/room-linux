@@ -223,6 +223,7 @@ class Room(QObject):
         return {"standbySec": day, "nightStandbySec": int(c.get("nightStandbySec", day)),
                 "idleReturnSec": int(c.get("idleReturnSec", 60)),
                 "menuStandbySec": int(c.get("menuStandbySec", 180)),
+                "refreshAt": c.get("refreshAt", "04:00") or "",
                 "nightStart": int(c.get("nightStart", 23)), "nightEnd": int(c.get("nightEnd", 7))}
 
     input_at = 0.0           # the last touch, click, scroll, mouse move or key (set by the app's event filter)

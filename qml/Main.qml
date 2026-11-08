@@ -65,6 +65,19 @@ Window {
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
     function enterStandby() { screen = "home"; standbyOn = true }
 
+    // burn-in care: the slow drift (see the stage) and the nightly refresh
+    property real orbitAmp: standbyOn ? 28 : 6
+    Behavior on orbitAmp { NumberAnimation { duration: 6000; easing.type: Easing.InOutSine } }
+    readonly property real shiftX: orbitAmp * Math.sin(2 * Math.PI * now / 1260)
+    readonly property real shiftY: orbitAmp * Math.sin(2 * Math.PI * now / 1740 + 1)
+    property string refreshedOn: ""
+    onNowChanged: {
+        var at = timing.refreshAt
+        if (!at || !standbyOn || alerting || talking || refreshRun.running) return
+        var d = new Date(now * 1000), hm = Theme.two(d.getHours()) + ":" + Theme.two(d.getMinutes()), day = d.toDateString()
+        if (hm === at && refreshedOn !== day) { refreshedOn = day; refreshRun.start() }
+    }
+
     Timer { interval: 250; running: true; repeat: true; onTriggered: win.now = Date.now() / 1000 }
     // the once-a-second tick
     Timer {
@@ -93,6 +106,9 @@ Window {
         width: Theme.stageW; height: Theme.stageH
         anchors.centerIn: parent
         scale: Math.min(win.width / Theme.stageW, win.height / Theme.stageH)
+        // burn-in care (an old LCD): everything drifts very slowly round a small loop, so nothing — the clock, a
+        // label, a hairline — sits on the same pixels for hours. ±6 px while in use (unnoticeable), ±28 px on standby.
+        transform: Translate { x: win.shiftX; y: win.shiftY }
 
         Home {
             now: win.now
@@ -176,6 +192,25 @@ Window {
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
+        // burn-in care: once a night (refreshAt, 04:00), while on standby, a minute of slow full-screen colour washes
+        // exercises every pixel and clears any image that's started to stick
+        Rectangle {
+            id: refresher
+            x: -100; y: -100; width: Theme.stageW + 200; height: Theme.stageH + 200
+            visible: refreshRun.running
+            color: "black"
+            SequentialAnimation {
+                id: refreshRun
+                ColorAnimation { target: refresher; property: "color"; to: "#ffffff"; duration: 8000 }
+                ColorAnimation { target: refresher; property: "color"; to: "#ff0000"; duration: 8000 }
+                ColorAnimation { target: refresher; property: "color"; to: "#00ff00"; duration: 8000 }
+                ColorAnimation { target: refresher; property: "color"; to: "#0000ff"; duration: 8000 }
+                ColorAnimation { target: refresher; property: "color"; to: "#ffffff"; duration: 8000 }
+                ColorAnimation { target: refresher; property: "color"; to: "#808080"; duration: 8000 }
+                ColorAnimation { target: refresher; property: "color"; to: "#000000"; duration: 12000 }
+            }
+            MouseArea { anchors.fill: parent; enabled: refreshRun.running; onClicked: { refreshRun.stop(); win.wake() } }
+        }
     }
 
     // any touch while awake counts as activity (it never blocks the touch itself)

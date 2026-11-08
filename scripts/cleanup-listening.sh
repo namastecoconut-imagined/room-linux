@@ -9,6 +9,14 @@ rm -f ~/.config/systemd/user/room-whisper.service ~/.local/bin/room-whisper-serv
 systemctl --user daemon-reload
 rm -rf ~/.local/share/room/whisper ~/.local/src/whisper.cpp
 
+echo "▸ Removing the listening packages from Room's voice Python"
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+export PATH="$HOME/.local/bin:$PATH"
+if [ -x "$HERE/voice/.venv/bin/python" ] && command -v uv >/dev/null; then
+  uv pip uninstall -q --python "$HERE/voice/.venv/bin/python" openwakeword webrtc-noise-gain pvporcupine scikit-learn \
+    websockets scipy tqdm 2>/dev/null || true
+fi
+
 echo "▸ Removing the wake-word models and Room's mic leftovers"
 rm -rf ~/.local/share/room/voice/oww ~/.local/share/room/voice/cues
 

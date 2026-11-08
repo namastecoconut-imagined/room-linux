@@ -75,6 +75,13 @@ def tone(path, notes, length=0.16, vol=0.22, rate=24000):
     return path
 
 
+def louder(x: np.ndarray) -> np.ndarray:
+    """Room's voice, made louder for the Surface's small speakers: gain (×2.5 by default, 'loudness' scales it) with a
+    soft limiter, so peaks round off instead of crackling. Float in, float out (−1…1)."""
+    g = 2.5 * float(CFG.get("loudness", 1.0))
+    return np.tanh(x * g) / np.tanh(g) if g > 1 else x * g
+
+
 def mic_target():
     """The plain mic. The echo-cancelled one (room-ec-source) only when asked for with "echoCancel": true — on the
     Surface its sound came out distorted (clipping), so it stays off until it's tuned."""
@@ -139,10 +146,10 @@ class Speaker:
         with self.lock:
             if g != self.gen:
                 return True
-            self.proc = subprocess.Popen(["pw-play", "--raw", "--rate", "24000", "--channels", "1", "--format", "s16",
-                                          "--volume", str(float(CFG.get("loudness", 1.0))), "-"],
+            self.proc = subprocess.Popen(["pw-play", "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         first = True
+        odd = b""
         try:
             for chunk in r.iter_content(chunk_size=4800):
                 if g != self.gen:
@@ -150,7 +157,15 @@ class Speaker:
                 if chunk:
                     if first:
                         emit(ev="speaking"); first = False
-                    self.proc.stdin.write(chunk)
+                    chunk = odd + chunk
+                    cut = len(chunk) // 2 * 2
+                    chunk, odd = chunk[:cut], chunk[cut:]
+                    x = np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768
+                    self.proc.stdin.write((louder(x) * 32000).astype("<i2").tobytes())
+        except Exception as e:
+            if g == self.gen:
+                log("aura play:", repr(e))
+        try:
             self.proc.stdin.close()
         except Exception:
             pass
@@ -174,7 +189,7 @@ class Speaker:
                     # short "Okay." isn't louder than a long answer)
                     rms = float(np.sqrt(np.mean(a ** 2))) if len(a) else 0.0
                     if rms > 0:
-                        a = np.clip(a * (0.12 / rms) * float(CFG.get("loudness", 1.0)), -1, 1)
+                        a = louder(np.clip(a * (0.1 / rms), -1, 1))
                     sf.write(f.name, a, sr); q.put(f.name)
                 except Exception as e:
                     log("tts:", e)

@@ -159,24 +159,51 @@ class Assistant(QObject):
         return [x for x in w if x]
 
     # ---------------------------------------------------------------- music down while talking
+    def _music_streams(self):
+        """PipeWire playback streams other than Room's own voice and tones (pw-play) — AirPlay, a browser…"""
+        out = []
+        try:
+            nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]")
+            for n in nodes:
+                props = ((n.get("info") or {}).get("props") or {})
+                if props.get("media.class") != "Stream/Output/Audio":
+                    continue
+                app = (props.get("application.name") or props.get("node.name") or "").lower()
+                if "pw-play" in app or "pw-cat" in app:
+                    continue
+                out.append(n["id"])
+        except Exception:
+            pass
+        return out
+
     def _duck(self, on: bool):
+        """Music down to 30 % while you talk to Room — just the music streams, never the speaker as a whole (turning
+        the whole speaker down also made Room's own answer quiet)."""
         try:
             if on and self._ducked is None:
-                out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2).stdout
-                v = float(out.split()[1])
+                saved = {}
+                for sid in self._music_streams():
+                    out = subprocess.run(["wpctl", "get-volume", str(sid)], capture_output=True, text=True, timeout=2).stdout
+                    try:
+                        v = float(out.split()[1])
+                    except Exception:
+                        continue
+                    saved[sid] = v
+                    subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.3:.2f}"], timeout=2)
                 sp = self.room.spotify.snapshot()
-                spv = sp.get("volume") if sp.get("playing") and sp.get("canVolume") else None
-                self._ducked = (v, spv)
-                subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{v * 0.3:.2f}"], timeout=2)
+                spv = sp.get("volume") if sp.get("playing") and sp.get("canVolume") and not self.room.airplay.showing else None
                 if spv:
                     self.room.spotify.set_volume(max(5, int(spv * 0.3)))
+                self._ducked = (saved, spv)
             elif not on and self._ducked is not None:
-                v, spv = self._ducked
+                saved, spv = self._ducked
                 self._ducked = None
-                subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{v:.2f}"], timeout=2)
+                for sid, v in saved.items():
+                    subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.2f}"], timeout=2)
                 if spv:
                     self.room.spotify.set_volume(int(spv))
-        except Exception:
+        except Exception as e:
+            print(f"[room] duck: {e!r}")
             self._ducked = None
 
     # ---------------------------------------------------------------- doing it
@@ -430,10 +457,7 @@ class Assistant(QObject):
         if d == "volume":
             v = m.get("volume") if m.get("volume") is not None else 50
             v = it["to"] if "to" in it else max(0, min(100, v + it["by"]))
-            if self._ducked:
-                # set what it comes back up to, not the turned-down level
-                vol, spv = self._ducked
-                self._ducked = (v / 100 if r.airplay.showing else vol, v if spv else None)
+            self._duck(False)                     # back to normal first, so the new level is the one that stays
             r.setVolume(int(v))
             return "", False
         if d == "play":

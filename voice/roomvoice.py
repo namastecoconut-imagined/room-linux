@@ -58,7 +58,7 @@ class Voicer:
         self.pk = np.concatenate([bb / aa[0], aa / aa[0]])[None, :]
         self.z1 = np.zeros((self.hp.shape[0], 2)); self.z2 = np.zeros((1, 2))
         self.level = 0.0
-        self.drive = 3.0 * float(CFG.get("loudness", 1.0))
+        self.drive = 1.6 * float(CFG.get("loudness", 1.0))
 
     def __call__(self, x: np.ndarray) -> np.ndarray:
         from scipy.signal import sosfilt
@@ -69,8 +69,9 @@ class Voicer:
         r = float(np.sqrt(np.mean(y ** 2)))
         if r > 0.004:                                       # speech, not a pause: follow its loudness
             self.level = r if self.level == 0 else self.level + (r - self.level) * (0.5 if r > self.level else 0.1)
-        g = float(np.clip(0.22 / max(self.level, 1e-4), 1.0, 12.0)) * self.drive / 3.0
-        return np.tanh(y * g * 3.0) / np.tanh(3.0) * 0.98
+        g = float(np.clip(0.2 / max(self.level, 1e-4), 1.0, 8.0))
+        d = self.drive
+        return np.tanh(y * g * d) / np.tanh(d) * 0.95          # gentle: clean, never clipped
 
 
 def _sinks():
@@ -123,6 +124,28 @@ def surface_target():
         return ["--target", raw] if CFG.get("voiceDirect") is not False and raw else []
     except Exception:
         return []
+
+
+def speakers_full():
+    """The Surface's speakers themselves at full — PipeWire's level for them and the chip's own Master/Speaker
+    controls. The volume slider works on the output in front of them (the speaker tuning, or a Bluetooth speaker), so
+    a lowered level here (it sat around 20 %) only made Room's voice quiet, and turning the voice up then just
+    distorted it. Checked before every answer (PipeWire can put a remembered level back when outputs change)."""
+    try:
+        for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
+            props = (n.get("info") or {}).get("props") or {}
+            name = props.get("node.name", "")
+            if props.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.pci") and "hdmi" not in name:
+                out = subprocess.run(["wpctl", "get-volume", str(n["id"])], capture_output=True, text=True, timeout=2).stdout
+                if "1.00" not in out or "MUTED" in out:
+                    subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=2)
+                    subprocess.run(["wpctl", "set-mute", str(n["id"]), "0"], timeout=2)
+                    log(f"the Surface's speakers were at {out.strip()} — set to full")
+        for c in ("Master", "Speaker"):
+            subprocess.run(["amixer", "-q", "-c", "0", "sset", c, "100%", "unmute"], timeout=2,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        log("speakers:", repr(e))
 
 
 class Level:
@@ -210,6 +233,7 @@ class Speaker:
         threading.Thread(target=self._say, args=(text, g, done), daemon=True).start()
 
     def _say(self, text, g, done):
+        speakers_full()
         try:
             if DG_KEY and self._deepgram(text, g):
                 self.busy = False
@@ -333,20 +357,7 @@ def main():
         emit(ev="error", msg="pw-play is missing (pipewire-utils)")
         return
     speaker = Speaker()
-    # the Surface's speakers themselves at full: the volume slider works on the output in front of them (the speaker
-    # tuning, or a Bluetooth speaker), so a lowered level here only ever made Room's voice quiet
-    try:
-        for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
-            props = (n.get("info") or {}).get("props") or {}
-            name = props.get("node.name", "")
-            if props.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.pci") and "hdmi" not in name:
-                out = subprocess.run(["wpctl", "get-volume", str(n["id"])], capture_output=True, text=True, timeout=2).stdout
-                if "1.00" not in out or "MUTED" in out:
-                    subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=2)
-                    subprocess.run(["wpctl", "set-mute", str(n["id"]), "0"], timeout=2)
-                    log(f"the Surface's speakers were at {out.strip()} — set to full")
-    except Exception as e:
-        log("speakers:", repr(e))
+    speakers_full()
     ears = None
     if CFG.get("listen") is not False:
         try:

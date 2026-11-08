@@ -182,8 +182,23 @@ class Ears:
     # pause detection and whisper all get speech at a useful level; `ref` is a slowly-falling peak of what's heard.
     ref = 0.05
     floor = 0.002
+    target_set = bool(CFG.get("mic"))              # a mic chosen in config is left alone
     def even(self, pcm: np.ndarray) -> np.ndarray:
         x = pcm.astype(np.float32) / 32768
+        # the mic can sit far off zero (a DC offset) — take it out so loudness means sound
+        self.dc = getattr(self, "dc", float(np.mean(x))) * 0.95 + float(np.mean(x)) * 0.05
+        x = x - self.dc
+        # clipping: the Surface's mic input is set too hot — turn it down a step (PipeWire's input volume) until it
+        # stops, rather than hand distorted sound to the wake word and whisper
+        clipped = float(np.mean(np.abs(x) > 0.97))
+        self.clips = getattr(self, "clips", 0) + (1 if clipped > 0.01 else 0)
+        self.chunks = getattr(self, "chunks", 0) + 1
+        if self.chunks >= 25:                       # every 2 s
+            if self.clips >= 5 and not self.target_set:
+                subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", "0.1-"], timeout=3)
+                out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@"], capture_output=True, text=True, timeout=3).stdout.strip()
+                log(f"mic was clipping — input turned down ({out})")
+            self.clips = 0; self.chunks = 0
         pk = float(np.max(np.abs(x))) if len(x) else 0.0
         self.ref = max(pk, self.ref * 0.998, 0.004)
         g = float(np.clip(0.35 / self.ref, 1.0, float(CFG.get("maxGain", 10))))
@@ -197,7 +212,7 @@ class Ears:
         self.clock = getattr(self, "clock", 0.0) + len(raw) / RATE
         now = self.clock
         pcm = self.even(raw)
-        level = float(np.sqrt(np.mean((raw.astype(np.float32) / 32768) ** 2)))
+        level = float(np.sqrt(np.mean((pcm.astype(np.float32) / 32768) ** 2))) / max(self.gain, 1.0)
         self.level_n = getattr(self, "level_n", 0) + 1
         if self.level_n % 2 == 0:                     # ~6 a second is plenty for the screen
             emit(ev="level", v=round(level, 5))

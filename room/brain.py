@@ -5,8 +5,13 @@ even parsed. Needs "anthropicKey" in config.json; without it (or offline) Room u
 
 Runs on worker threads; every callback is handed back to Qt's main thread by the caller (assistant.py).
 """
+import contextlib
 import datetime as dt
+import http.client
+import io
 import json
+import ssl
+import urllib.parse
 import os
 import re
 import threading
@@ -19,10 +24,84 @@ from .config import STATE_DIR
 API = os.environ.get("ROOM_CLAUDE_URL", "https://api.anthropic.com/v1/messages")
 
 
+class _Pool:
+    """Kept-alive HTTPS connections to Claude. From India a new connection (DNS + TLS) costs ~0.5–0.8 s, so one is
+    opened while the person is still talking (warm) and reused for the answer."""
+
+    def __init__(self, url):
+        u = urllib.parse.urlsplit(url)
+        self.host, self.path, self.https = u.hostname, u.path, u.scheme == "https"
+        self.port = u.port
+        self.free: list = []
+        self.lock = threading.Lock()
+
+    def _new(self, timeout):
+        cls = http.client.HTTPSConnection if self.https else http.client.HTTPConnection
+        return cls(self.host, self.port, timeout=timeout, **({"context": ssl.create_default_context()} if self.https else {}))
+
+    def take(self, timeout):
+        with self.lock:
+            while self.free:
+                c, at = self.free.pop()
+                if time.time() - at < 50:
+                    c.timeout = timeout
+                    if c.sock:
+                        c.sock.settimeout(timeout)
+                    return c, True
+                c.close()
+        return self._new(timeout), False
+
+    def give(self, c):
+        with self.lock:
+            self.free.append((c, time.time()))
+            del self.free[:-2]
+
+    def warm(self):
+        with self.lock:
+            if any(time.time() - at < 40 for _, at in self.free):
+                return
+        c = self._new(5)
+        try:
+            c.connect()
+            self.give(c)
+        except Exception:
+            c.close()
+
+    @contextlib.contextmanager
+    def post(self, body: dict, key: str, timeout=12):
+        data = json.dumps(body).encode()
+        hdrs = {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+        for attempt in range(2):
+            c, reused = self.take(timeout)
+            try:
+                c.request("POST", self.path, body=data, headers=hdrs)
+                r = c.getresponse()
+                break
+            except (http.client.RemoteDisconnected, BrokenPipeError, ConnectionResetError, http.client.CannotSendRequest):
+                c.close()
+                if not reused or attempt:
+                    raise
+        if r.status != 200:
+            err = r.read()
+            c.close()
+            raise urllib.error.HTTPError(API, r.status, r.reason, r.headers, io.BytesIO(err))
+        try:
+            yield r
+            r.read()                         # drain, so the connection can be reused
+            if r.will_close:
+                c.close()
+            else:
+                self.give(c)
+        except BaseException:
+            c.close()
+            raise
+
+
+POOL = _Pool(API)
+
+
 def _post(body: dict, key: str, timeout=12):
-    req = urllib.request.Request(API, data=json.dumps(body).encode(), method="POST", headers={
-        "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
-    return urllib.request.urlopen(req, timeout=timeout)
+    return POOL.post(body, key, timeout)
 
 
 class Memory:
@@ -109,12 +188,7 @@ class Brain:
 
     def warm(self):
         """Open the connection early (DNS + TLS) while the person is still talking."""
-        def go():
-            try:
-                urllib.request.urlopen(urllib.request.Request("https://api.anthropic.com/v1/models", method="HEAD"), timeout=5)
-            except Exception:
-                pass
-        threading.Thread(target=go, daemon=True).start()
+        threading.Thread(target=POOL.warm, daemon=True).start()
 
     # ---------------------------------------------------------------- the prompt (the phone's, for the living room)
     def system(self, has_computer: bool) -> str:
@@ -131,7 +205,9 @@ Anything unsaved might ask to be saved." with follow_up true, and do it when the
 or Google Assistant, but warmer and smarter. You control their lights and Spotify, and you can also just talk: \
 answer questions, explain things, help them think, chat. They speak; speech recognition turns it into text, which \
 sometimes mishears (Indian-English accents; names and places get mangled most): read odd words as a mishearing and \
-answer the sensible question — never ask about a strange word that's obviously a mishearing. \
+answer the sensible question — never ask about a strange word that's obviously a mishearing. Go by the sound: \
+"standard time of five minutes" is "set a timer for five minutes"; "alarm" can come out as "a lot" or "llama". When a \
+sound-alike reading is a clear command, just do it — don't ask. \
 Work out what they mean and call control_home exactly once.
 
 Talking:
@@ -287,6 +363,7 @@ action (closest name from the speaker list).
                             p = partial_string("say", js)
                             if p and p[1]:
                                 said = True
+                                print(f"[room] claude: spoken line ready in {int((time.time() - t0) * 1000)} ms")
                                 on_say(p[0])
                     elif ev.get("type") == "message_stop":
                         break

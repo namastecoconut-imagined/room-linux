@@ -46,9 +46,23 @@ PV_KEY = CFG.get("picovoiceKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 # with Deepgram: a lenient local trigger, then Deepgram checks it really was "Alexa" before Room reacts
 CANDIDATE = float(CFG.get("wakeCandidate", 0.12))
+WAKE_RE = re.compile(r"\b(alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b", re.I)
 CONFIDENT = float(CFG.get("wakeConfident", 0.5))          # above this, wake straight away without asking Deepgram
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
 DG_SPEAK = CFG.get("deepgramSpeakURL", "https://api.deepgram.com/v1/speak")
+# one kept-alive connection for the voice: from India a fresh TLS handshake to Deepgram costs ~0.5 s per answer
+HTTP = requests.Session()
+
+
+def warm_speech():
+    """Open (or keep open) the connection to Deepgram's voice while the person is still talking."""
+    def go():
+        try:
+            HTTP.head(DG_SPEAK.rsplit("/v1/", 1)[0] + "/", timeout=4)
+        except Exception:
+            pass
+    if DG_KEY:
+        threading.Thread(target=go, daemon=True).start()
 WHISPER = CFG.get("whisperURL", "http://127.0.0.1:8910/inference")
 DEBUG = os.environ.get("ROOM_VOICE_DEBUG") == "1"        # a line a second: mic level, gain, wake-word score
 
@@ -136,7 +150,8 @@ class Speaker:
         """Aura, streamed: playback starts with the first bytes. False if it couldn't be reached (→ Kokoro)."""
         self.busy = True
         try:
-            r = requests.post(DG_SPEAK,
+            t0 = time.time()
+            r = HTTP.post(DG_SPEAK,
                               params={"model": DG_VOICE, "encoding": "linear16", "sample_rate": 24000, "container": "none"},
                               headers={"Authorization": f"Token {DG_KEY}", "Content-Type": "application/json"},
                               json={"text": text}, stream=True, timeout=(3, 15))
@@ -160,6 +175,7 @@ class Speaker:
                 if chunk:
                     if first:
                         emit(ev="speaking"); first = False
+                        log(f"aura: first sound in {time.time() - t0:.2f} s")
                     chunk = odd + chunk
                     cut = len(chunk) // 2 * 2
                     chunk, odd = chunk[:cut], chunk[cut:]
@@ -266,9 +282,9 @@ class Wake:
 
 def dg_url(words):
     params = [("model", CFG.get("deepgramModel", "nova-3")), ("language", "en"), ("encoding", "linear16"),
-              ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"), ("smart_format", "true"),
-              ("endpointing", str(CFG.get("endpointMs", 400))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
-    params += [("keyterm", w) for w in (["Alexa"] + list(words))[:50]]
+              ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"),
+              ("endpointing", str(CFG.get("endpointMs", 300))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
+    params += [("keyterm", w) for w in (["Alexa", "set a timer", "timer", "minutes", "lights", "living room"] + list(words))[:50]]
     from urllib.parse import urlencode
     return DG_LISTEN + "?" + urlencode(params)
 
@@ -444,6 +460,8 @@ class Ears:
         self.last_wake = -10.0
         self.words: list[str] = []
         self.listen_after_speaking = False
+        self.barge = False
+        self.need_wake_word = False
         self.cues = os.path.join(DATA, "cues"); os.makedirs(self.cues, exist_ok=True)
         # the phone's own chimes (listen · done · miss); generated tones only if they're missing
         here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cues")
@@ -460,13 +478,15 @@ class Ears:
         self.confirming = True
         self.confirmed = False
         self.confirm_started = self.clock
+        self.barge = self.speaker.busy           # Room is talking: its own voice is in what's heard
+        self.need_wake_word = self.barge         # …so only what comes after "Alexa" counts
         self.dg = Deepgram(self.words, self._confirm_partial, self._dg_done)
         for c in self.ring:
             self.dg.push(c)
 
     def _confirm_partial(self, text):
         if self.confirming and not self.confirmed:
-            first = " ".join(text.split()[:4])
+            first = text if self.barge else " ".join(text.split()[:4])
             if re.search(r"\b(alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b", first, re.I):
                 self.confirmed = True
                 self.confirming = False
@@ -474,14 +494,17 @@ class Ears:
                 emit(ev="wake")
                 self.begin_listening(keep=True)
             return
+        if getattr(self, "need_wake_word", False) and not WAKE_RE.search(text):
+            return                                  # still only the room / Room's own voice before "Alexa"
         cmd = self.strip_wake(text)
         if cmd:
             emit(ev="partial", text=cmd)
 
     @staticmethod
     def strip_wake(text):
-        m = re.search(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b[\s,.!?]*", text, re.I)
-        return (text[m.end():] if m else text).strip()
+        """What was said after the (last) "Alexa" — anything before it is the room, or Room's own voice."""
+        ms = list(re.finditer(r"\b(?:(?:hey|okay|ok|hi)\s+)?(?:alexa|alexis|alexia|alexi|lexa|elexa|alaxa)\b[\s,.!?]*", text, re.I))
+        return (text[ms[-1].end():] if ms else text).strip()
 
     def chime(self, name):
         f = self.chimes.get(name)
@@ -502,6 +525,7 @@ class Ears:
         self.vad.reset_states()
         self.confirming = False
         if not keep:
+            self.need_wake_word = False
             if self.dg:
                 self.dg.done = True; self.dg.close()
             self.dg = None
@@ -511,6 +535,7 @@ class Ears:
                 if preroll:                          # "Alexa, turn off…" in one breath: the start is already said
                     for c in self.ring[-12:]:
                         self.dg.push(c)
+        warm_speech()
         emit(ev="listening", follow=follow)
 
     def _dg_done(self, text):
@@ -521,6 +546,8 @@ class Ears:
             self.confirming = False
             self.dg = None
             return
+        if getattr(self, "need_wake_word", False) and text and not WAKE_RE.search(text):
+            text = ""                               # nothing after a wake word — it was only the room talking
         cmd = self.strip_wake(text)
         if not cmd and text and self.state == "listening" and not getattr(dg, "failed", False):
             # just "Alexa" — now listen for what comes next
@@ -611,7 +638,7 @@ class Ears:
             log(f"wake: near miss {score:.2f}")
         if DG_KEY and not self.wake.pv:
             # lenient local trigger → Deepgram decides
-            if score >= CONFIDENT and self.state == "idle" and now - self.last_wake > 1.5:
+            if score >= CONFIDENT and self.state == "idle" and not self.speaker.busy and now - self.last_wake > 1.5:
                 # clearly "Alexa" — wake at once (and if a check was under way, it becomes the command stream)
                 self.last_wake = now
                 self.wake.reset()
@@ -623,7 +650,7 @@ class Ears:
                 else:
                     self.begin_listening(preroll=True)
                 return
-            if (score >= CANDIDATE and not self.confirming and self.state in ("idle",) and now - self.last_candidate > 2):
+            if (score >= (CANDIDATE * 2 if self.speaker.busy else CANDIDATE) and not self.confirming and self.state in ("idle",) and now - self.last_candidate > 2):
                 self.last_candidate = now
                 self.start_confirm()
                 return

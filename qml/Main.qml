@@ -21,9 +21,14 @@ Window {
     title: "Room"
 
     property real now: Date.now() / 1000
-    // Esc: leave full screen (to reach the desktop); F11: back to full screen
-    Shortcut { sequence: "Esc"; onActivated: win.visibility = Window.Windowed }
-    Shortcut { sequence: "F11"; onActivated: win.visibility = win.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
+    // F11: leave full screen to reach the desktop (and back again)
+    // a panel: always full screen (if something knocks it into a window, it goes back within a few seconds)
+    Timer {
+        interval: 4000; repeat: true; running: !windowed && !win.keptWindowed
+        onTriggered: if (win.visibility !== Window.FullScreen) win.visibility = Window.FullScreen
+    }
+    property bool keptWindowed: false
+    Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
     property string screen: ["music", "room", "clock", "weather", "reminders", "assistant"].indexOf(startScreen) >= 0 ? startScreen : "home"

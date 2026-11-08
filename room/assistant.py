@@ -131,6 +131,8 @@ class Assistant(QObject):
     # ---------------------------------------------------------------- what it hears
     def _event(self, e: dict):
         ev = e.get("ev")
+        if ev not in ("level",):
+            print(f"[room] voice {ev}{(' ' + repr(e.get('text'))) if e.get('text') else ''} · stage {self.stage}", flush=True)
         if ev == "level":
             self.level = float(e.get("v", 0)); self.levelChanged.emit(); return      # raw RMS 0…1
         if ev == "ready":
@@ -385,7 +387,9 @@ class Assistant(QObject):
         r, th = self.room, self.room._things
         now = dt.datetime.now()
         w = r.weather or {}
-        wx = {k: w.get(k) for k in ("t", "feels", "hum", "d", "hi", "lo", "aqi", "hours", "days", "sunrise", "sunset") if w.get(k) is not None}
+        wx = {k: w.get(k) for k in ("t", "feels", "hum", "d", "hi", "lo", "aqi", "sunrise", "sunset") if w.get(k) is not None}
+        wx["next_hours"] = [f"{h['h']}:00 {h['t']}° {h['d']}{' rain ' + str(h['p']) + '%' if h.get('p', 0) >= 30 else ''}" for h in (w.get("hours") or [])[:12]]
+        wx["next_days"] = [f"{d['name']} {d['hi']}°/{d['lo']}° {d['d']}{' rain ' + str(d['p']) + '%' if d.get('p', 0) >= 30 else ''}" for d in (w.get("days") or [])[:3]]
         snap = {"now": now.strftime("%A %-d %b, %-I:%M %p"), "here": r.lights.here or "", "place": "Bangalore",
                 "lights": r.lights.lamps_now(), "weather": wx,
                 "timers": [{"label": t["label"], "left_seconds": int(t["left"]), "paused": t["paused"]} for t in th.snapshot()["timers"]],

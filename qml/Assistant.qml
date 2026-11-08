@@ -20,9 +20,11 @@ Item {
     readonly property string stage: !active ? "" : st === "off" ? "off" : (v.stage || "idle")
     readonly property string heard: v.heard || ""
     readonly property string answer: { var sp = v.reply || "", ln = v.line || ""; return sp.length > ln.length + 12 ? sp : ln }
-    readonly property string card: stage === "done" && ["weather", "forecast", "air", "timer", "music", "schedule", "alarm"].indexOf(v.card) >= 0 ? v.card : ""
+    readonly property string card: mode === "done" && ["weather", "forecast", "air", "timer", "music", "schedule", "alarm"].indexOf(v.card) >= 0 ? v.card : ""
+    // idle after an answer keeps the answer layout while the screen closes (no snapping back to the middle)
     readonly property string mode: stage === "wake" || stage === "follow" || stage === "heard" ? "listen"
-                                 : stage === "think" ? "think" : stage === "done" ? "done" : "miss"
+                                 : stage === "think" ? "think" : stage === "done" ? "done"
+                                 : stage === "idle" ? ((v.reply || v.line) ? "done" : "gone") : stage === "" ? "gone" : "miss"
 
     // the phone's "day" colours: warm yellow, sky blue, mint and coral
     readonly property var c0: [255, 200, 90]
@@ -59,7 +61,7 @@ Item {
     ShaderEffect {
         id: win
         x: vv.px(vv.winR[0]); y: vv.py(vv.winR[1]); width: vv.winR[2] * vv.s; height: vv.winR[3] * vv.s
-        opacity: vv.stage === "" || vv.stage === "idle" ? 0 : vv.mode === "miss" ? 0.35 : 1
+        opacity: vv.mode === "gone" ? 0 : vv.mode === "miss" ? 0.35 : 1
         Behavior on x { NumberAnimation { duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.3, 0, 0.2, 1, 1, 1] } }
         Behavior on y { NumberAnimation { duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.3, 0, 0.2, 1, 1, 1] } }
         Behavior on width { NumberAnimation { duration: 900; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.3, 0, 0.2, 1, 1, 1] } }
@@ -96,8 +98,8 @@ Item {
         id: lab
         x: 0; width: vv.width; y: vv.py(66)
         horizontalAlignment: Text.AlignHCenter
-        text: (vv.stage === "wake" || vv.stage === "heard" ? "listening" : vv.stage === "follow" ? "go on" : vv.stage === "think" ? "thinking"
-               : vv.stage === "miss" ? "didn’t catch that" : vv.stage === "off" ? "voice is off" : "").toUpperCase()
+        text: (vv.mode === "listen" ? (vv.stage === "follow" ? "go on" : "listening") : vv.mode === "think" ? "thinking"
+               : vv.stage === "off" ? "voice is off" : vv.mode === "miss" ? "didn’t catch that" : "").toUpperCase()
         color: vv.mode === "miss" || vv.stage === "off" ? Qt.rgba(200 / 255, 196 / 255, 192 / 255, 0.7) : Qt.rgba(1, 226 / 255, 196 / 255, 0.85)
         font.family: Theme.face; font.pixelSize: 24; font.weight: Font.Medium; font.letterSpacing: 5.3
         renderType: Text.QtRendering
@@ -116,7 +118,7 @@ Item {
         x: vv.px(124); y: vv.py(98); width: 320 * vv.s; height: 160 * vv.s
         size: vv.heard.length > 48 ? 53 : 67
         color: vv.mode === "miss" ? Qt.rgba(1, 240 / 255, 225 / 255, 0.6) : Qt.rgba(1, 248 / 255, 240 / 255, 1)
-        opacity: vv.mode === "done" ? 0 : vv.mode === "think" ? 0.7 : 1
+        opacity: vv.mode === "done" || vv.mode === "gone" ? 0 : vv.mode === "think" ? 0.7 : 1
         Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.OutCubic } }
     }
     // the phone's hint under the window, only when it has just woken
@@ -180,8 +182,12 @@ Item {
     }
 
     // ---------------------------------------------------------------- what's said, as it changes
+    property string lastStage: ""
     function sync() {
         if (!active) return
+        // a new turn starts clean: nothing left over from the last question
+        if ((stage === "wake" || stage === "follow") && lastStage !== stage) words.clear()
+        lastStage = stage
         if (mode === "listen" || mode === "think" || mode === "miss") {
             if (heard) words.say(heard)
             else {

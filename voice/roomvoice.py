@@ -653,6 +653,15 @@ class Ears:
         # the mic can sit far off zero (a DC offset) — take it out so loudness means sound
         self.dc = getattr(self, "dc", float(np.mean(x))) * 0.95 + float(np.mean(x)) * 0.05
         x = x - self.dc
+        # cut the rumble under ~110 Hz: on the Surface it's the loudest thing the mics pick up (more than a voice from
+        # across the room), and the level evening-out was turning the voice down to keep the rumble in check
+        if not hasattr(self, "hp"):
+            from scipy.signal import butter, sosfilt, sosfilt_zi
+            self.hp = butter(2, float(CFG.get("highPassHz", 110)), "highpass", fs=RATE, output="sos")
+            self.hp_z = sosfilt_zi(self.hp) * 0.0
+            self._sosfilt = sosfilt
+        x, self.hp_z = self._sosfilt(self.hp, x, zi=self.hp_z)
+        x = x.astype(np.float32)
         # an even voice level, inside Room only (the system's mic slider is never touched): speech is brought to about
         # −20 dB whether you're at the panel or across the room. The boost drops at once when you're close and loud (so
         # nothing distorts), creeps back up slowly, and only moves on speech — silence never gets turned up into hiss.

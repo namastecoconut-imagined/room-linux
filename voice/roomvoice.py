@@ -50,6 +50,67 @@ def louder(x: np.ndarray) -> np.ndarray:
     return np.tanh(x * g) / np.tanh(g) if g > 1 else x * g
 
 
+class Level:
+    """Room's voice never comes out quieter than voiceMinLevel (75 % by default) of the speakers, whatever the volume
+    slider is at — like a smart speaker, whose voice has a floor of its own. While Room talks, the output is lifted to
+    that level if it's below it, and put back to where it was a moment after (unless it was changed meanwhile)."""
+
+    def __init__(self):
+        self.floor = float(CFG.get("voiceMinLevel", 0.75))
+        self.saved = None            # (volume before, volume set)
+        self.timer = None
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def _get():
+        out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2).stdout
+        return float(out.split()[1]), "MUTED" in out
+
+    def lift(self):
+        if self.floor <= 0:
+            return
+        with self.lock:
+            if self.timer:
+                self.timer.cancel(); self.timer = None
+            if self.saved:
+                return                   # still lifted from the sentence before
+            try:
+                v, muted = self._get()
+                if v < self.floor or muted:
+                    subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{self.floor:.2f}"], timeout=2)
+                    subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"], timeout=2)
+                    self.saved = (v, self.floor, muted)
+            except Exception as e:
+                log("level:", repr(e))
+
+    def release(self, after=1.2):
+        with self.lock:
+            if self.timer:
+                self.timer.cancel()
+            self.timer = threading.Timer(after, self._put_back)
+            self.timer.daemon = True
+            self.timer.start()
+
+    def _put_back(self):
+        with self.lock:
+            self.timer = None
+            if not self.saved:
+                return
+            before, mine, muted = self.saved
+            self.saved = None
+            try:
+                v, _ = self._get()
+                if abs(v - mine) < 0.02:     # nobody touched the slider while Room talked
+                    subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{before:.2f}"], timeout=2)
+                    if muted:
+                        subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"], timeout=2)
+            except Exception as e:
+                log("level:", repr(e))
+
+
+LEVEL = Level()
+
+
 class Speaker:
     """Deepgram Aura, streamed into pw-play; Kokoro sentence by sentence when that isn't possible. stop() cuts it off."""
 
@@ -74,12 +135,16 @@ class Speaker:
         threading.Thread(target=self._say, args=(text, g, done), daemon=True).start()
 
     def _say(self, text, g, done):
-        if DG_KEY and self._deepgram(text, g):
-            self.busy = False
-            if g == self.gen:
-                done()
-            return
-        self._run(text, g, done)
+        LEVEL.lift()
+        try:
+            if DG_KEY and self._deepgram(text, g):
+                self.busy = False
+                if g == self.gen:
+                    done()
+                return
+            self._run(text, g, done)
+        finally:
+            LEVEL.release()
 
     def _deepgram(self, text, g) -> bool:
         """Aura, streamed: playback starts with the first bytes. False if it couldn't be reached (→ Kokoro)."""

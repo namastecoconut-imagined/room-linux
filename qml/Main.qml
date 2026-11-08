@@ -3,6 +3,15 @@ import QtQuick.Window
 
 // Room on the Surface. Everything is drawn on a 1368 × 912 stage (the Surface Pro 6 at 200%), scaled to whatever
 // the window is, so it stays sharp and proportioned on any 3:2 screen.
+//
+// Standby follows the iPhone panel exactly (NativePanel.tick, once a second):
+//  • the music player (and any open sheet) keeps the panel awake — it never drops into standby there
+//  • otherwise, standbySec (15 s) untouched → it goes back to home and standby fades in; night hours use
+//    nightStandbySec if config sets one, else the same 15 s
+//  • any other screen left alone for idleReturnSec (60 s) goes back to home
+//  • a touch only counts while awake; on standby only a real tap wakes it (held ≥ 40 ms, moved < 30 phone pt) —
+//    a brush or a ghost touch doesn't. On music standby, tapping the cover opens the player.
+//  • music standby shows only while music is actually playing
 Window {
     id: win
     width: Theme.stageW; height: Theme.stageH
@@ -15,21 +24,42 @@ Window {
     // Esc: leave full screen (to reach the desktop); F11: back to full screen
     Shortcut { sequence: "Esc"; onActivated: win.visibility = Window.Windowed }
     Shortcut { sequence: "F11"; onActivated: win.visibility = win.visibility === Window.FullScreen ? Window.Windowed : Window.FullScreen }
-    property string screen: startScreen === "standby" || startScreen === "musicstandby" ? "standby" : startScreen === "music" ? "music" : "home"
-    property real lastTouch: Date.now() / 1000
+
+    // the screen you're on while awake, and whether standby is showing over it
+    property string screen: startScreen === "music" ? "music" : "home"
+    property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
+    property real lastTouch: standbyOn ? 0 : Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing
-    readonly property bool night: {
-        var h = new Date(now * 1000).getHours()
-        return h >= 23 || h < 7
+    readonly property bool musicFace: playing || startScreen === "musicstandby"
+    readonly property var timing: room.timing
+    function nightHour(h) {
+        var a = timing.nightStart, b = timing.nightEnd
+        return a > b ? (h >= a || h < b) : (h >= a && h < b)
     }
+    readonly property bool lateNight: nightHour(new Date(now * 1000).getHours())
+    readonly property bool dayTime: { var h = new Date(now * 1000).getHours(); return h >= 7 && h < 18 }
+    property bool sheetOpen: false        // speaker picker / library over the player
+
+    function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
+    function enterStandby() { screen = "home"; standbyOn = true }
 
     Timer { interval: 250; running: true; repeat: true; onTriggered: win.now = Date.now() / 1000 }
-    // idle → standby after standbySec untouched
+    // the once-a-second tick
     Timer {
         interval: 1000; running: true; repeat: true
-        onTriggered: if (win.screen !== "standby" && win.now - win.lastTouch > room.standbySec) win.screen = "standby"
+        onTriggered: {
+            var t = Date.now() / 1000
+            if (win.screen === "music" || win.sheetOpen) win.lastTouch = t          // the player keeps it awake
+            var wait = win.lateNight ? win.timing.nightStandbySec : win.timing.standbySec
+            var want = t - win.lastTouch > wait
+            if (want && !win.standbyOn) win.enterStandby()
+            else if (!want && win.standbyOn) win.standbyOn = false
+            if (!win.standbyOn && t - win.lastTouch > win.timing.idleReturnSec && win.screen !== "home") win.screen = "home"
+        }
     }
-    onScreenChanged: room.setStandby(screen === "standby")
+    onStandbyOnChanged: room.setScreenState(standbyOn, standbyOn && lateNight)
+    onLateNightChanged: room.setScreenState(standbyOn, standbyOn && lateNight)
+    Component.onCompleted: room.setScreenState(standbyOn, standbyOn && lateNight)
 
     Rectangle { anchors.fill: parent; color: "black" }
 
@@ -40,7 +70,6 @@ Window {
         scale: Math.min(win.width / Theme.stageW, win.height / Theme.stageH)
 
         Home {
-            id: home
             now: win.now
             opacity: win.screen === "home" ? 1 : 0
             visible: opacity > 0
@@ -53,41 +82,62 @@ Window {
             visible: opacity > 0
             Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
+            onPickingChanged: win.sheetOpen = picking || library
+            onLibraryChanged: win.sheetOpen = picking || library
         }
-        Standby {
-            now: win.now
-            night: win.night
-            opacity: win.screen === "standby" && !(win.playing || startScreen === "musicstandby") ? 1 : 0
+        // standby fades in over 0.9 s (ease-out) and back out over 0.9 s when woken, as on the phone;
+        // the plain and music faces crossfade over 0.8 s
+        Item {
+            id: standby
+            anchors.fill: parent
+            opacity: win.standbyOn ? 1 : 0
             visible: opacity > 0
-            Behavior on opacity { NumberAnimation { duration: 700; easing.type: Easing.InOutQuad } }
-        }
-        MusicStandby {
-            now: win.now
-            opacity: win.screen === "standby" && (win.playing || startScreen === "musicstandby") ? 1 : 0
-            visible: opacity > 0
-            Behavior on opacity { NumberAnimation { duration: 700; easing.type: Easing.InOutQuad } }
+            Behavior on opacity { NumberAnimation { duration: 900; easing.type: Easing.OutCubic } }
+            Rectangle { anchors.fill: parent; color: "black" }
+            Standby {
+                id: plainFace
+                now: win.now
+                night: win.lateNight
+                dayTime: win.dayTime
+                active: win.standbyOn
+                opacity: win.musicFace ? 0 : 1
+                visible: opacity > 0 && standby.visible
+                Behavior on opacity { NumberAnimation { duration: 800 } }
+            }
+            MusicStandby {
+                id: musicFace
+                now: win.now
+                night: win.lateNight
+                dayTime: win.dayTime
+                opacity: win.musicFace ? 1 : 0
+                visible: opacity > 0 && standby.visible
+                Behavior on opacity { NumberAnimation { duration: 800 } }
+            }
         }
     }
 
-    // any touch: note it (for the idle timer) and, on standby, wake to home. It never blocks the touch itself.
+    // any touch while awake counts as activity (it never blocks the touch itself)
     PointHandler {
         target: null
         acceptedDevices: PointerDevice.AllDevices
-        onActiveChanged: {
-            win.lastTouch = Date.now() / 1000
-            if (active && win.screen === "standby") wakeTimer.start()
-        }
+        onActiveChanged: if (!win.standbyOn) win.lastTouch = Date.now() / 1000
     }
-    // standby swallows the tap that wakes it, so it doesn't also press whatever's under the finger on home
+    // standby takes its own touches: only a real tap wakes it, and the tap doesn't also press what's underneath
     MouseArea {
         anchors.fill: parent
-        enabled: win.screen === "standby"
-        // on music standby, tapping the cover opens the player; anywhere else wakes to home
-        onPressed: (e) => {
-            win.lastTouch = Date.now() / 1000
+        enabled: win.standbyOn
+        property real t0: 0
+        property point p0
+        onPressed: (e) => { t0 = Date.now(); p0 = Qt.point(e.x, e.y) }
+        onReleased: (e) => {
+            var held = Date.now() - t0
+            var s = stage.scale, slop = 72 * s       // 30 phone points
+            if (held < 40 || Math.abs(e.x - p0.x) > slop || Math.abs(e.y - p0.y) > slop) return
             var p = stage.mapFromItem(win.contentItem, e.x, e.y)
-            var onCover = (win.playing || startScreen === "musicstandby") && p.x > 700 && p.x < 1300 && p.y > 96 && p.y < 696
-            win.screen = onCover ? "music" : "home"
+            var c = musicFace.coverRect
+            var onCover = win.musicFace && p.x > c.x - 30 && p.x < c.x + c.width + 30 && p.y > c.y - 30 && p.y < c.y + c.height + 30
+            win.wake()
+            if (onCover) win.screen = "music"
         }
     }
     // ROOM_SHOT: save a picture of the screen and quit (used to check builds)
@@ -95,5 +145,4 @@ Window {
         interval: shotMs; running: shotPath !== ""
         onTriggered: win.contentItem.grabToImage(function (r) { r.saveToFile(shotPath); Qt.quit() })
     }
-    Timer { id: wakeTimer; interval: 1; onTriggered: win.lastTouch = Date.now() / 1000 }
 }

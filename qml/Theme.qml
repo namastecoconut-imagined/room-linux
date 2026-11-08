@@ -23,5 +23,9 @@ QtObject {
     }
     function dateLine(d) { return Qt.formatDate(d, "dddd, d MMMM") }
     function hour(h, h24) { return h24 ? two(h) : ((h % 12 === 0 ? 12 : h % 12) + (h < 12 ? "a" : "p")) }
+    function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : "" }
+    function aqiWord(v) { return v <= 50 ? "good" : v <= 100 ? "moderate" : v <= 150 ? "poor" : v <= 200 ? "unhealthy" : v <= 300 ? "very unhealthy" : "hazardous" }
+    // a cover colour bright enough to read as light: keeps the hue, lifts dark covers (the phone's StandbyView.lit)
+    function lit(rgb) { var m = Math.max(1, rgb[0], rgb[1], rgb[2]), k = Math.max(1, 225 / m); return [Math.min(255, rgb[0] * k), Math.min(255, rgb[1] * k), Math.min(255, rgb[2] * k)] }
     function mmss(s) { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ":" + two(s % 60) }
 }

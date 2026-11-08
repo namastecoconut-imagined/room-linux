@@ -9,6 +9,7 @@ from PySide6.QtGui import QColor, QImage
 
 from . import net
 from .config import State
+from .art import wash
 
 API = "https://api.spotify.com/v1"
 
@@ -29,7 +30,7 @@ class Spotify(QObject):
         self.player: dict | None = None
         self.fetched_at = 0.0
         self.devices: list[dict] = []
-        self.art = {"id": "", "url": "", "rgb": [40, 36, 32], "rgb2": [20, 18, 16]}
+        self.art = {"id": "", "url": "", "rgb": [40, 36, 32], "rgb2": [20, 18, 16], "wash": ""}
         self.relaxed = False
         self.ticks = 0
         self.error = ""
@@ -42,6 +43,7 @@ class Spotify(QObject):
         self._queue_for = ""
         self._devices_at = 0.0
         self._playlists_at = 0.0
+        self.liked = None                  # is the current song in Liked Songs (None: unknown / not allowed)
 
     @property
     def enabled(self):
@@ -174,6 +176,26 @@ class Spotify(QObject):
             elif kind == "collection":
                 self.context_name = "Liked Songs"
 
+    def _refresh_liked(self, tid):
+        self.liked = None
+        if not tid:
+            return
+        def got(status, data, tid=tid):
+            if status == 200 and ((self.player or {}).get("item") or {}).get("id") == tid:
+                try:
+                    self.liked = bool(json.loads(data)[0]); self.changed.emit()
+                except Exception:
+                    pass
+        self._api("GET", f"/me/tracks/contains?ids={tid}", got)
+
+    def toggle_liked(self):
+        tid = ((self.player or {}).get("item") or {}).get("id")
+        if not tid or self.liked is None:
+            return
+        self.liked = not self.liked
+        self.changed.emit()
+        self._api("PUT" if self.liked else "DELETE", f"/me/tracks?ids={tid}")
+
     def refresh_devices(self):
         self._devices_at = time.time()
         def got(status, data):
@@ -210,8 +232,9 @@ class Spotify(QObject):
             return
         imgs = (item.get("album") or {}).get("images") or (item.get("images") or [])
         url = min(imgs, key=lambda i: abs((i.get("width") or 640) - 640))["url"] if imgs else ""
-        self.art = {"id": tid, "url": url, "rgb": self.art["rgb"], "rgb2": self.art["rgb2"]}
+        self.art = {"id": tid, "url": url, "rgb": self.art["rgb"], "rgb2": self.art["rgb2"], "wash": self.art.get("wash", "")}
         self._refresh_around()
+        self._refresh_liked(item.get("id"))
         small = min(imgs, key=lambda i: abs((i.get("width") or 64) - 64))["url"] if imgs else ""
         if small:
             def got(status, data, tid=tid):
@@ -221,6 +244,7 @@ class Spotify(QObject):
                 if img.isNull():
                     return
                 self.art["rgb"], self.art["rgb2"] = colours(img)
+                self.art["wash"], self.art["rgb"] = wash(img)
                 self.changed.emit()
             net.request("GET", small, got)
 
@@ -246,8 +270,10 @@ class Spotify(QObject):
             "art": self.art["url"],
             "rgb": self.art["rgb"],
             "rgb2": self.art["rgb2"],
+            "wash": self.art.get("wash", ""),
             "error": self.error,
             "source": "spotify",
+            "liked": self.liked,
             "context": self.context_name,
             "nextUp": self.next_up,
             "recent": self.recent,

@@ -7,6 +7,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from .airplay import AirPlay
 from .calendar import Calendar
 from .lights import Lights
+from .screen import Screen
 from .spotify import Spotify
 from .weather import Weather
 from . import demo
@@ -18,6 +19,7 @@ class Room(QObject):
     roomsChanged = Signal()
     musicChanged = Signal()
     levelChanged = Signal()
+    statusChanged = Signal()
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -41,6 +43,8 @@ class Room(QObject):
         self.calendar.changed.connect(self.eventsChanged)
         self.lights.changed.connect(self.roomsChanged)
         self.spotify.changed.connect(self.musicChanged)
+        self.screen = Screen(cfg)
+        self.screen.statusChanged.connect(self.statusChanged)
         self._level = 0.0
         self._mic = None
 
@@ -48,6 +52,7 @@ class Room(QObject):
         if self.demo:
             return
         self.wx.start()
+        self.screen.start()
         self.calendar.start()
         self.lights.start()
         self.spotify.start()
@@ -89,8 +94,9 @@ class Room(QObject):
         m.setdefault("nextUp", [])
         if m.get("source") == "airplay":
             # AirPlay plays through the Surface itself, so the slider is the Surface's volume
-            m["canVolume"] = self._out_volume is not None
-            m["volume"] = self._out_volume or 0
+            # the phone's own AirPlay volume (it reports every change); the panel's slider sets the Surface's output
+            m["canVolume"] = True
+            m["volume"] = self.airplay.volume
             m["playlists"] = self.spotify.playlists
         return m
 
@@ -139,6 +145,25 @@ class Room(QObject):
     @Property(str, constant=True)
     def here(self):
         return self.cfg.get("here", "")
+
+    @Property(str, notify=statusChanged)
+    def status(self):
+        return "⚡ Cool" if self.demo else self.screen.status
+
+    @Property("QVariantMap", constant=True)
+    def timing(self):
+        """The standby rules' settings (seconds and hours), straight from config.json."""
+        c = self.cfg
+        day = int(c.get("standbySec", 15))
+        return {"standbySec": day, "nightStandbySec": int(c.get("nightStandbySec", day)),
+                "idleReturnSec": int(c.get("idleReturnSec", 60)),
+                "nightStart": int(c.get("nightStart", 23)), "nightEnd": int(c.get("nightEnd", 7))}
+
+    @Slot(bool, bool)
+    def setScreenState(self, standby, dim):
+        """Standby on/off and night-dim → screen brightness, and Spotify polls less while nobody's looking."""
+        self.screen.set_state(standby, dim)
+        self.spotify.relaxed = standby
 
     @Property(bool, constant=True)
     def micOn(self):
@@ -202,10 +227,15 @@ class Room(QObject):
             import subprocess
             v = max(0, min(100, int(v)))
             self._out_volume = v
+            self.airplay.volume = v
             subprocess.Popen(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{v / 100:.2f}"])
             self.musicChanged.emit()
         else:
             self.spotify.set_volume(v)
+
+    @Slot()
+    def toggleLiked(self):
+        self.spotify.toggle_liked()
 
     @Slot(str)
     def transfer(self, device_id):

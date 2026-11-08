@@ -6,7 +6,7 @@ Item {
     property string name
     property real size: 24
     property color color: Theme.tx
-    property bool filled: name === "play" || name === "pause" || name === "next" || name === "prev"
+    property bool filled: name === "play" || name === "pause" || name === "next" || name === "prev" || name === "heartOn"
     width: size; height: size
     readonly property var paths: ({
         "bulb": "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z",
@@ -20,6 +20,9 @@ Item {
         "back": "M15 5l-7 7 7 7",
         "power": "M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0",
         "moon": "M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z",
+        "heart": "M12 20s-7-4.4-7-9.6A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.4C19 15.6 12 20 12 20z",
+        "heartOn": "M12 20s-7-4.4-7-9.6A3.9 3.9 0 0 1 12 8a3.9 3.9 0 0 1 7 2.4C19 15.6 12 20 12 20z",
+        "lib": "M7.5 5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5zM16.5 5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5zM7.5 14a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5zM16.5 14a2.5 2.5 0 1 0 0 5 2.5 2.5 0 1 0 0-5z",
         "dim": "M12 8a4 4 0 1 0 0 8 4 4 0 1 0 0-8zM12 3v1.5M12 19.5V21M3 12h1.5M19.5 12H21M5.6 5.6l1 1M17.4 17.4l1 1M5.6 18.4l1-1M17.4 6.6l1-1"
     })
     Shape {

@@ -632,15 +632,23 @@ class Ears:
 
     @staticmethod
     def pin_input():
-        """Set the system's mic input level once, so nothing moves it around (micVolume in config.json, 0–1)."""
-        if CFG.get("micVolume") is False:
-            return
-        v = float(CFG.get("micVolume", 0.6))
-        try:
-            subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{v:.2f}"], timeout=3)
-            log(f"mic input fixed at {int(v * 100)}%")
-        except Exception as e:
-            log("mic input:", e)
+        """Set the mic's levels once, so nothing moves them around. micVolume (0–1, PipeWire's software level — 1.0 is
+        untouched; anything lower throws signal away) and micBoost (0–3: the codec's own preamp, +10 dB a step,
+        before any noise is added) in config.json — scripts/mic-tune.sh measures and sets both."""
+        if CFG.get("micVolume") is not False:
+            v = float(CFG.get("micVolume", 1.0))
+            try:
+                subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SOURCE@", f"{v:.2f}"], timeout=3)
+                log(f"mic input fixed at {int(v * 100)}%")
+            except Exception as e:
+                log("mic input:", e)
+        if CFG.get("micBoost") is not None:
+            b = int(CFG["micBoost"])
+            try:
+                subprocess.run(["amixer", "-q", "-c", "0", "cset", "name=Internal Mic Boost Volume", f"{b},{b}"], timeout=3)
+                log(f"mic boost +{b * 10} dB")
+            except Exception as e:
+                log("mic boost:", e)
 
     def _input_volume(self) -> float:
         try:

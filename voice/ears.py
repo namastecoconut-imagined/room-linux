@@ -311,7 +311,10 @@ class Ears:
             if said and not s.closing and now - self.started > 1.0 and still > 0.8 and (
                     (quiet > float(self.cfg.get("endQuiet", 1.1)) and not unfinished(said)) or quiet > 2.5):
                 s.finish()
-            if not s.closing and ((not said and now - self.started > self.wait) or now - self.started > 12):
+            # nothing said: close after `wait` — but not while someone is talking and the words just haven't come
+            # back yet ("set a timer…" was cut to "set a" when the first words took 5 s to arrive)
+            if not s.closing and ((not said and now - self.started > self.wait and quiet > 1.0)
+                                  or now - self.started > 15):
                 s.finish()
 
     # ---------------------------------------------------------------- a request
@@ -325,7 +328,7 @@ class Ears:
             self.stream.ended = True        # the old one is dropped (its late words can't end the new one)
         self.state = "listening"
         self.started = self.spoke_at = self.clock
-        self.wait = 8.0 if follow else 5.0
+        self.wait = 8.0 if follow else 6.0
         self.mine_first = mine_first
         self.vad.reset_states()
         if not self.cfg.get("deepgramKey"):

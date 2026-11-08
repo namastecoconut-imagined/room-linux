@@ -46,6 +46,9 @@ PV_KEY = CFG.get("picovoiceKey") or ""
 DG_VOICE = CFG.get("auraVoice", "aura-2-thalia-en")
 # with Deepgram: a lenient local trigger, then Deepgram checks it really was "Alexa" before Room reacts
 CANDIDATE = float(CFG.get("wakeCandidate", 0.12))
+# one of the Surface's mics wired upside-down (a known Realtek fault — mixing them cancels the voice); found and set
+# by scripts/mic-check.sh
+INVERTED = bool(CFG.get("micInverted"))
 WAKE_RE = re.compile(r"\b(alexa|alexis|alexia|alexi|alex|lexa|elexa|alaxa|alyssa|alexis's|elexa|a lexa)\b", re.I)
 CONFIDENT = float(CFG.get("wakeConfident", 0.2))   # from here Room opens at once (no asking Deepgram first)          # above this, wake straight away without asking Deepgram
 DG_LISTEN = CFG.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen")
@@ -976,6 +979,9 @@ def main():
                 if not b or len(b) < n:
                     qa.put(None); return
                 a = np.frombuffer(b, dtype=">i2" if swap else "<i2").astype(np.int16)
+                if beam is not None and INVERTED:
+                    a = a.reshape(-1, 2).copy()
+                    a[:, 1] = np.clip(-a[:, 1].astype(np.int32), -32768, 32767)   # turn the upside-down mic over
                 qa.put(beam.mix(a.reshape(-1, 2)) if beam else a)
         threading.Thread(target=reader, daemon=True).start()
         slow, count, behind_said = 0.0, 0, 0.0

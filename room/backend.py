@@ -72,6 +72,8 @@ class Room(QObject):
         self.spotify.start()
         self.airplay.start()
         self.assistant.start()
+        from .output import Output
+        self.output = Output(self.cfg); self.output.start()
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(5000)
         # the room-sound ripple on standby comes from the voice process's mic when voice is on; the Qt mic is only a

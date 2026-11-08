@@ -18,6 +18,8 @@ if [ -f ~/.config/systemd/user/room-airplay.service ] && [ ! -f "$D/buffers.conf
   systemctl --user daemon-reload
   systemctl --user restart room-airplay.service
 fi
+# the helper command
+mkdir -p ~/.local/bin && ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
 # leftovers from the removed extras (echo canceller, kept lines, helper commands)
 pkill -f "echo-cancel.conf" 2>/dev/null || true
 rm -rf ~/.local/share/room/voice/echo-cancel.conf ~/.local/share/room/voice/lines ~/.local/share/room/bench \

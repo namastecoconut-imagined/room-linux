@@ -14,6 +14,8 @@ mkdir -p "$HOME/.local/bin" "$CONF" ~/.config/systemd/user
 echo "▸ Spotify Connect: libraries it plays with (asks for your password)"
 sudo dnf install -y -q libogg libvorbis flac-libs mpg123-libs alsa-lib pulseaudio-libs >/dev/null
 
+# a running copy (or one stuck restarting) would block replacing the file
+systemctl --user stop room-spotify.service 2>/dev/null || true
 echo "▸ Spotify Connect: downloading go-librespot"
 python3 - "$BIN" <<'PY'
 import json, sys, tarfile, io, urllib.request, os, platform
@@ -24,7 +26,9 @@ asset = next(a for a in rel["assets"] if "linux" in a["name"].lower() and any(x 
 data = urllib.request.urlopen(asset["browser_download_url"], timeout=120).read()
 with tarfile.open(fileobj=io.BytesIO(data)) as t:
     m = next(m for m in t.getmembers() if m.isfile() and os.path.basename(m.name) in ("go-librespot", "daemon"))
-    open(sys.argv[1], "wb").write(t.extractfile(m).read())
+    tmp = sys.argv[1] + ".new"
+    open(tmp, "wb").write(t.extractfile(m).read())
+    os.replace(tmp, sys.argv[1])
 os.chmod(sys.argv[1], 0o755)
 print("  ", rel["tag_name"], "·", asset["name"])
 PY
@@ -62,7 +66,7 @@ After=pipewire-pulse.service network-online.target
 Wants=pipewire-pulse.service
 
 [Service]
-ExecStart=%h/.local/bin/go-librespot -config_dir %h/.config/go-librespot
+ExecStart=%h/.local/bin/go-librespot
 Environment=PULSE_LATENCY_MSEC=85
 Restart=on-failure
 RestartSec=3

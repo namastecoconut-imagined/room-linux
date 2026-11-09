@@ -237,16 +237,18 @@ class Spotify(QObject):
         self.changed.emit()
         self._api("PUT" if self.liked else "DELETE", f"/me/tracks?ids={tid}")
 
-    def refresh_devices(self):
+    def refresh_devices(self, then=None):
         self._devices_at = time.monotonic()
         def got(status, data):
-            if status != 200: return
-            try:
-                self.devices = [{"id": d.get("id"), "name": d.get("name", ""), "type": d.get("type", ""),
-                                 "active": bool(d.get("is_active"))} for d in json.loads(data).get("devices", []) if d.get("id")]
-                self.changed.emit()
-            except Exception:
-                pass
+            if status == 200:
+                try:
+                    self.devices = [{"id": d.get("id"), "name": d.get("name", ""), "type": d.get("type", ""),
+                                     "active": bool(d.get("is_active"))} for d in json.loads(data).get("devices", []) if d.get("id")]
+                    self.changed.emit()
+                except Exception:
+                    pass
+            if then:
+                then()
         self._api("GET", "/me/player/devices", got)
 
     def refresh_playlists(self):
@@ -354,26 +356,71 @@ class Spotify(QObject):
         """The Surface itself as a Spotify speaker, if it's running and logged in."""
         return next((d for d in self.devices if d["name"].lower() == self.home), None)
 
-    def play_uri(self, uri: str, speaker: str | None = None, then=None):
-        body = {"context_uri": uri} if ":track:" not in uri else {"uris": [uri]}
+    def play_uri(self, uri: str, speaker: str | None = None, then=None, uris: list | None = None, fallback=None):
+        """Play a playlist / album / artist (context) or a song — or a list of songs (uris). Where: the speaker named,
+        else whatever's playing, else the Surface itself (its Spotify speaker), else the last speaker seen.
+        Every failure is logged; fallback() runs if Spotify won't play it at all."""
+        body = {"uris": uris} if uris else ({"context_uri": uri} if ":track:" not in uri else {"uris": [uri]})
         dev = self.device_named(speaker) if speaker else None
         if not dev and not (self.player or {}).get("is_playing"):
             dev = self.home_device()    # nothing playing anywhere: play here, on the Surface
-        def done(status, data):
-            if status == 404:   # nothing active to play on — the Surface if it's there, else the last speaker we saw
-                d = self.home_device() or (self.devices[0] if self.devices else None)
-                if d:
-                    self._api("PUT", f"/me/player/play?device_id={d['id']}", lambda *_: (then() if then else self._soon()), body)
+        what = uri or f"{len(uris or [])} songs"
+
+        def finish():
+            then() if then else self._soon()
+
+        def failed(status, data, where):
+            print(f"[room] spotify: couldn't play {what} {where}: {status} {(data or b'')[:200]!r}", flush=True)
+            if fallback:
+                fallback()
+
+        def retry(status, data):
+            if 200 <= status < 300:
+                finish()
             else:
-                then() if then else self._soon()
+                failed(status, data, "(second try)")
+
+        def done(status, data):
+            if 200 <= status < 300:
+                finish()
+            elif status == 404:
+                # nothing active to play on: look again for speakers (the Surface's may have just come up), then try
+                def got_devices(*_):
+                    d = self.home_device() or (self.devices[0] if self.devices else None)
+                    if d:
+                        self._api("PUT", f"/me/player/play?device_id={d['id']}", retry, body)
+                    else:
+                        failed(status, data, "(no speaker: is Spotify running on the Surface or your phone?)")
+                self.refresh_devices(got_devices)
+            else:
+                failed(status, data, f"on {dev['name'] if dev else 'the active speaker'}")
         self._api("PUT", "/me/player/play" + (f"?device_id={dev['id']}" if dev else ""), done, body)
 
     def play_liked(self):
-        """Liked Songs, shuffled."""
+        """Liked Songs, shuffled. Spotify's own "Liked Songs" collection if it'll take it; if not, the 50 most recently
+        liked, shuffled here."""
+        print("[room] spotify: Liked Songs", flush=True)
+        import random
+        shuffle = lambda: self._api("PUT", "/me/player/shuffle?state=true", self._soon)
+
+        def from_tracks():
+            def got(status, data):
+                try:
+                    uris = [i["track"]["uri"] for i in json.loads(data).get("items", []) if i.get("track")] if status == 200 else []
+                except Exception:
+                    uris = []
+                if not uris:
+                    print(f"[room] spotify: couldn't read Liked Songs: {status}", flush=True)
+                    return
+                random.shuffle(uris)
+                self.play_uri("", uris=uris)
+            self._api("GET", "/me/tracks?limit=50", got)
+
         def go(uid):
             if not uid:
+                from_tracks()
                 return
-            self.play_uri(f"spotify:user:{uid}:collection", then=lambda: self._api("PUT", "/me/player/shuffle?state=true", self._soon))
+            self.play_uri(f"spotify:user:{uid}:collection", then=shuffle, fallback=from_tracks)
         if self.user_id:
             go(self.user_id)
         else:
@@ -382,6 +429,8 @@ class Spotify(QObject):
                     self.user_id = json.loads(data).get("id", "") if status == 200 else ""
                 except Exception:
                     self.user_id = ""
+                if not self.user_id:
+                    print(f"[room] spotify: couldn't read your account: {status}", flush=True)
                 go(self.user_id)
             self._api("GET", "/me", me)
 

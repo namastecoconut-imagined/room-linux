@@ -75,7 +75,7 @@ class SarvamStream:
         self.url = self.URL + "?" + urlencode({
             "language_code": cfg.get("sarvamLanguage", "en-IN"),
             "model": cfg.get("sarvamModel", "saaras:v4"),
-            "stream_type": cfg.get("sarvamStream", "balanced"),
+            "stream_type": cfg.get("sarvamStream", "fast"),      # words back sooner than "balanced"
             "endpointing": "manual",        # Room decides when you've finished
             "encoding": "linear16", "sample_rate": str(RATE),
             "keyterms": json.dumps([t[:64] for t in terms]),
@@ -142,8 +142,11 @@ class SarvamStream:
                         ws.send(json.dumps({"event": "speech_end"}))
                         ws.send(json.dumps({"event": "flush"}))
                         # the final words normally come back in a fraction of a second; don't wait forever
-                        if not self.got_final.wait(2.0):
-                            print(f"[voice] sarvam: no final words after 2 s (partial so far {self.text()!r})", flush=True)
+                        flushed = time.time()
+                        if not self.got_final.wait(1.2):
+                            print(f"[voice] sarvam: no final words after 1.2 s (partial so far {self.text()!r})", flush=True)
+                        else:
+                            print(f"[voice] sarvam: final words {time.time() - flushed:.2f} s after you stopped", flush=True)
                         self._end()
                         break
                     ws.send(json.dumps({"event": "audio_input", "audio": base64.b64encode(b).decode()}))
@@ -310,8 +313,8 @@ class Ears:
             # finished: ~1.1 s without speech AND no new words for 0.8 s (a short pause — "set a timer… for five
             # minutes", "play something… chill" — was ending requests early)
             still = time.time() - self.text_at
-            if said and not s.closing and now - self.started > 1.0 and still > 0.8 and (
-                    (quiet > float(self.cfg.get("endQuiet", 0.8)) and not unfinished(said)) or quiet > 2.5):
+            if said and not s.closing and now - self.started > 1.0 and still > float(self.cfg.get("endStill", 0.5)) and (
+                    (quiet > float(self.cfg.get("endQuiet", 0.7)) and not unfinished(said)) or quiet > 2.5):
                 s.finish()
             # nothing said: close after `wait` — but not while someone is talking and the words just haven't come
             # back yet ("set a timer…" was cut to "set a" when the first words took 5 s to arrive)

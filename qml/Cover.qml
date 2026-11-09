@@ -15,7 +15,7 @@ Item {
             GradientStop { position: 0; color: Theme.rgb(c.rgb) }
             GradientStop { position: 1; color: Theme.rgb(c.rgb2) }
         }
-        visible: img.status !== Image.Ready
+        visible: !img.shown
     }
     Image {
         id: img
@@ -24,14 +24,17 @@ Item {
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: true
+        retainWhileLoading: true          // the last cover stays up while the next one loads
         visible: false
+        property bool shown: false        // a picture has been ready at least once
+        onStatusChanged: if (status === Image.Ready) shown = true; else if (status === Image.Null || status === Image.Error) shown = false
         sourceSize: Qt.size(640, 640)
     }
     Rectangle { id: mask; anchors.fill: parent; radius: c.radius; visible: false; layer.enabled: true; layer.smooth: true }
     MultiEffect {
         anchors.fill: parent
         source: img
-        visible: img.status === Image.Ready
+        visible: img.shown
         maskEnabled: true
         maskSource: mask
         maskThresholdMin: 0.5

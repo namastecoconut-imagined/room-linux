@@ -48,12 +48,11 @@ Item {
             mp.beatV += (target - mp.beatV) * (target > mp.beatV ? 0.8 : 0.3)
         }
     }
-    Timer {                                          // 30 frames a second is plenty for the beat
-        interval: 33; repeat: true
+    FrameAnimation {                                 // in step with the screen (a timer made it judder)
         running: mp.visible && (music.playing || mp.beatNow > 0.002)
         onTriggered: {
             var k = mp.beatTarget > mp.beatNow ? 0.32 : 0.1
-            mp.beatNow += (mp.beatTarget - mp.beatNow) * Math.min(1, k * 0.033 * 60)
+            mp.beatNow += (mp.beatTarget - mp.beatNow) * Math.min(1, k * Math.min(0.05, frameTime) * 60)
         }
     }
 

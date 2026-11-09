@@ -81,7 +81,7 @@ Window {
         if (hm === at && refreshedOn !== day) { refreshedOn = day; refreshRun.start() }
     }
 
-    Timer { interval: 500; running: true; repeat: true; onTriggered: win.now = Date.now() / 1000 }
+    Timer { interval: win.screen === "music" && !win.standbyOn ? 250 : 1000; running: true; repeat: true; onTriggered: win.now = Date.now() / 1000 }
     // standby fully up: nothing underneath it is drawn (it was all still being rendered behind the black)
     readonly property bool covered: standbyOn && standby.opacity >= 1
     // the once-a-second tick

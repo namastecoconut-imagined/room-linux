@@ -40,12 +40,15 @@ Item {
         }
     }
     property real gt: 0
-    // 20 frames a second, not the screen's 60 — the glow moves slowly; a third of the drawing
-    Timer {
-        interval: 50; repeat: true
+    // every other screen frame (30 a second): half the drawing, still in step with the screen so it doesn't judder
+    property real acc: 0
+    FrameAnimation {
         running: ms.visible
         onTriggered: {
-            var dt = 0.05
+            ms.acc += Math.min(0.1, frameTime)
+            if (currentFrame % 2) return
+            var dt = ms.acc
+            ms.acc = 0
             ms.gt += dt
             var k = ms.beatTarget > ms.beatNow ? 0.12 : 0.035      // eased: it swells with the music, never flickers
             ms.beatNow += (ms.beatTarget - ms.beatNow) * Math.min(1, k * dt * 60)

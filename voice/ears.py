@@ -94,6 +94,13 @@ class SarvamStream:
             self.closing = True
             self.q.put(None)
 
+    def _shrinks(self, now):
+        """A partial that's just the words already on screen with the last few dropped: Sarvam flip-flops like this
+        mid-sentence ("…with the weather tonight?" → "…with the" → back). Showing it makes the words flash."""
+        k = lambda t: re.sub(r"[^a-z0-9' ]", "", t.lower()).split()
+        old, new = k(getattr(self, "shown", "")), k(now)
+        return len(new) < len(old) and old[:len(new)] == new
+
     def text(self):
         idx = sorted(set(self.finals) | set(self.parts))
         return " ".join(self.finals.get(i) or self.parts.get(i, "") for i in idx).strip()
@@ -158,8 +165,10 @@ class SarvamStream:
                     if ev == "transcript.partial" and t:
                         self.last_guess = self.text()
                         self.guesses.append(self.last_guess)
-                    if self.text():
-                        self.on_text(self.text(), self)
+                    now = self.text()
+                    if now and not self._shrinks(now):
+                        self.shown = now
+                        self.on_text(now, self)
                     if ev == "transcript.final" and self.closing:
                         self.got_final.set()
                 elif ev == "session.begin":

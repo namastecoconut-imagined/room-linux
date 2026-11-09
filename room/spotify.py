@@ -50,6 +50,8 @@ class Spotify(QObject):
         self.liked = None                  # is the current song in Liked Songs (None: unknown / not allowed)
         # the home card's shortcuts when nothing's playing: Liked Songs, and what you last played (kept across restarts)
         self.user_id = ""
+        self.idle_after = float(cfg.get("idleAfterMin", 10)) * 60   # paused this long: the home card offers shortcuts
+        self._paused_at = 0.0
         self.last_store = State("spotify-last")
         self.last: dict = self.last_store.read()        # {name, art, uri, kind}
 
@@ -136,6 +138,10 @@ class Spotify(QObject):
                 try:
                     self.player = json.loads(data)
                     self.fetched_at = time.time()
+                    if self.player.get("is_playing"):
+                        self._paused_at = 0.0
+                    elif not self._paused_at:
+                        self._paused_at = time.monotonic()
                     self._update_art()
                 except Exception:
                     pass
@@ -314,6 +320,8 @@ class Spotify(QObject):
             "recent": self.recent,
             "playlists": self.playlists,
             "last": self.last,
+            "idle": bool(item) and not p.get("is_playing") and bool(self._paused_at)
+                    and time.monotonic() - self._paused_at > self.idle_after,
             "devices": self.devices,
             "canVolume": bool(dev.get("supports_volume", True)) and dev.get("volume_percent") is not None,
         }

@@ -61,24 +61,26 @@ Item {
     // ---------------------------------------------------------------- left: what's playing — big, with its controls
     Press {
         id: musicCard
+        // paused a while (or nothing at all): the card goes back to its shortcuts
+        readonly property bool live: music.exists && !music.idle
         x: 72; y: Theme.deadB1 + 14; width: 546; height: 866 - y
         pressScale: 0.99
         onTapped: home.openMusic()
         Rectangle { anchors.fill: parent; radius: 28; color: Qt.rgba(1, 1, 1, 0.04); border.color: Qt.rgba(1, 1, 1, 0.06) }
         Cover {
             x: 26; y: 26; width: 150; height: 150; radius: 14
-            visible: music.exists
+            visible: musicCard.live
             source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34]
         }
-        Rectangle { visible: !music.exists; x: 26; y: 26; width: 90; height: 90; radius: 12; color: Qt.rgba(1, 1, 1, 0.05); Icon { anchors.centerIn: parent; name: "lib"; size: 26; color: Theme.sub } }
+        Rectangle { visible: !musicCard.live; x: 26; y: 26; width: 90; height: 90; radius: 12; color: Qt.rgba(1, 1, 1, 0.05); Icon { anchors.centerIn: parent; name: "lib"; size: 26; color: Theme.sub } }
         Column {
-            x: music.exists ? 202 : 136; y: music.exists ? 50 : 30; width: parent.width - x - 26; spacing: 8
-            T { width: parent.width; text: music.exists ? (music.title || "") : "Nothing playing"; font.pixelSize: 30; elide: Text.ElideRight }
-            T { width: parent.width; text: music.exists ? [music.artist, music.device].filter(function (s) { return s }).join("  ·  ") : "Tap for your playlists, or AirPlay to Room"; font.pixelSize: 19; color: Theme.sub; elide: Text.ElideRight }
+            x: musicCard.live ? 202 : 136; y: musicCard.live ? 50 : 30; width: parent.width - x - 26; spacing: 8
+            T { width: parent.width; text: musicCard.live ? (music.title || "") : "Nothing playing"; font.pixelSize: 30; elide: Text.ElideRight }
+            T { width: parent.width; text: musicCard.live ? [music.artist, music.device].filter(function (s) { return s }).join("  ·  ") : "Tap for your playlists, or AirPlay to Room"; font.pixelSize: 19; color: Theme.sub; elide: Text.ElideRight }
         }
         // nothing playing: Liked Songs, and what you last played — one tap each
         Column {
-            visible: !music.exists && music.enabled !== false
+            visible: !musicCard.live && music.enabled !== false
             x: 26; width: parent.width - 52
             anchors.bottom: parent.bottom; anchors.bottomMargin: 26
             spacing: 12
@@ -124,14 +126,14 @@ Item {
             }
         }
         Item {
-            visible: music.exists && (music.duration || 0) > 0
+            visible: musicCard.live && (music.duration || 0) > 0
             x: 26; y: 202; width: parent.width - 52; height: 4
             readonly property real pos: Math.min(music.duration || 0, (music.position || 0) + (music.playing ? home.now - music.at : 0))
             Rectangle { anchors.fill: parent; radius: 2; color: Qt.rgba(1, 1, 1, 0.13) }
             Rectangle { height: 4; radius: 2; width: parent.width * (music.duration > 0 ? parent.pos / music.duration : 0); color: Theme.ink }
         }
         Row {
-            visible: music.exists
+            visible: musicCard.live
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom; anchors.bottomMargin: 26
             spacing: 70

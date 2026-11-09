@@ -21,6 +21,14 @@ if command -v firewall-cmd >/dev/null && sudo firewall-cmd --state >/dev/null 2>
   sudo firewall-cmd -q --reload
 fi
 
+# a software H.264 decoder for Screen Mirroring: Fedora's FFmpeg plugin has none (no avdec_h264), so Cisco's
+# OpenH264 (Fedora's openh264 repo); if neither is there, the hardware one (it works, with some blocky frames)
+sudo dnf install -y -q --skip-unavailable --enablerepo=fedora-cisco-openh264 gstreamer1-plugin-openh264 >/dev/null 2>&1 || true
+if gst-inspect-1.0 openh264dec >/dev/null 2>&1; then DEC="-vd openh264dec"
+elif gst-inspect-1.0 avdec_h264 >/dev/null 2>&1; then DEC="-avdec"
+else DEC=""; fi
+echo "▸ AirPlay video: Screen Mirroring decoder: ${DEC:-hardware (VA-API)}"
+
 # -n/-nh: the name, as is · -p: fixed ports (for the firewall) · waylandsink: drawn straight on the panel
 # -hls: YouTube's AirPlay button (it sends the video, not a mirror of the phone) · -nohold: a new phone can take over
 cat > ~/.config/systemd/user/room-airplay-video.service <<UNIT
@@ -38,10 +46,10 @@ UnsetEnvironment=DISPLAY
 # -vs "waylandsink fullscreen=true": fills the panel (the sink's own full-screen, not UxPlay's X11 one)
 # -hls: YouTube's AirPlay button (playbin3; -hls 2's older playbin can't use YouTube's stream at all: no sound either)
 # GST_DEBUG=2: GStreamer's warnings in the log, so a failure says why
-# -avdec: Screen Mirroring decoded in software (FFmpeg) — the Intel VA-API decoder garbled it into blocks (its log:
-# "driver bug: fd size … bigger than object descriptor size"); a 1080p mirror is light work for the Surface's CPU
+# $DEC: Screen Mirroring decoded in software — the Intel VA-API decoder garbled it into blocks (its log: "driver
+# bug: fd size … bigger than object descriptor size"); a 1080p mirror is light work for the Surface's CPU
 Environment=GST_DEBUG=2
-ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -m 02:52:4f:4f:4d:56 -p $PORT -vs "waylandsink fullscreen=true" -avdec -hls -nohold
+ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -m 02:52:4f:4f:4d:56 -p $PORT -vs "waylandsink fullscreen=true" $DEC -hls -nohold
 Restart=on-failure
 RestartSec=5
 

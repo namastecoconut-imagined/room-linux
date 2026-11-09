@@ -129,6 +129,9 @@ class Room(QObject):
                 m["art"], m["wash"], m["rgb"] = self._demo_art
             if os.environ.get("ROOM_DEMO_EMPTY") == "1":
                 m["nextUp"] = []
+            if os.environ.get("ROOM_DEMO_IDLE") == "1":       # nothing playing (the home card's shortcuts)
+                m["exists"] = m["playing"] = False
+                m["last"] = {"name": "Late Night Drives", "art": "", "uri": "spotify:playlist:x", "kind": "playlist"}
             return m
         # whatever's actually playing: AirPlay while a phone or Mac is sending to Room, otherwise Spotify
         m = self.airplay.snapshot() if self.airplay.showing else self.spotify.snapshot()
@@ -416,6 +419,18 @@ class Room(QObject):
                 self.lights.set_room(r["name"], level=10, kelvin=2200)
             else:
                 self.lights.set_room(r["name"], on=False)
+
+    @Slot()
+    def playLiked(self):
+        if self._video.active:
+            self._video.close()
+        self.spotify.play_liked()
+
+    @Slot()
+    def playLast(self):
+        if self._video.active:
+            self._video.close()
+        self.spotify.play_last()
 
     @Slot()
     def playPause(self):

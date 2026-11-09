@@ -70,11 +70,58 @@ Item {
             visible: music.exists
             source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34]
         }
-        Rectangle { visible: !music.exists; x: 26; y: 26; width: 150; height: 150; radius: 14; color: Qt.rgba(1, 1, 1, 0.05); Icon { anchors.centerIn: parent; name: "lib"; size: 36; color: Theme.sub } }
+        Rectangle { visible: !music.exists; x: 26; y: 26; width: 90; height: 90; radius: 12; color: Qt.rgba(1, 1, 1, 0.05); Icon { anchors.centerIn: parent; name: "lib"; size: 26; color: Theme.sub } }
         Column {
-            x: 202; y: 50; width: parent.width - 228; spacing: 8
+            x: music.exists ? 202 : 136; y: music.exists ? 50 : 30; width: parent.width - x - 26; spacing: 8
             T { width: parent.width; text: music.exists ? (music.title || "") : "Nothing playing"; font.pixelSize: 30; elide: Text.ElideRight }
-            T { width: parent.width; text: music.exists ? [music.artist, music.device].filter(function (s) { return s }).join("  ·  ") : "Tap for your playlists"; font.pixelSize: 19; color: Theme.sub; elide: Text.ElideRight }
+            T { width: parent.width; text: music.exists ? [music.artist, music.device].filter(function (s) { return s }).join("  ·  ") : "Tap for your playlists, or AirPlay to Room"; font.pixelSize: 19; color: Theme.sub; elide: Text.ElideRight }
+        }
+        // nothing playing: Liked Songs, and what you last played — one tap each
+        Column {
+            visible: !music.exists && music.enabled !== false
+            x: 26; width: parent.width - 52
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 26
+            spacing: 12
+            Repeater {
+                model: {
+                    var rows = [{ key: "liked", name: "Liked Songs", sub: "Shuffle", art: "" }]
+                    var l = music.last || {}
+                    if (l.uri) rows.push({ key: "last", name: l.name || "", art: l.art || "",
+                                           sub: "Last played" + (l.kind && l.kind !== "song" ? " · " + l.kind : "") })
+                    return rows
+                }
+                Press {
+                    width: parent.width; height: 72
+                    pressScale: 0.98
+                    onTapped: modelData.key === "liked" ? room.playLiked() : room.playLast()
+                    Rectangle { anchors.fill: parent; radius: 18; color: Qt.rgba(1, 1, 1, 0.06) }
+                    Rectangle {
+                        x: 12; anchors.verticalCenter: parent.verticalCenter; width: 50; height: 50; radius: 9
+                        visible: modelData.key === "liked"
+                        gradient: Gradient {
+                            orientation: Gradient.Horizontal
+                            GradientStop { position: 0; color: "#5b3fd8" }
+                            GradientStop { position: 1; color: "#8fb7ff" }
+                        }
+                        Icon { anchors.centerIn: parent; name: "heartOn"; size: 22; color: "white" }
+                    }
+                    Cover {
+                        x: 12; anchors.verticalCenter: parent.verticalCenter; width: 50; height: 50; radius: 9
+                        visible: modelData.key !== "liked"
+                        source: modelData.art; rgb: [70, 60, 80]; rgb2: [30, 26, 34]
+                    }
+                    Column {
+                        x: 78; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 78 - 76; spacing: 3
+                        T { width: parent.width; text: modelData.name; font.pixelSize: 19; font.weight: Font.DemiBold; elide: Text.ElideRight }
+                        T { width: parent.width; text: modelData.sub; font.pixelSize: 15; color: Theme.sub; elide: Text.ElideRight }
+                    }
+                    Rectangle {
+                        anchors.right: parent.right; anchors.rightMargin: 13; anchors.verticalCenter: parent.verticalCenter
+                        width: 46; height: 46; radius: 23; color: Theme.ink
+                        Icon { anchors.centerIn: parent; name: "play"; size: 16; color: "#111" }
+                    }
+                }
+            }
         }
         Item {
             visible: music.exists && (music.duration || 0) > 0

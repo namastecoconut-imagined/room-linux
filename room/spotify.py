@@ -48,6 +48,10 @@ class Spotify(QObject):
         self._devices_at = 0.0
         self._playlists_at = 0.0
         self.liked = None                  # is the current song in Liked Songs (None: unknown / not allowed)
+        # the home card's shortcuts when nothing's playing: Liked Songs, and what you last played (kept across restarts)
+        self.user_id = ""
+        self.last_store = State("spotify-last")
+        self.last: dict = self.last_store.read()        # {name, art, uri, kind}
 
     @property
     def enabled(self):
@@ -178,15 +182,34 @@ class Spotify(QObject):
             self._context_uri, self.context_name = uri, ""
             kind = uri.split(":")[1] if uri.count(":") >= 2 else ""
             if kind in ("playlist", "album", "artist", "show"):
-                def n(status, data, uri=uri):
+                def n(status, data, uri=uri, kind=kind):
                     if status == 200 and uri == self._context_uri:
                         try:
-                            self.context_name = json.loads(data).get("name", ""); self.changed.emit()
+                            obj = json.loads(data)
+                            self.context_name = obj.get("name", "")
+                            imgs = obj.get("images") or []
+                            art = min(imgs, key=lambda i: abs((i.get("width") or 300) - 300))["url"] if imgs else ""
+                            self._remember_last({"name": self.context_name, "art": art, "uri": uri, "kind": kind})
+                            self.changed.emit()
                         except Exception:
                             pass
-                self._api("GET", f"/{kind}s/{uri.split(':')[-1]}?fields=name", n)
+                self._api("GET", f"/{kind}s/{uri.split(':')[-1]}" + ("?fields=name,images" if kind == "playlist" else ""), n)
             elif kind == "collection":
                 self.context_name = "Liked Songs"
+            elif not uri:
+                # a song on its own (no playlist or album around it): that's what you last played
+                item = (self.player or {}).get("item") or {}
+                if item.get("uri"):
+                    t = self._track(item)
+                    self._remember_last({"name": t["title"], "art": t["art"], "uri": t["uri"], "kind": "song"})
+
+    def _remember_last(self, last: dict):
+        if last.get("uri") and last != self.last:
+            self.last = last
+            try:
+                self.last_store.write(last)
+            except Exception:
+                pass
 
     def _refresh_liked(self, tid):
         self.liked = None
@@ -290,6 +313,7 @@ class Spotify(QObject):
             "nextUp": self.next_up,
             "recent": self.recent,
             "playlists": self.playlists,
+            "last": self.last,
             "devices": self.devices,
             "canVolume": bool(dev.get("supports_volume", True)) and dev.get("volume_percent") is not None,
         }
@@ -322,7 +346,7 @@ class Spotify(QObject):
         """The Surface itself as a Spotify speaker, if it's running and logged in."""
         return next((d for d in self.devices if d["name"].lower() == self.home), None)
 
-    def play_uri(self, uri: str, speaker: str | None = None):
+    def play_uri(self, uri: str, speaker: str | None = None, then=None):
         body = {"context_uri": uri} if ":track:" not in uri else {"uris": [uri]}
         dev = self.device_named(speaker) if speaker else None
         if not dev and not (self.player or {}).get("is_playing"):
@@ -331,10 +355,32 @@ class Spotify(QObject):
             if status == 404:   # nothing active to play on — the Surface if it's there, else the last speaker we saw
                 d = self.home_device() or (self.devices[0] if self.devices else None)
                 if d:
-                    self._api("PUT", f"/me/player/play?device_id={d['id']}", self._soon, body)
+                    self._api("PUT", f"/me/player/play?device_id={d['id']}", lambda *_: (then() if then else self._soon()), body)
             else:
-                self._soon()
+                then() if then else self._soon()
         self._api("PUT", "/me/player/play" + (f"?device_id={dev['id']}" if dev else ""), done, body)
+
+    def play_liked(self):
+        """Liked Songs, shuffled."""
+        def go(uid):
+            if not uid:
+                return
+            self.play_uri(f"spotify:user:{uid}:collection", then=lambda: self._api("PUT", "/me/player/shuffle?state=true", self._soon))
+        if self.user_id:
+            go(self.user_id)
+        else:
+            def me(status, data):
+                try:
+                    self.user_id = json.loads(data).get("id", "") if status == 200 else ""
+                except Exception:
+                    self.user_id = ""
+                go(self.user_id)
+            self._api("GET", "/me", me)
+
+    def play_last(self):
+        """Whatever you last played — picks up where it was if Spotify still remembers."""
+        if self.last.get("uri"):
+            self.play_uri(self.last["uri"])
 
     def device_named(self, name: str):
         """The closest speaker to a spoken name ('desk speaker' → 'Desk Speaker (Echo)')."""

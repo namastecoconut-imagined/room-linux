@@ -169,6 +169,133 @@ class Stream:
             pass
 
 
+class SarvamStream:
+    """One request, live to Sarvam (saaras, trained on Indian speech — Indian English included) over its realtime
+    websocket: audio as base64 JSON, partial words as they come, the final words after a flush. Same shape as
+    Stream, so the rest of the listening works the same. If Sarvam can't be reached, `fallback` is set and the audio
+    so far is kept, so Ears can carry on with Deepgram without losing what was said."""
+
+    URL = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
+
+    def __init__(self, cfg, words, on_text, on_end):
+        self.cfg, self.on_text, self.on_end = cfg, on_text, on_end
+        self.q: queue.Queue = queue.Queue()
+        self.finals: dict = {}              # utterance → its final words
+        self.parts: dict = {}               # utterance → words so far
+        self.last_guess = ""
+        self.ended = self.closing = self.failed = self.fallback = False
+        self.t0 = time.time()
+        self.first_at = 0.0
+        self.opened = 0.0
+        self.guesses: list[str] = []
+        self.audio: list[bytes] = []        # everything sent, in case Deepgram has to take over
+        self.lock = threading.Lock()
+        self.got_final = threading.Event()
+        terms = (KEYTERMS + list(words))[:50]
+        from urllib.parse import urlencode
+        self.url = self.URL + "?" + urlencode({
+            "language_code": cfg.get("sarvamLanguage", "en-IN"),
+            "model": cfg.get("sarvamModel", "saaras:v4"),
+            "stream_type": cfg.get("sarvamStream", "balanced"),
+            "endpointing": "manual",        # Room decides when you've finished (as with Deepgram)
+            "encoding": "linear16", "sample_rate": str(RATE),
+            "keyterms": json.dumps([t[:64] for t in terms]),
+            "prompt": "Voice commands to a smart-home panel in Bangalore, India: lights, scenes, timers, alarms, "
+                      "reminders, Spotify music, weather, questions.",
+        })
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def push(self, pcm):
+        if not self.ended:
+            b = pcm.tobytes()
+            self.audio.append(b)
+            self.q.put(b)
+
+    def finish(self):
+        if not self.closing:
+            self.closing = True
+            self.q.put(None)
+
+    def text(self):
+        idx = sorted(set(self.finals) | set(self.parts))
+        return " ".join(self.finals.get(i) or self.parts.get(i, "") for i in idx).strip()
+
+    def _end(self):
+        with self.lock:
+            if self.ended or self.fallback:     # Deepgram is taking over this one
+                return
+            self.ended = True
+        self.on_end(self.text() or self.last_guess, self)
+
+    def _run(self):
+        import base64
+        from websockets.sync.client import connect
+        try:
+            ctx = connect(self.url, additional_headers={"Api-Subscription-Key": self.cfg["sarvamKey"]},
+                          open_timeout=4, max_size=None)
+            ws = ctx.__enter__()
+        except Exception as e:
+            print("[voice] sarvam connect:", repr(e), "— using Deepgram")
+            self.fallback = True
+            return
+        self.opened = time.time() - self.t0
+
+        def sender():
+            try:
+                while not self.ended:
+                    try:
+                        b = self.q.get(timeout=5)
+                    except queue.Empty:
+                        ws.send(json.dumps({"event": "ping"})); continue
+                    if b is None:
+                        ws.send(json.dumps({"event": "flush"}))
+                        # the final words normally come back in a fraction of a second; don't wait forever
+                        if not self.got_final.wait(2.5):
+                            print("[voice] sarvam: no final words after 2.5 s — going with what came")
+                        self._end()
+                        break
+                    ws.send(json.dumps({"event": "audio_input", "audio": base64.b64encode(b).decode()}))
+                ws.send(json.dumps({"event": "end"}))
+            except Exception:
+                self._end()
+        threading.Thread(target=sender, daemon=True).start()
+        try:
+            for msg in ws:
+                if isinstance(msg, bytes):
+                    continue
+                m = json.loads(msg)
+                ev = m.get("event")
+                if ev in ("transcript.partial", "transcript.final"):
+                    i, t = m.get("utterance_idx", 0), (m.get("text") or "").strip()
+                    (self.finals if ev == "transcript.final" else self.parts)[i] = t
+                    if t and not self.first_at:
+                        self.first_at = time.time()
+                    if ev == "transcript.partial" and t:
+                        self.last_guess = self.text()
+                        self.guesses.append(self.last_guess)
+                    if self.text():
+                        self.on_text(self.text(), self)
+                    if ev == "transcript.final" and self.closing:
+                        self.got_final.set()
+                elif ev == "error":
+                    print(f"[voice] sarvam: {m.get('code')} {m.get('message')}")
+                    if m.get("is_fatal"):
+                        if not self.text() and not self.closing:
+                            self.fallback = True        # turned down (no access, quota…): Deepgram takes over
+                            return
+                        break
+        except Exception as e:
+            if not self.ended:
+                print("[voice] sarvam:", repr(e))
+        print(f"[voice] heard {self.text()!r} · sarvam · connect {self.opened:.2f} s · "
+              f"first words {self.first_at - self.t0 if self.first_at else 0:.1f} s · done {time.time() - self.t0:.1f} s")
+        self._end()
+        try:
+            ctx.__exit__(None, None, None)
+        except Exception:
+            pass
+
+
 class Spare:
     """One Deepgram connection kept open and ready (KeepAlive, no audio — nothing to pay for): from India, opening one
     costs ~0.5–0.9 s, which would otherwise come straight after "Alexa"."""
@@ -328,6 +455,19 @@ class Ears:
         if self.state != "listening":
             return
         s = self.stream
+        if s and getattr(s, "fallback", False) and not s.ended and not self.cfg.get("deepgramKey"):
+            s.fallback = False
+            s._end()                        # no Deepgram to fall back to: end with nothing heard
+        if s and getattr(s, "fallback", False) and not s.ended:
+            # Sarvam couldn't be reached or turned us down: Deepgram for a while, with everything said so far
+            self.sarvam_off_until = time.time() + 300
+            s.ended = True
+            d = Stream(self.cfg, self.words, self._text, self._end, self.spare.take() if self.spare else None)
+            for b in s.audio:
+                d.q.put(b)
+            if s.closing:
+                d.finish()
+            self.stream = s = d
         if s:
             s.push(pcm)
             if float(self.vad.predict(pcm, frame_size=480)) > 0.4:
@@ -368,13 +508,18 @@ class Ears:
         self.wait = 8.0 if follow else 6.0
         self.mine_first = mine_first
         self.vad.reset_states()
-        if not self.cfg.get("deepgramKey"):
-            self.emit(ev="error", msg="No deepgramKey in config.json — Room can't understand speech without it")
+        use_sarvam = bool(self.cfg.get("sarvamKey")) and self.cfg.get("stt", "sarvam") == "sarvam" \
+            and time.time() > getattr(self, "sarvam_off_until", 0)
+        if not use_sarvam and not self.cfg.get("deepgramKey"):
+            self.emit(ev="error", msg="No speech key in config.json (sarvamKey or deepgramKey) — Room can't understand speech")
             self.state = "idle"
             return
         if self.spare:
             self.spare.words = self.words
-        s = Stream(self.cfg, self.words, self._text, self._end, self.spare.take() if self.spare else None)
+        if use_sarvam:
+            s = SarvamStream(self.cfg, self.words, self._text, self._end)
+        else:
+            s = Stream(self.cfg, self.words, self._text, self._end, self.spare.take() if self.spare else None)
         self.stream = s
         if preroll:
             for c in self.ring:

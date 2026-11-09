@@ -84,7 +84,7 @@ class Assistant(QObject):
         self.proc = QProcess(self)
         env = QProcessEnvironment.systemEnvironment()
         cfg = dict(self.room.cfg.get("voiceSettings") or {})
-        for k in ("deepgramKey",):                          # the speech key lives at the top of config.json
+        for k in ("deepgramKey", "sarvamKey"):              # the speech keys live at the top of config.json
             if self.room.cfg.get(k):
                 cfg[k] = self.room.cfg[k]
         env.insert("ROOM_VOICE_CFG", json.dumps(cfg))

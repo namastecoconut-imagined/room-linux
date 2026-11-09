@@ -6,6 +6,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from .airplay import AirPlay
 from .bluetooth import Bluetooth
+from .video import Video
 from .display import Display
 from .calendar import Calendar
 from .lights import Lights
@@ -40,6 +41,7 @@ class Room(QObject):
         self.spotify = Spotify(cfg.get("spotify"))
         self.airplay = AirPlay()
         self.airplay.changed.connect(self.musicChanged)
+        self._video = Video(cfg)
         # what played before, whatever the source — the left side of the cover flow
         self._history: list[dict] = []
         self._settle = QTimer(self); self._settle.setSingleShot(True); self._settle.setInterval(1500)
@@ -480,6 +482,10 @@ class Room(QObject):
 
     @Slot(float)
     def setBrightness(self, v): self._display.set_level(v)
+
+    @Property(QObject, constant=True)
+    def video(self):
+        return self._video
 
     @Property("QVariantMap", notify=settingsChanged)
     def bluetooth(self):

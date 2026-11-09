@@ -4,6 +4,7 @@
   ROOM_WINDOWED=1    a 1368×912 window instead of full screen (for working on it)
   ROOM_SHOT=path.png save a screenshot after ROOM_SHOT_MS (default 2500) and quit — used to check builds
   ROOM_SCREEN=home|standby|musicstandby   which screen to open on
+  ROOM_VIDEO=file.mp4 the video screen, playing that file (checks)
 """
 import os
 import signal
@@ -117,6 +118,8 @@ def main():
     pointer.room = room
 
     room.start()
+    if os.environ.get("ROOM_VIDEO"):       # (checks) play a local file as if it were a found video
+        QTimer.singleShot(300, lambda: room.video.show_file(os.environ["ROOM_VIDEO"]))
     code = app.exec()
     room.assistant.stop()   # the voice process goes with Room
     del engine          # tear the screens down before the object they read from

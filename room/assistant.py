@@ -447,6 +447,10 @@ class Assistant(QObject):
                          "volume": m.get("volume"), "speakers": [d["name"] for d in sp.get("devices") or []]}
         if r.airplay.showing:
             snap["music"]["note"] = "playing from their phone over AirPlay to this panel: music and volume actions control it; to play something new, use play (Spotify)"
+        if r.video.active:
+            snap["video"] = {"title": r.video.title, "channel": r.video.channel,
+                             "state": "loading" if r.video.loading else "paused" if r.video.paused else "playing",
+                             "note": "a music video is playing full screen on the panel: pause/play/next music actions control it"}
         snap["my_playlists"] = [{"name": p["name"], "uri": p["uri"]} for p in (sp.get("playlists") or [])][:40]
         snap["calendar"] = [f"{e['title']} — {e['when']}{(' ' + e['extra']) if e.get('extra') else ''}" for e in r.events[:5]]
         return snap
@@ -474,6 +478,27 @@ class Assistant(QObject):
                                                kelvin=a.get("kelvin"), rgb=a.get("rgb"))
                     if n:
                         parts.append(f"{n} light{'s' if n != 1 else ''}")
+                elif k == "music" and r.video.active:
+                    # a video is on: pause / play / next / previous are for it
+                    c = a.get("command")
+                    if c in ("pause", "play"):
+                        r.video.set_paused(c == "pause")
+                    elif c == "next":
+                        r.video.next()
+                    parts.append(c or "")
+                elif k == "video":
+                    if a.get("on") is False or not a.get("query"):
+                        r.video.close(); parts.append("video closed")
+                    else:
+                        if r.music.get("playing"):      # the song stops for the video
+                            (r.airplay if r.airplay.showing else r.spotify).play_pause()
+                        waiting[0] += 1
+
+                        def vrep(name, why):
+                            parts.append(f"video · {name.lower()}" if name else f"couldn't play the video — {why}")
+                            waiting[0] -= 1
+                            self._main.emit(fin)
+                        r.video.play(a["query"], vrep)
                 elif k == "music":
                     c = a.get("command")
                     src = r.airplay if r.airplay.showing else r.spotify
@@ -497,6 +522,8 @@ class Assistant(QObject):
                     if d:
                         r.spotify.transfer(d["id"]); parts.append(f"on {d['name'].lower()}")
                 elif k == "play":
+                    if r.video.active:
+                        r.video.close()                # a song now: the video makes way
                     uri = a.get("uri") or ""
                     if uri.startswith("spotify:"):
                         r.spotify.play_uri(uri, speaker=a.get("speaker"))
@@ -779,6 +806,14 @@ class Assistant(QObject):
                 day = {"Tmrw": "tomorrow"}.get(when, "on " + {"Mon": "Monday", "Tue": "Tuesday", "Wed": "Wednesday", "Thu": "Thursday", "Fri": "Friday", "Sat": "Saturday", "Sun": "Sunday"}.get(when, when))
                 s = f"Next up: {e['title']} {day}" + (f" at {e['extra']}" if e.get("extra") else "") + "."
             return s, False
+
+        # ---------------- a video on screen: pause / resume / next are for it
+        if r.video.active and d in ("pause", "resume", "next"):
+            if d == "next":
+                r.video.next()
+            else:
+                r.video.set_paused(d == "pause")
+            return "", False
 
         # ---------------- music
         playing_src = r.airplay if r.airplay.showing else r.spotify

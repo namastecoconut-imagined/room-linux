@@ -277,6 +277,9 @@ blue [0,70,255], purple [150,0,255], pink [255,40,140], teal [0,200,180].
 - Music is Spotify (or AirPlay from their phone — then music and volume actions control that). To play something \
 specific, use kind "play" with a search query and search_type. If they name a speaker, pass it inside that play \
 action (closest name from the speaker list).
+- Videos: "play the … video", "show me …", "put on the … music video", or anything to watch → kind "video" with a \
+YouTube search query (song + artist + "official video" for music videos). It plays full screen on this panel. \
+"close / stop the video" → kind "video" with on false. While a video plays, pause/play/next are music actions as usual.
 - "my_playlists" are their own Spotify playlists: if they ask for one, use kind "play" with its uri. Otherwise search.
 - "goodnight" = all lights off and pause music. "turn everything off" = all lights off.
 - Questions ("what's next", "is the floor lamp on", "what's playing") → no actions; answer.
@@ -291,7 +294,7 @@ action (closest name from the speaker list).
             "kind": {"type": "string", "enum": ["lights", "music", "volume", "speaker", "play", "timer", "cancel_timer",
                                                 "set_alarm", "alarm_off", "delete_alarm", "sleep_timer", "remember",
                                                 "forget", "computer", "look_up", "set_reminder", "cancel_reminder",
-                                                "reminder_done"]},
+                                                "reminder_done", "video"]},
             "reminder_id": {"type": "string"}, "at": {"type": "string"},
             "time": {"type": "string"},
             "days": {"type": "array", "items": {"type": "string", "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]}},

@@ -61,19 +61,19 @@ class Output:
             if p.get("media.class") != "Stream/Output/Audio":
                 continue
             who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
-            if "airplay" not in who and "shairport" not in who:
-                continue
+            if "airplay" not in who and "shairport" not in who and "librespot" not in who:
+                continue                    # (librespot: the Surface's own Spotify speaker, same rule as AirPlay)
             sid = n["id"]
             if self.moved.get(sid) == (bt or ""):
                 continue
             if bt:
                 subprocess.run(["pw-metadata", "-n", "default", str(sid), "target.object", bt], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"[room] output: AirPlay → {bt}", flush=True)
+                print(f"[room] output: {'Spotify' if 'librespot' in who else 'AirPlay'} → {bt}", flush=True)
             else:
                 subprocess.run(["pw-metadata", "-n", "default", "-d", str(sid), "target.object"], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print("[room] output: AirPlay → the system's output (no Bluetooth speaker)", flush=True)
+                print("[room] output: music → the system's output (no Bluetooth speaker)", flush=True)
             self.moved[sid] = bt or ""
         live = {n["id"] for n in nodes}
         self.moved = {k: v for k, v in self.moved.items() if k in live}

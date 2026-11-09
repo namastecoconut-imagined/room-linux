@@ -52,6 +52,7 @@ if command -v gsettings >/dev/null; then
 fi
 
 bash "$HERE/scripts/airplay.sh"
+bash "$HERE/scripts/spotify-connect.sh"
 
 echo "▸ Room in the app grid"
 mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/scalable/apps

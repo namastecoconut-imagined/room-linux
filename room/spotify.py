@@ -21,6 +21,8 @@ class Spotify(QObject):
         super().__init__()
         cfg = cfg or {}
         self.client_id = cfg.get("clientId", "")
+        # the Surface's own Spotify speaker (scripts/spotify-connect.sh): where "play …" goes when nothing else is playing
+        self.home = (cfg.get("homeDevice") or "Room").lower()
         self.store = State("spotify")
         saved = self.store.read()
         # a newer token we were handed beats the one in config.json, as long as config hasn't changed since
@@ -316,13 +318,20 @@ class Spotify(QObject):
     def transfer(self, device_id: str):
         self._api("PUT", "/me/player", lambda *_: (self.refresh_devices(), self._soon()), {"device_ids": [device_id], "play": True})
 
+    def home_device(self):
+        """The Surface itself as a Spotify speaker, if it's running and logged in."""
+        return next((d for d in self.devices if d["name"].lower() == self.home), None)
+
     def play_uri(self, uri: str, speaker: str | None = None):
         body = {"context_uri": uri} if ":track:" not in uri else {"uris": [uri]}
         dev = self.device_named(speaker) if speaker else None
+        if not dev and not (self.player or {}).get("is_playing"):
+            dev = self.home_device()    # nothing playing anywhere: play here, on the Surface
         def done(status, data):
-            if status == 404:   # nothing active to play on — wake the last speaker we saw
-                if self.devices:
-                    self._api("PUT", f"/me/player/play?device_id={self.devices[0]['id']}", self._soon, body)
+            if status == 404:   # nothing active to play on — the Surface if it's there, else the last speaker we saw
+                d = self.home_device() or (self.devices[0] if self.devices else None)
+                if d:
+                    self._api("PUT", f"/me/player/play?device_id={d['id']}", self._soon, body)
             else:
                 self._soon()
         self._api("PUT", "/me/player/play" + (f"?device_id={dev['id']}" if dev else ""), done, body)

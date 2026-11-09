@@ -17,6 +17,7 @@ Room starts with the desktop session. It doesn't restart itself while we're stil
 - Stop it: `systemctl --user stop room`
 - Run it in a terminal so errors show: `cd ~/room && .venv/bin/python -m room` (Esc leaves full screen, Ctrl-C quits)
 - AirPlay only: `bash scripts/airplay.sh`
+- Spotify on the Surface itself (Spotify Connect speaker "Room"): `bash scripts/spotify-connect.sh`
 
 ## Update
 

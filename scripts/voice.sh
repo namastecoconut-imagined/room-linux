@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Room's voice and ears — speaking (Deepgram's Aura online, Kokoro offline) and listening ("Alexa" on the Surface,
-# Deepgram for what follows). Safe to run again.
+# Sarvam for what follows). Safe to run again.
 set -euo pipefail
 trap 'echo "✗ Voice setup stopped at line $LINENO — paste the lines above to Claude"' ERR
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"

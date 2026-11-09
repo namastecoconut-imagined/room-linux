@@ -4,10 +4,10 @@
     — read as it comes (16 kHz mono). Room does no mic processing of its own: no gain, no filters, no suppression.
   • "Alexa" is spotted on the Surface (openWakeWord), and Room reacts at once — no checking over the internet first.
     While Room is talking it needs a clearer "Alexa" (its own voice is in the mic).
-  • What follows streams to Deepgram (nova-3, Indian English) from the moment "Alexa" is heard (with the second before
+  • What follows streams to Sarvam (saaras, trained on Indian speech) from the moment "Alexa" is heard (with the second before
     it, so a quick "Alexa, lights off" isn't clipped). One stream per request: a pause after "Alexa" or mid-sentence
     ("…tomorrow in") doesn't end it.
-  • You've finished when Deepgram says so, or after ~0.8 s without speech (Silero VAD, on the Surface) — whichever
+  • You've finished after ~0.8 s without speech (Silero VAD, on the Surface) — whichever
     is first. Nothing said for 5 s (8 s after a question): it closes.
 
 Events out: level · wake · listening · partial · heard · error. Commands in: listen (tap, or follow-up) · cancel · words.
@@ -50,130 +50,10 @@ def unfinished(text: str) -> bool:
     return bool(w) and w[-1] in DANGLE and not (text or "").rstrip().endswith((".", "?", "!"))
 
 
-class Stream:
-    """One request, live to Deepgram. on_text(text, self) while talking; on_end(text, self) once."""
-
-    def __init__(self, cfg, words, on_text, on_end, spare=None):
-        self.cfg, self.on_text, self.on_end = cfg, on_text, on_end
-        self.q: queue.Queue = queue.Queue()
-        self.finals: list[str] = []
-        self.interim = ""
-        self.last_guess = ""
-        self.ended = False
-        self.closing = False
-        self.failed = False
-        self.url = Stream.url(cfg, words)
-        self.spare = spare
-        self.t0 = time.time()
-        self.first_at = 0.0                 # Deepgram's first words back
-        self.guesses: list[str] = []        # what it thought along the way (the final can be worse: "please drink chill")
-        threading.Thread(target=self._run, daemon=True).start()
-
-    @staticmethod
-    def url(cfg, words):
-        from urllib.parse import urlencode
-        p = [("model", cfg.get("deepgramModel", "nova-3")), ("language", cfg.get("language", "en-IN")),
-             ("encoding", "linear16"), ("sample_rate", str(RATE)), ("channels", "1"), ("interim_results", "true"),
-             ("endpointing", str(cfg.get("endpointMs", 800))), ("utterance_end_ms", "1000"), ("vad_events", "true")]
-        p += [("keyterm", w) for w in (KEYTERMS + list(words))[:50]]
-        return cfg.get("deepgramListenURL", "wss://api.deepgram.com/v1/listen") + "?" + urlencode(p)
-
-    def push(self, pcm):
-        if not self.ended:
-            self.q.put(pcm.tobytes())
-
-    def finish(self):
-        """Ask Deepgram for its final words now."""
-        if not self.closing:
-            self.closing = True
-            self.q.put(None)
-
-    def text(self):
-        return " ".join([*self.finals, self.interim]).strip()
-
-    def _end(self):
-        if not self.ended:
-            self.ended = True
-            self.on_end(self.text() or self.last_guess, self)
-
-    def _run(self):
-        from websockets.sync.client import connect
-        t0 = time.time()
-        try:
-            if self.spare:
-                ctx, ws = self.spare
-            else:
-                ctx = connect(self.url, additional_headers={"Authorization": f"Token {self.cfg['deepgramKey']}"},
-                              open_timeout=4, max_size=None)
-                ws = ctx.__enter__()
-        except Exception as e:
-            print("[voice] deepgram connect:", repr(e), flush=True)
-            self.failed = True
-            self._end()
-            return
-
-        self.opened = time.time() - t0
-
-        def sender():
-            try:
-                while not self.ended:
-                    try:
-                        b = self.q.get(timeout=2)
-                    except queue.Empty:
-                        ws.send(json.dumps({"type": "KeepAlive"})); continue
-                    if b is None:
-                        ws.send(json.dumps({"type": "Finalize"}))
-                        time.sleep(1.5)
-                        break
-                    ws.send(b)
-                ws.send(json.dumps({"type": "CloseStream"}))
-            except Exception:
-                pass
-        threading.Thread(target=sender, daemon=True).start()
-        try:
-            for msg in ws:
-                if isinstance(msg, bytes):
-                    continue
-                m = json.loads(msg)
-                if m.get("type") == "Results":
-                    t = (((m.get("channel") or {}).get("alternatives") or [{}])[0].get("transcript") or "").strip()
-                    if m.get("is_final"):
-                        if t:
-                            self.finals.append(t)
-                        self.interim = ""
-                    else:
-                        self.interim = t
-                        if t:
-                            self.last_guess = " ".join([*self.finals, t])
-                            self.guesses.append(self.last_guess)
-                    if t and not self.first_at:
-                        self.first_at = time.time()
-                    if self.text():
-                        self.on_text(self.text(), self)
-                    if m.get("from_finalize") and self.finals:
-                        break
-                    if m.get("speech_final") and self.finals and not unfinished(self.text()):
-                        break
-                elif m.get("type") == "UtteranceEnd" and self.finals and not unfinished(self.text()):
-                    break
-        except Exception as e:
-            if not self.ended:
-                print("[voice] deepgram:", repr(e), flush=True)
-        print(f"[voice] heard {self.text()!r} · {'spare' if self.spare else 'new'} connection {self.opened:.2f} s · "
-              f"first words {self.first_at - self.t0 if self.first_at else 0:.1f} s · done {time.time() - self.t0:.1f} s")
-        self._end()
-        try:
-            ws.send(json.dumps({"type": "CloseStream"}))
-            ctx.__exit__(None, None, None)
-        except Exception:
-            pass
-
-
 class SarvamStream:
     """One request, live to Sarvam (saaras, trained on Indian speech — Indian English included) over its realtime
     websocket: audio as base64 JSON, partial words as they come, the final words after a flush. Same shape as
-    Stream, so the rest of the listening works the same. If Sarvam can't be reached, `fallback` is set and the audio
-    so far is kept, so Ears can carry on with Deepgram without losing what was said."""
+    the rest of the listening expects."""
 
     URL = "wss://api.sarvam.ai/speech-to-text-realtime/ws"
 
@@ -183,12 +63,11 @@ class SarvamStream:
         self.finals: dict = {}              # utterance → its final words
         self.parts: dict = {}               # utterance → words so far
         self.last_guess = ""
-        self.ended = self.closing = self.failed = self.fallback = False
+        self.ended = self.closing = self.failed = False
         self.t0 = time.time()
         self.first_at = 0.0
         self.opened = 0.0
         self.guesses: list[str] = []
-        self.audio: list[bytes] = []        # everything sent, in case Deepgram has to take over
         self.lock = threading.Lock()
         self.got_final = threading.Event()
         terms = (KEYTERMS + list(words))[:50]
@@ -197,7 +76,7 @@ class SarvamStream:
             "language_code": cfg.get("sarvamLanguage", "en-IN"),
             "model": cfg.get("sarvamModel", "saaras:v4"),
             "stream_type": cfg.get("sarvamStream", "balanced"),
-            "endpointing": "manual",        # Room decides when you've finished (as with Deepgram)
+            "endpointing": "manual",        # Room decides when you've finished
             "encoding": "linear16", "sample_rate": str(RATE),
             "keyterms": json.dumps([t[:64] for t in terms]),
             "prompt": "Voice commands to a smart-home panel in Bangalore, India: lights, scenes, timers, alarms, "
@@ -208,7 +87,6 @@ class SarvamStream:
     def push(self, pcm):
         if not self.ended:
             b = pcm.tobytes()
-            self.audio.append(b)
             self.q.put(b)
 
     def finish(self):
@@ -222,7 +100,7 @@ class SarvamStream:
 
     def _end(self):
         with self.lock:
-            if self.ended or self.fallback:     # Deepgram is taking over this one
+            if self.ended:
                 return
             self.ended = True
         print(f"[voice] heard {self.text()!r} · sarvam · connect {self.opened:.2f} s · "
@@ -238,8 +116,9 @@ class SarvamStream:
                           open_timeout=4, max_size=None)
             ws = ctx.__enter__()
         except Exception as e:
-            print("[voice] sarvam connect:", repr(e), "— using Deepgram")
-            self.fallback = True
+            print("[voice] sarvam connect:", repr(e), flush=True)
+            self.failed = True
+            self._end()
             return
         self.opened = time.time() - self.t0
 
@@ -258,10 +137,6 @@ class SarvamStream:
                         # the final words normally come back in a fraction of a second; don't wait forever
                         if not self.got_final.wait(2.0):
                             print(f"[voice] sarvam: no final words after 2 s (partial so far {self.text()!r})", flush=True)
-                            if not self.text() and self.cfg.get("deepgramKey"):
-                                # Sarvam gave nothing at all: let Deepgram hear the same audio rather than lose it
-                                self.empty = self.fallback = True
-                                break
                         self._end()
                         break
                     ws.send(json.dumps({"event": "audio_input", "audio": base64.b64encode(b).decode()}))
@@ -296,74 +171,19 @@ class SarvamStream:
                 if ev == "error":
                     print(f"[voice] sarvam: {m.get('code')} {m.get('message')}")
                     if m.get("is_fatal"):
-                        if not self.text() and not self.closing:
-                            self.fallback = True        # turned down (no access, quota…): Deepgram takes over
-                            return
+                        if not self.text():
+                            self.failed = True          # turned down (no access, quota…): say so on the panel
                         break
         except Exception as e:
             if not self.ended:
                 print("[voice] sarvam:", repr(e), flush=True)
-        if not self.ended and not self.fallback:
+        if not self.ended:
             print(f"[voice] sarvam closed {getattr(ws, 'close_code', None)} {getattr(ws, 'close_reason', '')}", flush=True)
         self._end()
         try:
             ctx.__exit__(None, None, None)
         except Exception:
             pass
-
-
-class Spare:
-    """One Deepgram connection kept open and ready (KeepAlive, no audio — nothing to pay for): from India, opening one
-    costs ~0.5–0.9 s, which would otherwise come straight after "Alexa"."""
-
-    def __init__(self, cfg):
-        self.cfg, self.words = cfg, []
-        self.lock = threading.Lock()
-        self.spare = None                  # (ctx, ws, url, opened)
-        self.need = threading.Event()
-        threading.Thread(target=self._keep, daemon=True).start()
-
-    def take(self):
-        with self.lock:
-            sp, self.spare = self.spare, None
-        self.need.set()
-        if sp and sp[2] == Stream.url(self.cfg, self.words) and time.time() - sp[3] < 400:
-            return sp[0], sp[1]
-        if sp:
-            Spare._close(sp)
-        return None
-
-    @staticmethod
-    def _close(sp):
-        try:
-            sp[1].send(json.dumps({"type": "CloseStream"})); sp[0].__exit__(None, None, None)
-        except Exception:
-            pass
-
-    def _keep(self):
-        from websockets.sync.client import connect
-        while True:
-            with self.lock:
-                sp = self.spare
-            try:
-                url = Stream.url(self.cfg, self.words)
-                if sp is None or time.time() - sp[3] > 380 or sp[2] != url:
-                    ctx = connect(url, additional_headers={"Authorization": f"Token {self.cfg['deepgramKey']}"},
-                                  open_timeout=5, max_size=None)
-                    new = (ctx, ctx.__enter__(), url, time.time())
-                    with self.lock:
-                        old, self.spare = self.spare, new
-                    if old:
-                        Spare._close(old)
-                else:
-                    sp[1].send(json.dumps({"type": "KeepAlive"}))
-            except Exception as e:
-                print("[voice] deepgram spare:", repr(e), flush=True)
-                with self.lock:
-                    self.spare = None
-                time.sleep(2)
-            self.need.wait(3)
-            self.need.clear()
 
 
 class Ears:
@@ -378,8 +198,7 @@ class Ears:
         self.vad = VAD(model_path=os.path.join(d, "silero_vad.onnx"))
         self.threshold = float(cfg.get("wakeThreshold", 0.4))
         self.words: list[str] = []
-        self.spare = Spare(cfg) if cfg.get("deepgramKey") else None
-        self.stream: Stream | None = None
+        self.stream: SarvamStream | None = None
         self.state = "idle"                 # idle · listening
         self.ring: list[np.ndarray] = []    # the last ~1 s (so "Alexa, lights off" in one breath isn't clipped)
         self.clock = 0.0
@@ -471,20 +290,6 @@ class Ears:
         if self.state != "listening":
             return
         s = self.stream
-        if s and getattr(s, "fallback", False) and not s.ended and not self.cfg.get("deepgramKey"):
-            s.fallback = False
-            s._end()                        # no Deepgram to fall back to: end with nothing heard
-        if s and getattr(s, "fallback", False) and not s.ended:
-            # Sarvam couldn't be reached or turned us down: Deepgram for a while, with everything said so far
-            if not getattr(s, "empty", False):
-                self.sarvam_off_until = time.time() + 300
-            s.ended = True
-            d = Stream(self.cfg, self.words, self._text, self._end, self.spare.take() if self.spare else None)
-            for b in s.audio:
-                d.q.put(b)
-            if s.closing:
-                d.finish()
-            self.stream = s = d
         if s:
             s.push(pcm)
             if float(self.vad.predict(pcm, frame_size=480)) > 0.4:
@@ -525,18 +330,11 @@ class Ears:
         self.wait = 8.0 if follow else 6.0
         self.mine_first = mine_first
         self.vad.reset_states()
-        use_sarvam = bool(self.cfg.get("sarvamKey")) and self.cfg.get("stt", "sarvam") == "sarvam" \
-            and time.time() > getattr(self, "sarvam_off_until", 0)
-        if not use_sarvam and not self.cfg.get("deepgramKey"):
-            self.emit(ev="error", msg="No speech key in config.json (sarvamKey or deepgramKey) — Room can't understand speech")
+        if not self.cfg.get("sarvamKey"):
+            self.emit(ev="error", msg="No sarvamKey in config.json — Room can't understand speech without it")
             self.state = "idle"
             return
-        if self.spare:
-            self.spare.words = self.words
-        if use_sarvam:
-            s = SarvamStream(self.cfg, self.words, self._text, self._end)
-        else:
-            s = Stream(self.cfg, self.words, self._text, self._end, self.spare.take() if self.spare else None)
+        s = SarvamStream(self.cfg, self.words, self._text, self._end)
         self.stream = s
         if preroll:
             for c in self.ring:

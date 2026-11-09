@@ -53,8 +53,8 @@ Set up once with `bash scripts/voice.sh` (install.sh runs it too).
 
 - **Listening** (`voice/ears.py`) — the system's default mic as it is (on the Surface: the noise-suppressed "Surface
   Mic"), no processing of Room's own. "Alexa" is spotted on the Surface (openWakeWord) and Room reacts at once; what
-  follows streams to Deepgram (nova-3, en-IN), one stream per request. You've finished when Deepgram says so or after
-  ~0.8 s without speech (Silero VAD).
+  follows streams to Sarvam (saaras:v4, en-IN — `sarvamKey`), one stream per request. You've finished after ~0.8 s
+  without speech (Silero VAD).
 - **Understanding** — Claude (`room/brain.py`, the iPhone panel's prompt and tool) with a snapshot of the home;
   `room/intents.py`, plain rules, when there's no key or no internet. `room/assistant.py` carries out the actions.
 - **Answers** — Deepgram's Aura voice, streamed (`deepgramKey`); Kokoro (`af_heart`) offline. Chimes in `voice/cues`.

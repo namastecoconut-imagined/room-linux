@@ -168,7 +168,7 @@ Item {
             var dx = e.x - x0, dy = e.y - y0
             if (mode === "" && Math.abs(dx) + Math.abs(dy) > 10) {
                 if (inSeek(x0, y0)) mode = music.duration > 0 && music.canSeek ? "seek" : "none"   // never volume by accident
-                else if (Math.abs(dy) >= Math.abs(dx)) mode = "none"
+                else if (Math.abs(dy) > Math.abs(dx) * 1.6) mode = "none"     // clearly up/down: nothing
                 else { mode = "flow"; x0 = e.x - (dx > 0 ? 4 : -4) }     // follow from here, without a jump
             }
             if (mode === "seek") mp.seekDrag = seekF(e.x)
@@ -191,8 +191,8 @@ Item {
     // A swipe past 180 px (or a button) skips: the cover flies the way it was pushed and the next one comes in
     // from the other side.
     function flowEnd(dx, ms) {
-        // a long push, or a quick flick (a short swipe done fast) — like a phone's
-        var far = Math.abs(dx) > 180 || (Math.abs(dx) > 60 && ms < 320)
+        // even a small swipe skips (asked for: the cover is a small target in the part of the screen that answers)
+        var far = Math.abs(dx) > 36
         var dir = !far ? 0 : dx < 0 ? 1 : -1
         if (dir === 0 || !music.exists) { flyBack.start(); return }
         skip(dir)

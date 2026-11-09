@@ -6,7 +6,7 @@ import QtQuick.Effects
 // colours swirl very slowly. A new song's colours fade in over the old ones.
 //
 // Light on the Surface: each copy is blurred once (a cached layer) and only moved after that, and the movement steps
-// 15 times a second, not 60 — slow enough that you can't tell, a quarter of the redrawing. Nothing moves while it's
+// 20 times a second, not 60 — a third of the redrawing. Nothing moves while it's
 // hidden or faded out.
 Item {
     id: cw
@@ -17,9 +17,9 @@ Item {
 
     property real t: 0
     Timer {
-        interval: 66; repeat: true
+        interval: 50; repeat: true
         running: cw.moving && cw.visible && cw.opacity > 0 && cw.strength > 0
-        onTriggered: cw.t += 0.066
+        onTriggered: cw.t += 0.05
     }
 
     // two slots, so a new cover's colours fade in over the old ones
@@ -52,19 +52,22 @@ Item {
         anchors.fill: parent
         opacity: on && src !== "" && a.status === Image.Ready ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 1600; easing.type: Easing.InOutQuad } }
+        // movement you can see but that never hurries: each copy circles and turns once every ~30–50 s
         Blob {
             id: a
             src: sw.src
-            x: -cw.width * 0.3 + cw.width * 0.08 * Math.sin(cw.t / 19)
-            y: -cw.height * 0.3 + cw.height * 0.07 * Math.cos(cw.t / 23)
-            rotation: 8 * Math.sin(cw.t / 41)
+            x: -cw.width * 0.3 + cw.width * 0.16 * Math.sin(cw.t / 6)
+            y: -cw.height * 0.3 + cw.height * 0.14 * Math.cos(cw.t / 7.5)
+            rotation: 22 * Math.sin(cw.t / 9)
+            scale: 1 + 0.12 * Math.sin(cw.t / 5)
         }
         Blob {
             src: sw.src
-            x: -cw.width * 0.3 + cw.width * 0.09 * Math.cos(cw.t / 17)
-            y: -cw.height * 0.3 + cw.height * 0.08 * Math.sin(cw.t / 29)
-            rotation: 180 + 10 * Math.cos(cw.t / 37)
-            opacity: 0.55
+            x: -cw.width * 0.3 + cw.width * 0.18 * Math.cos(cw.t / 5.5)
+            y: -cw.height * 0.3 + cw.height * 0.16 * Math.sin(cw.t / 8)
+            rotation: 180 + 26 * Math.cos(cw.t / 7)
+            scale: 1.1 + 0.12 * Math.cos(cw.t / 6.5)
+            opacity: 0.6
         }
     }
     Item {

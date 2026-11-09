@@ -1,8 +1,8 @@
 import QtQuick
 import QtQuick.Effects
 
-// Music standby — "Poster". The song's colours fill the room, slowly moving (ColourWash); the title is set huge
-// across the middle. Top left: the time and the day, with a running timer / the next alarm under it; top right: ⚡
+// Music standby — "Poster", the Zune way. The song's colours fill the room, slowly moving (ColourWash); the artist,
+// the title and the album drift across it as giant lowercase words. Top left: the time and the day, with a running timer / the next alarm under it; top right: ⚡
 // status and the weather. Along the bottom: a small cover, the artist and what's next, and the progress. A new song
 // fades its colours and title in over the old ones. Tap the song (bottom left) for the player.
 Item {
@@ -69,31 +69,75 @@ Item {
         T { anchors.right: parent.right; visible: text !== ""; text: room.status; font.pixelSize: 20; color: Qt.rgba(1, 0.965, 0.925, 0.4) }
     }
 
-    // ---------------------------------------------------------------- the title, huge (fades over to the next song)
-    property string shownTitle: music.title || ""
-    property string wantTitle: music.title || ""
-    onWantTitleChanged: titleSwap.restart()
-    SequentialAnimation {
-        id: titleSwap
-        NumberAnimation { target: title; property: "opacity"; to: 0; duration: 500; easing.type: Easing.InQuad }
-        ScriptAction { script: ms.shownTitle = ms.wantTitle }
-        NumberAnimation { target: title; property: "opacity"; to: 1; duration: 900; easing.type: Easing.OutQuad }
+    // ---------------------------------------------------------------- Zune's now playing: giant words drifting by
+    // Three layers of lowercase type, far bigger than the screen, sliding slowly sideways at different speeds and
+    // in different directions — the artist faint and enormous behind, the title big and bright, the album small and
+    // quiet below. Each loops seamlessly. A new song: they all fade out, change, and drift back in.
+    property real zt: 0
+    property real zacc: 0
+    FrameAnimation {            // 30 a second (every other frame): smooth for slow movement, half the drawing
+        running: ms.visible
+        onTriggered: {
+            ms.zacc += Math.min(0.1, frameTime)
+            if (currentFrame % 2) return
+            ms.zt += ms.zacc; ms.zacc = 0
+        }
     }
-    T {
-        id: title
-        x: 64; width: 1240
-        anchors.verticalCenter: parent.verticalCenter; anchors.verticalCenterOffset: 10
-        height: 420
-        verticalAlignment: Text.AlignVCenter
-        text: ms.shownTitle
-        wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight
-        fontSizeMode: Text.Fit; minimumPixelSize: 84
-        font.pixelSize: 196; font.weight: Font.DemiBold; font.letterSpacing: -5
-        lineHeight: 0.92
-        color: ms.ink
-        opacity: 1
-        layer.enabled: true
-        layer.effect: MultiEffect { shadowEnabled: true; shadowColor: Qt.rgba(0, 0, 0, 0.35); shadowBlur: 0.8; shadowVerticalOffset: 6; shadowHorizontalOffset: 0 }
+    property string shownTitle: (music.title || "").toLowerCase()
+    property string shownArtist: (music.artist || "").toLowerCase()
+    property string shownAlbum: (music.album || "").toLowerCase()
+    property string wantKey: (music.title || "") + "|" + (music.artist || "")
+    onWantKeyChanged: swap.restart()
+    SequentialAnimation {
+        id: swap
+        NumberAnimation { target: words; property: "opacity"; to: 0; duration: 600; easing.type: Easing.InQuad }
+        ScriptAction {
+            script: {
+                ms.shownTitle = (music.title || "").toLowerCase()
+                ms.shownArtist = (music.artist || "").toLowerCase()
+                ms.shownAlbum = (music.album || "").toLowerCase()
+                ms.zt = 0
+            }
+        }
+        NumberAnimation { target: words; property: "opacity"; to: 1; duration: 1400; easing.type: Easing.OutQuad }
+    }
+    component Drift: Item {
+        id: dr
+        property string text: ""
+        property real size: 200
+        property int weight: Font.Normal
+        property real speed: 20                  // px a second; negative drifts right
+        property real start: 0                   // where in the loop it begins (so the layers don't line up)
+        property color colour: ms.ink
+        width: ms.width; height: probe.height
+        T { id: probe; visible: false; text: dr.text; font.pixelSize: dr.size; font.weight: dr.weight; font.letterSpacing: -dr.size * 0.03 }
+        // a wide gap: one word crossing at a time, the next coming in as it leaves (Zune, not a ticker)
+        readonly property real gap: Math.max(dr.size * 0.6, ms.width * 0.55)
+        readonly property real period: probe.implicitWidth + gap
+        Row {
+            x: dr.period > 0 ? -(((ms.zt * dr.speed + dr.start) % dr.period) + dr.period) % dr.period : 0
+            spacing: dr.gap
+            Repeater {
+                model: dr.text === "" ? 0 : Math.ceil((ms.width + 2 * dr.period) / Math.max(1, dr.period)) + 1
+                T { text: dr.text; font.pixelSize: dr.size; font.weight: dr.weight; font.letterSpacing: -dr.size * 0.03; color: dr.colour; elide: Text.ElideNone }
+            }
+        }
+    }
+    Item {
+        id: words
+        anchors.fill: parent
+        Drift {          // the artist: enormous, faint, drifting right behind everything
+            y: 70; text: ms.shownArtist; size: 380; weight: Font.Bold; speed: -14; start: 200
+            colour: Qt.rgba(1, 0.965, 0.925, ms.night ? 0.06 : 0.1)
+        }
+        Drift {          // the title: big and bright, drifting left
+            y: 330; text: ms.shownTitle; size: 210; weight: Font.DemiBold; speed: 24
+            colour: Qt.rgba(1, 0.965, 0.925, ms.night ? 0.75 : 0.96)
+        }
+        Drift {          // the album: small and quiet, drifting right a little faster
+            y: 590; text: ms.shownAlbum; size: 64; weight: Font.Light; speed: -32; start: 400
+            colour: Qt.rgba(1, 0.965, 0.925, ms.night ? 0.3 : 0.45)
+        }
     }
 
     // ---------------------------------------------------------------- bottom: the song

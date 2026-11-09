@@ -6,6 +6,7 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from .airplay import AirPlay
 from .bluetooth import Bluetooth
+from .airplay_video import AirPlayVideo
 from .display import Display
 from .calendar import Calendar
 from .lights import Lights
@@ -28,6 +29,7 @@ class Room(QObject):
     alertChanged = Signal()
     voiceChanged = Signal()
     settingsChanged = Signal()
+    videoWaitChanged = Signal()
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -40,6 +42,8 @@ class Room(QObject):
         self.spotify = Spotify(cfg.get("spotify"))
         self.airplay = AirPlay()
         self.airplay.changed.connect(self.musicChanged)
+        self.avideo = AirPlayVideo()           # an iPhone sending a video to "Room Screen"
+        self.avideo.changed.connect(self.videoWaitChanged)
         # what played before, whatever the source — the left side of the cover flow
         self._history: list[dict] = []
         self._settle = QTimer(self); self._settle.setSingleShot(True); self._settle.setInterval(1500)
@@ -83,6 +87,7 @@ class Room(QObject):
         self.lights.start()
         self.spotify.start()
         self.airplay.start()
+        self.avideo.start()
         self.assistant.start()
         from .output import Output
         self.output = Output(self.cfg); self.output.start()
@@ -495,6 +500,12 @@ class Room(QObject):
 
     @Slot(float)
     def setBrightness(self, v): self._display.set_level(v)
+
+    @Property("QVariantMap", notify=videoWaitChanged)
+    def videoWait(self):
+        if self.demo and os.environ.get("ROOM_DEMO_VIDEOWAIT") == "1":
+            return {"waiting": True, "from": "Aviral's iPhone", "since": time.time()}
+        return self.avideo.snapshot()
 
     @Property("QVariantMap", notify=settingsChanged)
     def bluetooth(self):

@@ -16,6 +16,11 @@ Item {
     onVisibleChanged: visible ? room.btSearch() : room.btStop()
 
     Header { title: "Settings"; onBack: st.back() }
+    T {     // the battery, small, beside the title
+        x: 270; y: 66; visible: room.battery.pct !== undefined
+        text: "Battery " + room.battery.pct + "%" + (room.battery.charging ? "  ·  ⚡ plugged in" : "")
+        font.pixelSize: 19; color: Theme.sub
+    }
 
     component Toggle: Press {
         property bool on: false

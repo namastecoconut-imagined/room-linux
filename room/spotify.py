@@ -26,6 +26,8 @@ class Spotify(QObject):
         # a newer token we were handed beats the one in config.json, as long as config hasn't changed since
         self.refresh_token = saved.get("refreshToken") if saved.get("from") == cfg.get("refreshToken") else cfg.get("refreshToken", "")
         self.cfg_token = cfg.get("refreshToken", "")
+        # (timing by time.monotonic(): the wall clock can jump hours at start-up on this Surface, which once left an
+        # expired login looking valid — and the queue, playlists and speakers all quietly stopped)
         self.token, self.expiry = None, 0.0
         self.player: dict | None = None
         self.fetched_at = 0.0
@@ -66,9 +68,9 @@ class Spotify(QObject):
 
     # ---- auth
     def _with_token(self, use):
-        if self.token and time.time() < self.expiry:
+        if self.token and time.monotonic() < self.expiry:
             return use(self.token)
-        if time.time() < self._retry_at:
+        if time.monotonic() < self._retry_at:
             return use(None)
         self._waiting.append(use)
         if self._refreshing:
@@ -84,7 +86,7 @@ class Spotify(QObject):
                 obj = {}
             if obj.get("access_token"):
                 tok = self.token = obj["access_token"]
-                self.expiry = time.time() + float(obj.get("expires_in", 3600)) - 60
+                self.expiry = time.monotonic() + float(obj.get("expires_in", 3600)) - 60
                 self.error, self._fails = "", 0
             else:
                 self.error = "Spotify login expired — run tools/spotify_token.py again" if obj else "Couldn't reach Spotify"
@@ -93,7 +95,7 @@ class Spotify(QObject):
                 self.store.write({"refreshToken": self.refresh_token, "from": self.cfg_token})
             if not tok:
                 self._fails += 1
-                self._retry_at = time.time() + min(1800, 15 * 2 ** min(self._fails, 7))
+                self._retry_at = time.monotonic() + min(1800, 15 * 2 ** min(self._fails, 7))
             w, self._waiting = self._waiting, []
             for f in w:
                 f(tok)
@@ -110,7 +112,13 @@ class Spotify(QObject):
             h = {"Authorization": f"Bearer {tok}"}
             if body is not None:
                 h["Content-Type"] = "application/json"
-            net.request(method, API + path, done, h, json.dumps(body).encode() if body is not None else None)
+
+            def back(status, data):
+                if status == 401 and self.token == tok:
+                    self.token, self.expiry = None, 0.0      # turned down: log in again on the next call
+                if done:
+                    done(status, data)
+            net.request(method, API + path, back, h, json.dumps(body).encode() if body is not None else None)
         self._with_token(go)
 
     # ---- state
@@ -127,9 +135,9 @@ class Spotify(QObject):
                     pass
             self.changed.emit()
         self._api("GET", "/me/player?additional_types=episode", got)
-        if time.time() - self._devices_at > 20:
+        if time.monotonic() - self._devices_at > 20:
             self.refresh_devices()
-        if time.time() - self._playlists_at > 600:
+        if time.monotonic() - self._playlists_at > (600 if self.playlists else 30):
             self.refresh_playlists()
 
     # ---- what's around the current song, and what you can play
@@ -199,7 +207,7 @@ class Spotify(QObject):
         self._api("PUT" if self.liked else "DELETE", f"/me/tracks?ids={tid}")
 
     def refresh_devices(self):
-        self._devices_at = time.time()
+        self._devices_at = time.monotonic()
         def got(status, data):
             if status != 200: return
             try:
@@ -211,7 +219,7 @@ class Spotify(QObject):
         self._api("GET", "/me/player/devices", got)
 
     def refresh_playlists(self):
-        self._playlists_at = time.time()
+        self._playlists_at = time.monotonic()
         def got(status, data):
             if status != 200: return
             try:

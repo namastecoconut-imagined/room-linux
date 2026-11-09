@@ -178,7 +178,8 @@ Item {
     }
     T {
         visible: rooms.length > 0
-        x: 744; y: 886; text: "Tap a room to switch it  ·  hold for more"; font.pixelSize: 15; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.3)
+        x: 744; y: grid.y + Math.min(2, Math.ceil(rooms.length / 2)) * 196 + 2      // right under the last tile
+        text: "Tap a room to switch it  ·  hold for more"; font.pixelSize: 15; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.3)
     }
 
     // ---------------------------------------------------------------- the scenes sheet (low on the screen, where touch works)

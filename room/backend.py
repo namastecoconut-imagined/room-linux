@@ -507,6 +507,13 @@ class Room(QObject):
     @Slot(str)
     def btForget(self, mac): self.bt.forget(mac)
 
+    @Property("QVariantMap", notify=statusChanged)
+    def battery(self):
+        """{pct, charging} — shown small in Settings."""
+        if self.demo:
+            return {"pct": 82, "charging": True}
+        return self.screen.battery
+
     @Property(bool, notify=settingsChanged)
     def kiosk(self):
         """Started as just the panel (room-kiosk on), not inside GNOME."""

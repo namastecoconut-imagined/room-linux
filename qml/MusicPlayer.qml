@@ -162,21 +162,22 @@ Item {
         property real y0: 0
         function inSeek(x, y) { return x >= mp.cx - mp.rw / 2 && x <= mp.cx + mp.rw / 2 && y >= mp.cy + mp.rw / 2 - 30 && y <= mp.cy + mp.rw / 2 + 82 }
         function seekF(x) { return Math.max(0, Math.min(1, (x - (mp.cx - mp.cs / 2)) / mp.cs)) }
-        onPressed: (e) => { mode = ""; x0 = e.x; y0 = e.y }
+        property real t0: 0
+        onPressed: (e) => { mode = ""; x0 = e.x; y0 = e.y; t0 = Date.now() }
         onPositionChanged: (e) => {
             var dx = e.x - x0, dy = e.y - y0
-            if (mode === "" && Math.abs(dx) + Math.abs(dy) > 14) {
+            if (mode === "" && Math.abs(dx) + Math.abs(dy) > 10) {
                 if (inSeek(x0, y0)) mode = music.duration > 0 && music.canSeek ? "seek" : "none"   // never volume by accident
                 else if (Math.abs(dy) >= Math.abs(dx)) mode = "none"
-                else mode = "flow"
+                else { mode = "flow"; x0 = e.x - (dx > 0 ? 4 : -4) }     // follow from here, without a jump
             }
             if (mode === "seek") mp.seekDrag = seekF(e.x)
-            else if (mode === "flow") mp.flowDx = dx
+            else if (mode === "flow") mp.flowDx = e.x - x0
         }
         onReleased: (e) => {
             var dx = e.x - x0
             if (mode === "seek") { mp.seekTo_(seekF(e.x) * music.duration); mp.seekDrag = -1 }
-            else if (mode === "flow") mp.flowEnd(dx)
+            else if (mode === "flow") mp.flowEnd(dx, Date.now() - t0)
             else if (mode === "") {
                 // a tap
                 if (inSeek(e.x, e.y)) { if (music.duration > 0 && music.canSeek) mp.seekTo_(seekF(e.x) * music.duration) }
@@ -189,8 +190,10 @@ Item {
 
     // A swipe past 180 px (or a button) skips: the cover flies the way it was pushed and the next one comes in
     // from the other side.
-    function flowEnd(dx) {
-        var dir = dx < -180 ? 1 : dx > 180 ? -1 : 0
+    function flowEnd(dx, ms) {
+        // a long push, or a quick flick (a short swipe done fast) — like a phone's
+        var far = Math.abs(dx) > 180 || (Math.abs(dx) > 60 && ms < 320)
+        var dir = !far ? 0 : dx < 0 ? 1 : -1
         if (dir === 0 || !music.exists) { flyBack.start(); return }
         skip(dir)
     }
@@ -222,6 +225,10 @@ Item {
         x: mp.cx - mp.cs / 2 + mp.flowDx; y: mp.cy - mp.cs / 2
         rotation: mp.flowDx / 104
         opacity: Math.max(0.35, 1 - Math.abs(mp.flowDx) / 1040)
+        // drawn once into a texture and then only moved, turned and faded while it's swiped — the rounded-corner
+        // effect isn't redone every frame, so the cover keeps up with the finger
+        layer.enabled: true
+        layer.smooth: true
         Rectangle {
             x: -6; y: 50; width: parent.width + 12; height: parent.height - 30
             radius: 52; color: Qt.rgba(0, 0, 0, 0.4)

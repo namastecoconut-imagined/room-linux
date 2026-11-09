@@ -15,6 +15,7 @@ class Screen(QObject):
         self.standby = False
         self.dim = False
         self.status = ""
+        self.battery = {}
 
     def start(self):
         self.timer = QTimer(self); self.timer.timeout.connect(self._tick); self.timer.start(20000)
@@ -27,7 +28,22 @@ class Screen(QObject):
         self.standby, self.dim = standby, dim
 
     # ---- ⚡ Cool
+    def _battery(self):
+        """{pct, charging} from the battery, or {} when there isn't one."""
+        for b in sorted(glob.glob("/sys/class/power_supply/BAT*")):
+            try:
+                pct = int(open(b + "/capacity").read().strip())
+                st = open(b + "/status").read().strip()
+                return {"pct": pct, "charging": st in ("Charging", "Full") or st == "Not charging"}
+            except Exception:
+                continue
+        return {}
+
     def _status(self):
+        bat = self._battery()
+        if bat != self.battery:
+            self.battery = bat
+            self.statusChanged.emit()
         parts = []
         try:
             for p in glob.glob("/sys/class/power_supply/*/online"):

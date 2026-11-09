@@ -53,9 +53,22 @@ class Output:
             self.poked.clear()
 
     def airplay(self, nodes):
-        bt = next(((n.get("info") or {}).get("props", {}).get("node.name") for n in nodes
-                   if ((n.get("info") or {}).get("props") or {}).get("media.class") == "Audio/Sink"
-                   and ((n.get("info") or {}).get("props") or {}).get("node.name", "").startswith("bluez_output")), None)
+        """Music (AirPlay, and the Surface's own Spotify speaker) → the Bluetooth speaker when one's connected.
+        Checked against where each stream is *actually* playing (PipeWire's links), not against what was set last:
+        a speaker that drops and reconnects, or a stream PipeWire moved back to the Surface, used to stay on the
+        Surface's speakers for good because Room thought it had already sent it over."""
+        bt, bt_id = None, None
+        for n in nodes:
+            p = (n.get("info") or {}).get("props") or {}
+            if p.get("media.class") == "Audio/Sink" and p.get("node.name", "").startswith("bluez_output"):
+                bt, bt_id = p["node.name"], n["id"]
+                break
+        # where each stream's sound goes now: output node → the nodes it's linked into
+        links: dict = {}
+        for n in nodes:
+            if n.get("type") == "PipeWire:Interface:Link":
+                i = n.get("info") or {}
+                links.setdefault(i.get("output-node-id"), set()).add(i.get("input-node-id"))
         for n in nodes:
             p = (n.get("info") or {}).get("props") or {}
             if p.get("media.class") != "Stream/Output/Audio":
@@ -65,22 +78,31 @@ class Output:
             if "airplay" not in who and "shairport" not in who and not spot:
                 continue                    # (Soloist: the Surface's own Spotify speaker, same rule as AirPlay)
             sid = n["id"]
-            if self.moved.get(sid) == (bt or ""):
-                continue
+            if (n.get("info") or {}).get("state") != "running":
+                continue                    # paused / idle: nothing to move (it's checked again when it plays)
             if sid not in self.moved:
                 # a new music stream starts at full: PipeWire may have kept a lower level for this app from an
                 # old duck that was never undone (how AirPlay got quiet)
                 subprocess.run(["wpctl", "set-volume", str(sid), "1.0"], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            name = "Spotify" if spot else "AirPlay"
             if bt:
-                subprocess.run(["pw-metadata", "-n", "default", str(sid), "target.object", bt], timeout=3,
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"[room] output: {'Spotify' if spot else 'AirPlay'} → {bt}", flush=True)
-            else:
+                if bt_id in links.get(sid, set()):
+                    self.moved[sid] = bt
+                    continue                # already on the speaker
+                # clear, then set: setting the same target again is no change to PipeWire, so it wouldn't move
                 subprocess.run(["pw-metadata", "-n", "default", "-d", str(sid), "target.object"], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print("[room] output: music → the system's output (no Bluetooth speaker)", flush=True)
-            self.moved[sid] = bt or ""
+                subprocess.run(["pw-metadata", "-n", "default", str(sid), "target.object", bt], timeout=3,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"[room] output: {name} → {bt}", flush=True)
+                self.moved[sid] = bt
+                self.burst = max(self.burst, 2)      # look again shortly: did it go?
+            elif self.moved.get(sid) != "":
+                subprocess.run(["pw-metadata", "-n", "default", "-d", str(sid), "target.object"], timeout=3,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"[room] output: {name} → the Surface (no Bluetooth speaker)", flush=True)
+                self.moved[sid] = ""
         live = {n["id"] for n in nodes}
         self.moved = {k: v for k, v in self.moved.items() if k in live}
 

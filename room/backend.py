@@ -92,6 +92,15 @@ class Room(QObject):
         from .output import Output
         self.output = Output(self.cfg); self.output.start()
         self.airplay.changed.connect(self.output.poke)
+        # the Surface's own Spotify speaker starting to play: route it now, not at the next 20 s look
+        self._spot_here = False
+        def spot():
+            p = self.spotify.player or {}
+            here = bool(p.get("is_playing")) and (p.get("device") or {}).get("name", "").lower() == self.spotify.home
+            if here and not self._spot_here:
+                self.output.poke()
+            self._spot_here = here
+        self.spotify.changed.connect(spot)
         self.bt.connectedChanged.connect(self.output.poke)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)

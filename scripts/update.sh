@@ -25,5 +25,10 @@ pkill -f "echo-cancel.conf" 2>/dev/null || true
 rm -rf ~/.local/share/room/voice/echo-cancel.conf ~/.local/share/room/voice/lines ~/.local/share/room/bench \
        ~/.local/bin/room-heard ~/.local/bin/room-mic-compare ~/.local/bin/room-stt-bench \
        ~/room-heard ~/room-mic-compare ~/room-check-*.wav
+# YouTube cast, if it's set up: its packages, then a restart
+if [ -f ~/.config/systemd/user/room-cast.service ]; then
+  ( cd "$HERE/cast" && npm install --omit=dev --no-audit --no-fund --loglevel=error ) || true
+  systemctl --user restart room-cast.service || true
+fi
 systemctl --user restart room.service
 echo "Room updated to $(git log -1 --format='%h · %s')"

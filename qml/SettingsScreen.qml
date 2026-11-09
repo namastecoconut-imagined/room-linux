@@ -64,30 +64,19 @@ Item {
         Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: st.disp.auto === true; onTapped: room.setAutoBrightness(!on) }
     }
     SectionCap { x: 96; y: Theme.deadB1 + 248; text: "This panel" }
-    // paused music: how long before the home card goes back to Liked Songs / Last played (tap to change)
-    Press {
-        x: 96; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
-        onTapped: room.cycleIdleAfter()
-        Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
-        T { x: 24; y: 22; text: "Clear paused music"; font.pixelSize: 22 }
-        T {
-            x: 24; y: 62; font.pixelSize: 20; color: Theme.warm
-            text: room.idleAfterMin > 0 ? "After " + room.idleAfterMin + " min" : "Never"
-        }
-    }
     Press {
         visible: room.kiosk
-        x: 366; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
+        x: 96; y: Theme.deadB1 + 280; width: 528; height: 112; pressScale: 0.985
         onTapped: confirm.open = true
         Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
-        T { x: 24; y: 22; text: "Switch to desktop"; font.pixelSize: 22 }
-        T { x: 24; y: 62; width: parent.width - 70; text: "Restarts into GNOME"; font.pixelSize: 17; color: Theme.sub }
-        Icon { anchors.right: parent.right; anchors.rightMargin: 20; anchors.verticalCenter: parent.verticalCenter; name: "chev"; size: 20; color: Theme.sub }
+        T { x: 28; y: 24; text: "Switch to desktop"; font.pixelSize: 26 }
+        T { x: 28; y: 66; width: parent.width - 90; text: "Restarts into GNOME"; font.pixelSize: 18; color: Theme.sub }
+        Icon { anchors.right: parent.right; anchors.rightMargin: 28; anchors.verticalCenter: parent.verticalCenter; name: "chev"; size: 22; color: Theme.sub }
     }
     T {
         visible: !room.kiosk
-        x: 366; y: Theme.deadB1 + 284; width: 258; wrapMode: Text.WordWrap; font.pixelSize: 16; color: Theme.sub
-        text: "In the GNOME desktop. For just the panel: room-kiosk on, then restart."
+        x: 96; y: Theme.deadB1 + 284; width: 528; wrapMode: Text.WordWrap; font.pixelSize: 19; color: Theme.sub
+        text: "Running inside the GNOME desktop. To start as just the panel, run  room-kiosk on  and restart."
     }
     T {
         visible: room.desktopNote !== ""

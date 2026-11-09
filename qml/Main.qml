@@ -60,12 +60,6 @@ Window {
     readonly property string voiceStage: room.voice.stage || ""
     onVoiceStageChanged: if (voiceState === "idle" && screen === "assistant") voiceClose.restart()
     Timer { id: voiceClose; interval: room.voice.card ? 7000 : win.voiceStage === "miss" ? 3400 : 2600; onTriggered: if (win.screen === "assistant" && !win.talking) win.screen = win.beforeVoice === "assistant" ? "home" : win.beforeVoice }
-    // a video: comes up as soon as it's asked for (after the assistant closes, if it's still showing)
-    readonly property bool videoOn: room.video.active
-    onVideoOnChanged: {
-        if (videoOn) { if (screen === "assistant") beforeVoice = "video"; else screen = "video"; wake() }
-        else { if (screen === "video") screen = "home"; if (beforeVoice === "video") beforeVoice = "home" }
-    }
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
@@ -95,7 +89,7 @@ Window {
         interval: 1000; running: true; repeat: true
         onTriggered: {
             var t = Date.now() / 1000
-            if (win.screen === "music" || win.screen === "video" || win.sheetOpen || win.alerting || win.talking) win.lastTouch = t   // the player (and an alert) keeps it awake
+            if (win.screen === "music" || win.sheetOpen || win.alerting || win.talking) win.lastTouch = t   // the player (and an alert) keeps it awake
             // scrolling, mouse moves and keys count as use too (seen by the app itself, so a list that takes the
             // scroll still counts); on standby only a real tap wakes it
             if (!win.standbyOn) win.lastTouch = Math.max(win.lastTouch, room.lastInput())
@@ -159,12 +153,6 @@ Window {
         RemindersScreen {
             opacity: win.screen === "reminders" ? 1 : 0; visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
-            onBack: win.screen = "home"
-        }
-        VideoScreen {
-            ducked: win.talking
-            opacity: win.screen === "video" ? 1 : 0; visible: opacity > 0 && !win.covered
-            Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }
         Assistant {

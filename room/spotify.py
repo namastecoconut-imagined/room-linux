@@ -50,9 +50,7 @@ class Spotify(QObject):
         self.liked = None                  # is the current song in Liked Songs (None: unknown / not allowed)
         # the home card's shortcuts when nothing's playing: Liked Songs, and what you last played (kept across restarts)
         self.user_id = ""
-        # paused this long: the home card offers its shortcuts (Settings → This panel; 0 = never)
-        self.prefs = State("music")
-        self.idle_after = float(self.prefs.read().get("idleAfterMin", cfg.get("idleAfterMin", 2))) * 60
+        self.idle_after = 60.0             # paused this long: the home card goes back to its shortcuts
         self._paused_at = 0.0
         self.last_store = State("spotify-last")
         self.last: dict = self.last_store.read()        # {name, art, uri, kind}
@@ -211,13 +209,6 @@ class Spotify(QObject):
                     t = self._track(item)
                     self._remember_last({"name": t["title"], "art": t["art"], "uri": t["uri"], "kind": "song"})
 
-    def set_idle_after(self, minutes: int):
-        self.idle_after = float(minutes) * 60
-        try:
-            self.prefs.write({"idleAfterMin": minutes})
-        except Exception:
-            pass
-
     def _remember_last(self, last: dict):
         if last.get("uri") and last != self.last:
             self.last = last
@@ -329,7 +320,7 @@ class Spotify(QObject):
             "recent": self.recent,
             "playlists": self.playlists,
             "last": self.last,
-            "idle": bool(item) and not p.get("is_playing") and bool(self._paused_at) and self.idle_after > 0
+            "idle": bool(item) and not p.get("is_playing") and bool(self._paused_at)
                     and time.monotonic() - self._paused_at > self.idle_after,
             "devices": self.devices,
             "canVolume": bool(dev.get("supports_volume", True)) and dev.get("volume_percent") is not None,

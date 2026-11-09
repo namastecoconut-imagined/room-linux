@@ -6,7 +6,6 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from .airplay import AirPlay
 from .bluetooth import Bluetooth
-from .video import Video
 from .display import Display
 from .calendar import Calendar
 from .lights import Lights
@@ -41,7 +40,6 @@ class Room(QObject):
         self.spotify = Spotify(cfg.get("spotify"))
         self.airplay = AirPlay()
         self.airplay.changed.connect(self.musicChanged)
-        self._video = Video(cfg)
         # what played before, whatever the source — the left side of the cover flow
         self._history: list[dict] = []
         self._settle = QTimer(self); self._settle.setSingleShot(True); self._settle.setInterval(1500)
@@ -422,14 +420,10 @@ class Room(QObject):
 
     @Slot()
     def playLiked(self):
-        if self._video.active:
-            self._video.close()
         self.spotify.play_liked()
 
     @Slot()
     def playLast(self):
-        if self._video.active:
-            self._video.close()
         self.spotify.play_last()
 
     @Slot()
@@ -471,19 +465,6 @@ class Room(QObject):
         else:
             self.spotify.play_uri(uri)
 
-    # how long music can sit paused before the home card goes back to its shortcuts (minutes; 0 = never)
-    @Property(int, notify=settingsChanged)
-    def idleAfterMin(self):
-        return int(self.spotify.idle_after // 60)
-
-    @Slot()
-    def cycleIdleAfter(self):
-        steps = [2, 5, 10, 0]
-        cur = self.idleAfterMin
-        nxt = steps[(steps.index(cur) + 1) % len(steps)] if cur in steps else 2
-        self.spotify.set_idle_after(nxt)
-        self.settingsChanged.emit()
-        self.musicChanged.emit()
 
     @Slot()
     def refreshDevices(self):
@@ -514,10 +495,6 @@ class Room(QObject):
 
     @Slot(float)
     def setBrightness(self, v): self._display.set_level(v)
-
-    @Property(QObject, constant=True)
-    def video(self):
-        return self._video
 
     @Property("QVariantMap", notify=settingsChanged)
     def bluetooth(self):

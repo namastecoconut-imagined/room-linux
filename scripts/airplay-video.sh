@@ -33,7 +33,9 @@ Wants=pipewire-pulse.service
 # no -fs: UxPlay's full-screen switch is X11 code and crashes on Wayland — the panel's compositor (cage) shows the
 # window full screen anyway. No DISPLAY either, so none of UxPlay's X11 window handling runs.
 UnsetEnvironment=DISPLAY
-ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -p $PORT -vs waylandsink -hls -nohold
+# -m: its own device id. By default UxPlay uses the Surface's network address as its AirPlay id — the same one AirPlay
+# music ("Room", shairport-sync) uses — and the iPhone merges the two, so "Room" vanished behind "Room Screen".
+ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -m 02:52:4f:4f:4d:56 -p $PORT -vs waylandsink -hls -nohold
 Restart=on-failure
 RestartSec=5
 

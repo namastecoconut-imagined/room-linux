@@ -36,11 +36,10 @@ UnsetEnvironment=DISPLAY
 # -m: its own device id. By default UxPlay uses the Surface's network address as its AirPlay id — the same one AirPlay
 # music ("Room", shairport-sync) uses — and the iPhone merges the two, so "Room" vanished behind "Room Screen".
 # -vs "waylandsink fullscreen=true": fills the panel (the sink's own full-screen, not UxPlay's X11 one)
-# -hls 2: GStreamer's older playbin for YouTube's video — playbin3 failed on its streams ("hlsdemux2 internal data
-# stream error": sound came, picture never did)
+# -hls: YouTube's AirPlay button (playbin3; -hls 2's older playbin can't use YouTube's stream at all: no sound either)
 # GST_DEBUG=2: GStreamer's warnings in the log, so a failure says why
 Environment=GST_DEBUG=2
-ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -m 02:52:4f:4f:4d:56 -p $PORT -vs "waylandsink fullscreen=true" -hls 2 -nohold
+ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -m 02:52:4f:4f:4d:56 -p $PORT -vs "waylandsink fullscreen=true" -hls -nohold
 Restart=on-failure
 RestartSec=5
 

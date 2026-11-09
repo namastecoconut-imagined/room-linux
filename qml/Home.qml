@@ -138,13 +138,13 @@ Item {
     GridView {
         id: grid
         x: 744; y: Theme.deadB1 + 8; width: 552 + 16; height: 880 - y + 16
-        cellWidth: 284; cellHeight: 206
+        cellWidth: 284; cellHeight: 196
         clip: true
         interactive: rooms.length > 4
         boundsBehavior: Flickable.StopAtBounds
         model: rooms
         delegate: Press {
-            width: 268; height: 190
+            width: 268; height: 180
             pressScale: 0.985
             onTapped: if (modelData.reachable) room.toggleRoom(modelData.name)
             onHeld: home.openRoom(modelData.name)
@@ -178,7 +178,7 @@ Item {
     }
     T {
         visible: rooms.length > 0
-        x: 744; y: 884; text: "Tap a room to switch it  ·  hold for more"; font.pixelSize: 15; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.3)
+        x: 744; y: 886; text: "Tap a room to switch it  ·  hold for more"; font.pixelSize: 15; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.3)
     }
 
     // ---------------------------------------------------------------- the scenes sheet (low on the screen, where touch works)

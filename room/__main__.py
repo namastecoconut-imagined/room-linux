@@ -53,8 +53,27 @@ class Pointer(QObject):
 
     room = None          # set once Room exists: every input is noted on it (standby waits for real idleness)
 
+    # This Surface's touch sensor has two faulty lines (6–7 of 44 from the top) that fire phantom touches right across
+    # the screen. A touch that starts there is dropped, whole, before anything sees it — so it can't wake standby,
+    # close a sheet or press anything. Nothing on the screens is meant to be touched there anyway.
+    GHOST = (6 / 44, 8 / 44)
+    eating = False
+
     def eventFilter(self, obj, ev):
         t = ev.type()
+        if t in (QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate, QEvent.Type.TouchEnd, QEvent.Type.TouchCancel) \
+                and hasattr(obj, "height") and callable(obj.height) and obj.isWindowType():
+            if t == QEvent.Type.TouchBegin:
+                try:
+                    h = obj.height() or 1
+                    pts = ev.points()
+                    self.eating = bool(pts) and all(self.GHOST[0] <= p.scenePosition().y() / h <= self.GHOST[1] for p in pts)
+                except Exception:
+                    self.eating = False
+            if self.eating:
+                if t in (QEvent.Type.TouchEnd, QEvent.Type.TouchCancel):
+                    self.eating = False
+                return True
         if self.room is not None and t in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel,
                                            QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate, QEvent.Type.KeyPress):
             import time

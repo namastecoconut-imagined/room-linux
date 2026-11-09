@@ -22,8 +22,10 @@ QtObject {
     // tests): stage y deadA0–deadB1. Every screen keeps buttons, sliders and lists out of it — in the top bar (topY)
     // or the lower part — and puts only things to read there (the clock, the weather, labels). If it's measured
     // again, change it here.
-    readonly property real deadA0: 114
-    readonly property real deadB1: 478
+    // (from the sensor test: 44 lines; 0–5 work, 6–7 fire phantom touches, 8–16 dead, 17–19 work, 20–23 dead, 24–43
+    // work — one line ≈ 20.7 px. Room drops the phantom touches itself, see room/__main__.py)
+    readonly property real deadA0: 118
+    readonly property real deadB1: 500
     readonly property real topY: 40                 // where a top-bar control (68 high) sits
     readonly property real capY: deadB1 - 34         // a label just above the lower part
 

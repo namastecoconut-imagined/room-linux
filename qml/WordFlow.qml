@@ -1,7 +1,9 @@
 import QtQuick
 
-// Words that arrive one by one (the phone's WordFlow): new words since the last update slide up into place one after
-// another; words already shown stay put (and ease over when the line re-centres).
+// Words that arrive one by one (the phone's WordFlow): new words rise into place; words already shown stay put.
+// Each line is laid out from its left edge and the line as a whole glides to stay centred, so the words on it travel
+// together and a new word can never land on top of an old one. When the recogniser changes its mind about an earlier
+// word ("Um, what's" → "what's"), only the words that changed come and go — the rest stay and slide over.
 Item {
     id: wf
     property real size: 67
@@ -14,46 +16,77 @@ Item {
     property var words: []
     clip: false
 
+    // where each line starts (eased): the words on a line ride on it
+    property real off0: 0; property real off1: 0; property real off2: 0; property real off3: 0; property real off4: 0
+    readonly property var glide: [0.2, 0.8, 0.2, 1, 1, 1]
+    Behavior on off0 { NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide } }
+    Behavior on off1 { NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide } }
+    Behavior on off2 { NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide } }
+    Behavior on off3 { NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide } }
+    Behavior on off4 { NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide } }
+    function off(l) { return [off0, off1, off2, off3, off4][Math.min(l, 4)] }
+
     function norm(w) { return (w || "").toLowerCase().replace(/[^a-z0-9']/g, "") }
 
     function say(text) {
         var ws = (text || "").split(/\s+/).filter(function (w) { return w.length > 0 })
-        var same = 0
-        while (same < words.length && same < ws.length && norm(words[same]) === norm(ws[same])) same++
-        if (same === ws.length && ws.length === words.length) {
-            for (var k = 0; k < ws.length; k++) wm.setProperty(k, "w", ws[k])
-            return
-        }
-        while (wm.count > same) wm.remove(wm.count - 1)
-        for (var i = same; i < ws.length; i++) wm.append({ w: ws[i] })
-        for (var j = 0; j < same; j++) wm.setProperty(j, "w", ws[j])
-        words = ws
         placeholder = ""
-        Qt.callLater(layout, same)
+        var a = words.map(norm), b = ws.map(norm), n = a.length, m = b.length
+        // longest common run of words (in order) between what's shown and what's new: those stay
+        var L = []
+        for (var i = 0; i <= n; i++) { L.push([]); for (var j = 0; j <= m; j++) L[i].push(0) }
+        for (i = n - 1; i >= 0; i--)
+            for (j = m - 1; j >= 0; j--)
+                L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1])
+        var keep = []                       // pairs [old index, new index]
+        i = 0; j = 0
+        while (i < n && j < m) {
+            if (a[i] === b[j]) { keep.push([i, j]); i++; j++ }
+            else if (L[i + 1][j] >= L[i][j + 1]) i++
+            else j++
+        }
+        // drop the old words that aren't kept (from the end, so indexes hold)
+        var kept = {}
+        for (var k = 0; k < keep.length; k++) kept[keep[k][0]] = true
+        for (i = n - 1; i >= 0; i--) if (!kept[i]) wm.remove(i)
+        // now the model is exactly the kept words, in order; add the new ones where they belong
+        var isKeptNew = {}
+        for (k = 0; k < keep.length; k++) isKeptNew[keep[k][1]] = true
+        for (j = 0; j < m; j++) {
+            if (isKeptNew[j]) wm.setProperty(j, "w", ws[j])          // same word, maybe new punctuation/case
+            else wm.insert(j, { w: ws[j] })
+        }
+        words = ws
+        Qt.callLater(layout)
     }
     function clear() { wm.clear(); words = []; usedHeight = 0 }
 
-    function layout(from) {
+    function layout() {
         var space = size * 0.24, lh = size * lineHeight
-        var x = 0, y = 0, frames = [], lineOf = [], lineW = [0]
+        var x = 0, line = 0, items = [], lineW = [0], fresh = 0
         for (var i = 0; i < rep.count; i++) {
-            var d = rep.itemAt(i); if (!d) return
+            var d = rep.itemAt(i); if (!d) { Qt.callLater(layout); return }
             var w = d.implicitWidth
-            if (x > 0 && x + w > wf.width) { x = 0; y += lh; lineW.push(0) }
-            frames.push({ x: x, y: y + (lh - d.implicitHeight) / 2 })
-            lineOf.push(lineW.length - 1)
-            lineW[lineW.length - 1] = x + w
+            if (x > 0 && x + w > wf.width) { x = 0; line++; lineW.push(0) }
+            items.push({ d: d, x: x, line: line, y: line * lh + (lh - d.implicitHeight) / 2 })
+            lineW[line] = x + w
             x += w + space
         }
-        for (var j = 0; j < rep.count; j++) {
-            var f = frames[j]
-            if (centered) f.x += (wf.width - lineW[lineOf[j]]) / 2
-            rep.itemAt(j).place(f.x, f.y, j >= from, (j - from) * 70)
+        // line offsets first (they glide), then each word to its spot on its line
+        var offs = [0, 0, 0, 0, 0]
+        for (var l = 0; l < lineW.length && l < 5; l++) offs[l] = centered ? (wf.width - lineW[l]) / 2 : 0
+        var moving = false
+        for (var j = 0; j < items.length; j++) if (items[j].d.born && (items[j].d.lx !== items[j].x || items[j].d.line !== items[j].line)) moving = true
+        off0 = offs[0]; off1 = offs[1]; off2 = offs[2]; off3 = offs[3]; off4 = offs[4]
+        for (j = 0; j < items.length; j++) {
+            var it = items[j]
+            if (!it.d.born) { it.d.enter(it.x, it.line, it.y, (moving ? 160 : 0) + fresh * 70); fresh++ }
+            else it.d.move(it.x, it.line, it.y)
         }
-        usedHeight = rep.count ? y + lh : 0
+        usedHeight = rep.count ? (line + 1) * lh : 0
     }
-    onSizeChanged: Qt.callLater(layout, 99999)
-    onWidthChanged: Qt.callLater(layout, 99999)
+    onSizeChanged: Qt.callLater(layout)
+    onWidthChanged: Qt.callLater(layout)
 
     ListModel { id: wm }
     Repeater {
@@ -67,32 +100,40 @@ Item {
             renderType: Text.QtRendering
             opacity: 0
             property bool born: false
-            function place(px, py, fresh, delay) {
-                if (fresh || !born) {
-                    born = true
-                    moveA.stop(); inA.stop()
-                    x = px; y = py + 12 * 2.4; opacity = 0
-                    inA.toY = py; inA.delay = Math.max(0, delay); inA.start()
-                } else if (x !== px || y !== py) {
-                    moveA.toX = px; moveA.toY = py; moveA.start()
-                }
+            property real lx: 0                  // x on its line
+            property int line: 0
+            property real rise: 0
+            x: lx + wf.off(line)
+            y: ty + rise
+            property real ty: 0
+            Behavior on lx { enabled: d.born; NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide } }
+            Behavior on ty { enabled: d.born; NumberAnimation { duration: 380; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide } }
+            function enter(px, l, py, delay) {
+                lx = px; line = l; ty = py; rise = 12 * 2.4; opacity = 0
+                born = true
+                inA.delay = Math.max(0, delay); inA.restart()
+            }
+            function move(px, l, py) {
+                if (l !== line) {
+                    // changing lines: fade across rather than fly diagonally through other words
+                    lineA.px = px; lineA.l = l; lineA.py = py; lineA.restart()
+                } else { lx = px; ty = py }
             }
             SequentialAnimation {
                 id: inA
-                property real toY: 0
                 property int delay: 0
                 PauseAnimation { duration: inA.delay }
                 ParallelAnimation {
-                    NumberAnimation { target: d; property: "y"; to: inA.toY; duration: 420; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0.8, 0.2, 1, 1, 1] }
-                    NumberAnimation { target: d; property: "opacity"; to: 1; duration: 420; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0.8, 0.2, 1, 1, 1] }
+                    NumberAnimation { target: d; property: "rise"; to: 0; duration: 420; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide }
+                    NumberAnimation { target: d; property: "opacity"; to: 1; duration: 420; easing.type: Easing.BezierSpline; easing.bezierCurve: wf.glide }
                 }
             }
-            ParallelAnimation {
-                id: moveA
-                property real toX: 0
-                property real toY: 0
-                NumberAnimation { target: d; property: "x"; to: moveA.toX; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0.8, 0.2, 1, 1, 1] }
-                NumberAnimation { target: d; property: "y"; to: moveA.toY; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: [0.2, 0.8, 0.2, 1, 1, 1] }
+            SequentialAnimation {
+                id: lineA
+                property real px: 0; property int l: 0; property real py: 0
+                NumberAnimation { target: d; property: "opacity"; to: 0; duration: 140 }
+                ScriptAction { script: { d.born = false; d.lx = lineA.px; d.line = lineA.l; d.ty = lineA.py; d.born = true } }
+                NumberAnimation { target: d; property: "opacity"; to: 1; duration: 260; easing.type: Easing.OutCubic }
             }
         }
     }

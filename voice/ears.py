@@ -225,6 +225,9 @@ class SarvamStream:
             if self.ended or self.fallback:     # Deepgram is taking over this one
                 return
             self.ended = True
+        print(f"[voice] heard {self.text()!r} · sarvam · connect {self.opened:.2f} s · "
+              f"first words {self.first_at - self.t0 if self.first_at else 0:.1f} s · done {time.time() - self.t0:.1f} s",
+              flush=True)
         self.on_end(self.text() or self.last_guess, self)
 
     def _run(self):
@@ -242,16 +245,23 @@ class SarvamStream:
 
         def sender():
             try:
+                # manual endpointing: Sarvam only transcribes between speech_start and speech_end
+                ws.send(json.dumps({"event": "speech_start"}))
                 while not self.ended:
                     try:
                         b = self.q.get(timeout=5)
                     except queue.Empty:
                         ws.send(json.dumps({"event": "ping"})); continue
                     if b is None:
+                        ws.send(json.dumps({"event": "speech_end"}))
                         ws.send(json.dumps({"event": "flush"}))
                         # the final words normally come back in a fraction of a second; don't wait forever
-                        if not self.got_final.wait(2.5):
-                            print("[voice] sarvam: no final words after 2.5 s — going with what came")
+                        if not self.got_final.wait(2.0):
+                            print(f"[voice] sarvam: no final words after 2 s (partial so far {self.text()!r})", flush=True)
+                            if not self.text() and self.cfg.get("deepgramKey"):
+                                # Sarvam gave nothing at all: let Deepgram hear the same audio rather than lose it
+                                self.empty = self.fallback = True
+                                break
                         self._end()
                         break
                     ws.send(json.dumps({"event": "audio_input", "audio": base64.b64encode(b).decode()}))
@@ -277,7 +287,13 @@ class SarvamStream:
                         self.on_text(self.text(), self)
                     if ev == "transcript.final" and self.closing:
                         self.got_final.set()
-                elif ev == "error":
+                elif ev == "session.begin":
+                    if not getattr(SarvamStream, "said_hello", False):
+                        SarvamStream.said_hello = True
+                        print("[voice] sarvam session:", json.dumps(m.get("config", {}))[:300], flush=True)
+                elif ev not in ("pong", "vad.speech_start", "vad.speech_end", "config.updated", "session.end", "error"):
+                    print("[voice] sarvam said:", msg[:300], flush=True)
+                if ev == "error":
                     print(f"[voice] sarvam: {m.get('code')} {m.get('message')}")
                     if m.get("is_fatal"):
                         if not self.text() and not self.closing:
@@ -286,9 +302,9 @@ class SarvamStream:
                         break
         except Exception as e:
             if not self.ended:
-                print("[voice] sarvam:", repr(e))
-        print(f"[voice] heard {self.text()!r} · sarvam · connect {self.opened:.2f} s · "
-              f"first words {self.first_at - self.t0 if self.first_at else 0:.1f} s · done {time.time() - self.t0:.1f} s")
+                print("[voice] sarvam:", repr(e), flush=True)
+        if not self.ended and not self.fallback:
+            print(f"[voice] sarvam closed {getattr(ws, 'close_code', None)} {getattr(ws, 'close_reason', '')}", flush=True)
         self._end()
         try:
             ctx.__exit__(None, None, None)
@@ -460,7 +476,8 @@ class Ears:
             s._end()                        # no Deepgram to fall back to: end with nothing heard
         if s and getattr(s, "fallback", False) and not s.ended:
             # Sarvam couldn't be reached or turned us down: Deepgram for a while, with everything said so far
-            self.sarvam_off_until = time.time() + 300
+            if not getattr(s, "empty", False):
+                self.sarvam_off_until = time.time() + 300
             s.ended = True
             d = Stream(self.cfg, self.words, self._text, self._end, self.spare.take() if self.spare else None)
             for b in s.audio:

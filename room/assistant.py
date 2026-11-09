@@ -77,6 +77,7 @@ class Assistant(QObject):
         return (ROOT / "voice" / ".venv" / "bin" / "python").exists() and self.room.cfg.get("voice") is not False
 
     def start(self):
+        self._duck_ready()          # (also puts music streams back to full, if a duck was left behind)
         if not self.available():
             self.state = "off"; self.error = "Voice isn't installed yet — run scripts/voice.sh"
             self.changed.emit()
@@ -246,10 +247,7 @@ class Assistant(QObject):
         if on == getattr(self, "_duck_want", False):
             return
         self._duck_want = on
-        if not hasattr(self, "_duckq"):
-            import queue, threading
-            self._duckq = queue.Queue()
-            threading.Thread(target=self._duck_worker, daemon=True).start()
+        self._duck_ready()
         sp = self.room.spotify.snapshot()
         if on:
             spv = sp.get("volume") if sp.get("playing") and sp.get("canVolume") and not self.room.airplay.showing else None
@@ -262,28 +260,33 @@ class Assistant(QObject):
                 self.room.spotify.set_volume(int(spv))
         self._duckq.put(on)
 
+    def _duck_ready(self):
+        if not hasattr(self, "_duckq"):
+            import queue, threading
+            self._duckq = queue.Queue()
+            threading.Thread(target=self._duck_worker, daemon=True).start()
+
     def _duck_worker(self):
-        saved = None
+        """Music streams sit at full volume (the phone and the speaker set how loud music is); ducking takes them to
+        55 % and back to full. Always back to *full* — not to "what it was": PipeWire remembers a stream's volume per
+        app, so a duck that was never undone (Room restarted mid-request, the stream restarted) used to come back
+        at 55 %, then 30 %… and AirPlay stayed quiet for good. Room starting up heals any of that, too."""
+        ducked = False
+        self._duckq.put("heal")
         while True:
             on = self._duckq.get()
             try:
-                if on and saved is None:
-                    saved = {}
+                if on == "heal" or (not on and ducked):
                     for sid in self._music_streams():
-                        out = subprocess.run(["wpctl", "get-volume", str(sid)], capture_output=True, text=True, timeout=2).stdout
-                        try:
-                            v = float(out.split()[1])
-                        except Exception:
-                            continue
-                        saved[sid] = v
-                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * 0.55:.2f}"], timeout=2)   # ≈ −15 dB
-                elif not on and saved is not None:
-                    for sid, v in saved.items():
-                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.2f}"], timeout=2)
-                    saved = None
+                        subprocess.run(["wpctl", "set-volume", str(sid), "1.0"], timeout=2)
+                    ducked = False
+                elif on is True and not ducked:
+                    for sid in self._music_streams():
+                        subprocess.run(["wpctl", "set-volume", str(sid), "0.55"], timeout=2)   # ≈ −15 dB
+                    ducked = True
             except Exception as e:
                 print(f"[room] duck: {e!r}")
-                saved = None
+                ducked = False
 
     # ---------------------------------------------------------------- doing it
     def say(self, text: str, listen=False):

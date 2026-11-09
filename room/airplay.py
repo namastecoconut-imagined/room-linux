@@ -56,6 +56,8 @@ class AirPlay(QObject):
         self.last_seen = 0.0
         self.art_dir = STATE_DIR / "airplay"
         self.art_dir.mkdir(parents=True, exist_ok=True)
+        for old in self.art_dir.glob("cover-*.jpg"):       # last run's covers: start clean
+            old.unlink(missing_ok=True)
 
     def start(self):
         self._open()
@@ -157,11 +159,19 @@ class AirPlay(QObject):
             if d:
                 img = QImage.fromData(d)
                 if not img.isNull():
-                    path = self.art_dir / f"cover-{int(time.time() * 1000)}.jpg"
-                    img.save(str(path), "JPG", 92)
-                    # keep the newest few — the cover flow still shows the last couple of songs
-                    for old in sorted(self.art_dir.glob("cover-*.jpg"), key=lambda f: f.stat().st_mtime)[:-5]:
+                    self._n = getattr(self, "_n", 0) + 1
+                    path = self.art_dir / f"cover-{int(time.time() * 1000)}-{self._n}.jpg"
+                    if not img.save(str(path), "JPG", 92):
+                        print(f"[room] airplay: couldn't save the cover to {path}", flush=True)
+                        return True
+                    # keep the few written most recently — the cover flow still shows the last couple of songs.
+                    # (By the order Room wrote them, not the files' dates: when the clock was wrong at start-up,
+                    # covers dated in the "future" made every new cover look oldest — and it was deleted the moment
+                    # it was written, so the screen had nothing to show.)
+                    self._written = (getattr(self, "_written", []) + [path])
+                    for old in self._written[:-5]:
                         old.unlink(missing_ok=True)
+                    self._written = self._written[-5:]
                     self.art_url = path.as_uri()
                     self.rgb, self.rgb2 = colours(img)
                     self.wash, self.rgb = wash(img)

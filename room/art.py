@@ -11,6 +11,10 @@ from PySide6.QtGui import QColor, QImage
 from .config import STATE_DIR
 
 _dir = STATE_DIR / "wash"
+_n = 0
+_written: list = []
+for _old in (_dir.glob("wash-*.png") if _dir.exists() else []):      # last run's: start clean
+    _old.unlink(missing_ok=True)
 
 
 def wash(img: QImage) -> tuple[str, list[int]]:
@@ -29,8 +33,13 @@ def wash(img: QImage) -> tuple[str, list[int]]:
             rr, gg, bb = colorsys.hsv_to_rgb(h, min(1.0, s * 1.25), min(v, 0.6) * 0.75)
             small.setPixel(x, y, QColor(int(rr * 255), int(gg * 255), int(bb * 255)).rgb())
     _dir.mkdir(parents=True, exist_ok=True)
-    path = _dir / f"wash-{int(time.time() * 1000)}.png"
+    global _n
+    _n += 1
+    path = _dir / f"wash-{int(time.time() * 1000)}-{_n}.png"
     small.save(str(path), "PNG")
-    for old in sorted(_dir.glob("wash-*.png"), key=lambda f: f.stat().st_mtime)[:-4]:
-        old.unlink(missing_ok=True)
+    # keep the few written most recently (by the order written, not the files' dates — a wrong clock at start-up
+    # once made every new file look oldest, so it was deleted as soon as it was written)
+    _written.append(path)
+    while len(_written) > 4:
+        _written.pop(0).unlink(missing_ok=True)
     return path.as_uri(), best

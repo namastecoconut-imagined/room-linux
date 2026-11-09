@@ -8,7 +8,7 @@
 # Escape hatch: Ctrl+Alt+F3 gives a text login at any time; and if Room stops, you land on the login screen, where
 # the gear button lets you pick "GNOME".
 set -e
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
+HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 U="$(id -un)"
 ACC="/org/freedesktop/Accounts/User$(id -u)"
 session() { busctl get-property org.freedesktop.Accounts "$ACC" org.freedesktop.Accounts.User Session 2>/dev/null | cut -d'"' -f2; }

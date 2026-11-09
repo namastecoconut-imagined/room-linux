@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # What room-update runs: pull the latest Room, refresh its packages (and voice's, if voice is set up), restart.
 set -e
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
+HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 cd "$HERE"
 git pull --ff-only
 "$HERE/.venv/bin/pip" install -q -r requirements.txt

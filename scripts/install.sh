@@ -2,7 +2,7 @@
 # Room — one-time setup on Fedora (Surface Pro 6). Safe to run again.
 #   bash scripts/install.sh
 set -euo pipefail
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
+HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 echo "▸ Room → $HERE"
 
 echo "▸ System packages (asks for your password once)"

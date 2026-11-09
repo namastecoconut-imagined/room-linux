@@ -3,7 +3,7 @@
 # Deepgram for what follows). Safe to run again.
 set -euo pipefail
 trap 'echo "✗ Voice setup stopped at line $LINENO — paste the lines above to Claude"' ERR
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
+HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 DATA="$HOME/.local/share/room/voice"
 mkdir -p "$DATA" "$HOME/.local/bin"
 

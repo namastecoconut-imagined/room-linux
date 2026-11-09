@@ -38,8 +38,10 @@ UnsetEnvironment=DISPLAY
 # -vs "waylandsink fullscreen=true": fills the panel (the sink's own full-screen, not UxPlay's X11 one)
 # -hls: YouTube's AirPlay button (playbin3; -hls 2's older playbin can't use YouTube's stream at all: no sound either)
 # GST_DEBUG=2: GStreamer's warnings in the log, so a failure says why
+# -avdec: Screen Mirroring decoded in software (FFmpeg) — the Intel VA-API decoder garbled it into blocks (its log:
+# "driver bug: fd size … bigger than object descriptor size"); a 1080p mirror is light work for the Surface's CPU
 Environment=GST_DEBUG=2
-ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -m 02:52:4f:4f:4d:56 -p $PORT -vs "waylandsink fullscreen=true" -hls -nohold
+ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -m 02:52:4f:4f:4d:56 -p $PORT -vs "waylandsink fullscreen=true" -avdec -hls -nohold
 Restart=on-failure
 RestartSec=5
 

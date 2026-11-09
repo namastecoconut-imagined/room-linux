@@ -149,10 +149,8 @@ Item {
     }
 
     // ================================================================= gestures (under the buttons)
-    // Where a drag starts and which way it goes decides what it does: along the bottom strip → seek; sideways on the
-    // cover → cover flow (the arrows on the cover show where). Volume has its own slider, bottom right — a drag
-    // across the whole screen would run through the band the touch screen doesn't answer in. A tap on the cover
-    // plays/pauses; a tap on the strip seeks.
+    // A sideways drag on the cover skips (even a small one); a tap on the cover plays/pauses. No seeking and no
+    // up-and-down volume here — they got in the way of the swipe; volume has its own slider, bottom right.
     MouseArea {
         id: pad
         anchors.fill: parent
@@ -160,32 +158,26 @@ Item {
         property string mode: ""
         property real x0: 0
         property real y0: 0
-        function inSeek(x, y) { return x >= mp.cx - mp.rw / 2 && x <= mp.cx + mp.rw / 2 && y >= mp.cy + mp.rw / 2 - 30 && y <= mp.cy + mp.rw / 2 + 82 }
-        function seekF(x) { return Math.max(0, Math.min(1, (x - (mp.cx - mp.cs / 2)) / mp.cs)) }
         property real t0: 0
         onPressed: (e) => { mode = ""; x0 = e.x; y0 = e.y; t0 = Date.now() }
         onPositionChanged: (e) => {
             var dx = e.x - x0, dy = e.y - y0
             if (mode === "" && Math.abs(dx) + Math.abs(dy) > 10) {
-                if (inSeek(x0, y0)) mode = music.duration > 0 && music.canSeek ? "seek" : "none"   // never volume by accident
-                else if (Math.abs(dy) > Math.abs(dx) * 1.6) mode = "none"     // clearly up/down: nothing
+                if (Math.abs(dy) > Math.abs(dx) * 1.6) mode = "none"     // clearly up/down: nothing
                 else { mode = "flow"; x0 = e.x - (dx > 0 ? 4 : -4) }     // follow from here, without a jump
             }
-            if (mode === "seek") mp.seekDrag = seekF(e.x)
-            else if (mode === "flow") mp.flowDx = e.x - x0
+            if (mode === "flow") mp.flowDx = e.x - x0
         }
         onReleased: (e) => {
             var dx = e.x - x0
-            if (mode === "seek") { mp.seekTo_(seekF(e.x) * music.duration); mp.seekDrag = -1 }
-            else if (mode === "flow") mp.flowEnd(dx, Date.now() - t0)
+            if (mode === "flow") mp.flowEnd(dx, Date.now() - t0)
             else if (mode === "") {
-                // a tap
-                if (inSeek(e.x, e.y)) { if (music.duration > 0 && music.canSeek) mp.seekTo_(seekF(e.x) * music.duration) }
-                else if (Math.abs(e.x - mp.cx) < mp.cs / 2 && Math.abs(e.y - mp.cy) < mp.cs / 2) room.playPause()
+                // a tap on the cover: play / pause
+                if (Math.abs(e.x - mp.cx) < mp.cs / 2 && Math.abs(e.y - mp.cy) < mp.cs / 2) room.playPause()
             }
             mode = ""
         }
-        onCanceled: { mode = ""; mp.seekDrag = -1; mp.volDrag = -1; mp.flowDx = 0 }
+        onCanceled: { mode = ""; mp.flowDx = 0 }
     }
 
     // A swipe past 180 px (or a button) skips: the cover flies the way it was pushed and the next one comes in
@@ -272,23 +264,13 @@ Item {
                 PathSvg { path: ring.path }
             }
         }
-        // the head: a white dot with an amber halo that pulses while playing
+        // the head: a small dot — the ring only shows where the song is (it isn't a control: seeking is off, it got in
+        // the way of swiping the cover)
         Item {
             visible: music.exists
             readonly property point pt: mp.ringPoint(mp.f * mp.ringL)
             x: pt.x; y: pt.y
-            Rectangle {
-                id: halo
-                width: 58; height: 58; radius: 29; x: -29; y: -29; color: Theme.accent
-                property real v: 0.5
-                opacity: music.playing ? v : 0.5
-                SequentialAnimation on v {
-                    running: music.playing && mp.visible; loops: Animation.Infinite
-                    NumberAnimation { from: 0.25; to: 0.75; duration: 1200; easing.type: Easing.InOutSine }
-                    NumberAnimation { from: 0.75; to: 0.25; duration: 1200; easing.type: Easing.InOutSine }
-                }
-            }
-            Rectangle { width: 26; height: 26; radius: 13; x: -13; y: -13; color: "white" }
+            Rectangle { width: 14; height: 14; radius: 7; x: -7; y: -7; color: "white" }
         }
     }
     // the point `len` along the ring (same segments as the phone's ringPoint)

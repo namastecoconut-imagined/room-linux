@@ -24,9 +24,18 @@ Item {
     signal openReminders()
     signal openAssistant()
 
-    // ---------------------------------------------------------------- the music's colour, low in the left corner
-    Glow { x: 300 - 520; y: 820 - 520; width: 1040; height: 1040; strength: music.exists ? 0.22 : 0; color: Theme.rgb(Theme.lit(music.rgb || [160, 138, 108])) }
-    Glow { x: 1020 - 500; y: 300 - 500; width: 1000; height: 1000; strength: lit.length ? 0.07 : 0; color: Theme.warm }
+    // ---------------------------------------------------------------- the song's colours, slowly moving, behind glass
+    readonly property bool coloured: musicCard.live && (music.art || "") !== ""
+    Rectangle { anchors.fill: parent; anchors.margins: -40; color: "#07080b" }
+    ColourWash { anchors.fill: parent; anchors.margins: -40; art: music.art || ""; strength: home.coloured ? 0.85 : 0; moving: home.visible }
+    Rectangle { anchors.fill: parent; anchors.margins: -40; color: Qt.rgba(0.02, 0.02, 0.04, home.coloured ? 0.42 : 0); Behavior on color { ColorAnimation { duration: 1400 } } }
+    Rectangle {
+        anchors.fill: parent; anchors.margins: -40
+        gradient: Gradient {
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.25) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.55) }
+        }
+    }
 
     // ---------------------------------------------------------------- top bar, left: the shortcuts
     readonly property var dueToday: (things.reminders || []).filter(function (r) { return !r.done && (r.today || r.dueNow) })
@@ -35,22 +44,22 @@ Item {
         Repeater {
             model: [["Alarms", "alarm", 128], ["Weather", "cloud", 140], ["Reminders", "check", 162], ["Scenes", "scenes", 128]]
             Pill {
-                width: modelData[2]; height: 68; text: modelData[0]; icon: modelData[1]; fontSize: 17
+                width: modelData[2]; height: 68; text: modelData[0]; icon: modelData[1]; fontSize: 17; fill: Qt.rgba(1, 1, 1, 0.09)
                 onTapped: index === 0 ? home.openClock() : index === 1 ? home.openWeather() : index === 2 ? home.openReminders() : scenes.open = true
             }
         }
     }
 
     // ---------------------------------------------------------------- left: date, clock, weather, what's set (to read)
-    DotText { id: hClock; x: 72; y: Theme.deadA0 + 34; pitch: 20; text: Theme.clock(new Date(home.now * 1000), room.clock24) }
+    DotText { id: hClock; x: 72; y: Theme.deadA0 + 32; pitch: 22; text: Theme.clock(new Date(home.now * 1000), room.clock24) }
     Column {
         id: hLine
-        x: 72; y: hClock.y + hClock.height + 34; width: 546; spacing: 4
+        x: 72; y: hClock.y + hClock.height + 30; width: 600; spacing: 4
         T { width: parent.width; text: Theme.dayLine(new Date(home.now * 1000)); font.pixelSize: 26; font.weight: Font.Light; color: Theme.ink }
         T { width: parent.width; text: Theme.wxLine(home.wx, room.clock24); font.pixelSize: 26; font.weight: Font.Light; color: Theme.sub }
     }
     T {
-        x: 72; y: hLine.y + hLine.height + 26; width: 546; elide: Text.ElideRight; font.pixelSize: 20; color: Theme.sub
+        x: 72; y: hLine.y + hLine.height + 22; width: 600; elide: Text.ElideRight; font.pixelSize: 20; color: Theme.sub
         visible: text !== ""
         text: [(home.things.timers || []).length ? "Timer " + Theme.countdown(home.things.timers[0].left) : "",
                (home.things.nextAlarm && home.things.nextAlarm.h !== undefined ? "Alarm " + Theme.hm(home.things.nextAlarm.h, home.things.nextAlarm.m, room.clock24) + (room.clock24 ? "" : " " + Theme.ampm(home.things.nextAlarm.h, false)) : ""),
@@ -63,26 +72,26 @@ Item {
         id: musicCard
         // paused a while (or nothing at all): the card goes back to its shortcuts
         readonly property bool live: music.exists && !music.idle
-        x: 72; y: Theme.deadB1 + 14; width: 546; height: 866 - y
+        x: 72; y: Theme.deadB1 + 12; width: 600; height: 880 - y
         pressScale: 0.99
         onTapped: home.openMusic()
-        Rectangle { anchors.fill: parent; radius: 28; color: Qt.rgba(1, 1, 1, 0.04); border.color: Qt.rgba(1, 1, 1, 0.06) }
+        Glass { anchors.fill: parent; tinted: home.coloured }
         Cover {
-            x: 26; y: 26; width: 150; height: 150; radius: 14
+            x: 28; y: 28; width: 176; height: 176; radius: 18
             visible: musicCard.live
             source: music.art || ""; rgb: music.rgb || [200, 185, 163]; rgb2: music.rgb2 || [44, 40, 34]
         }
-        Rectangle { visible: !musicCard.live; x: 26; y: 26; width: 90; height: 90; radius: 12; color: Qt.rgba(1, 1, 1, 0.05); Icon { anchors.centerIn: parent; name: "lib"; size: 26; color: Theme.sub } }
+        Rectangle { visible: !musicCard.live; x: 28; y: 28; width: 90; height: 90; radius: 12; color: Qt.rgba(1, 1, 1, 0.05); Icon { anchors.centerIn: parent; name: "lib"; size: 26; color: Theme.sub } }
         Column {
-            x: musicCard.live ? 202 : 136; y: musicCard.live ? 50 : 30; width: parent.width - x - 26; spacing: 8
-            T { width: parent.width; text: musicCard.live ? (music.title || "") : "Nothing playing"; font.pixelSize: 30; elide: Text.ElideRight }
+            x: musicCard.live ? 230 : 138; y: musicCard.live ? 54 : 32; width: parent.width - x - 28; spacing: 8
+            T { width: parent.width; text: musicCard.live ? (music.title || "") : "Nothing playing"; font.pixelSize: musicCard.live ? 32 : 30; elide: Text.ElideRight }
             T { width: parent.width; text: musicCard.live ? [music.artist, music.device].filter(function (s) { return s }).join("  ·  ") : "Tap for your playlists, or AirPlay to Room"; font.pixelSize: 19; color: Theme.sub; elide: Text.ElideRight }
         }
         // nothing playing: Liked Songs, and what you last played — one tap each
         Column {
             visible: !musicCard.live && music.enabled !== false
-            x: 26; width: parent.width - 52
-            anchors.bottom: parent.bottom; anchors.bottomMargin: 26
+            x: 28; width: parent.width - 56
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 28
             spacing: 12
             Repeater {
                 model: {
@@ -96,7 +105,7 @@ Item {
                     width: parent.width; height: 72
                     pressScale: 0.98
                     onTapped: modelData.key === "liked" ? room.playLiked() : room.playLast()
-                    Rectangle { anchors.fill: parent; radius: 18; color: Qt.rgba(1, 1, 1, 0.06) }
+                    Rectangle { anchors.fill: parent; radius: 18; color: Qt.rgba(1, 1, 1, 0.08) }
                     Rectangle {
                         x: 12; anchors.verticalCenter: parent.verticalCenter; width: 50; height: 50; radius: 9
                         visible: modelData.key === "liked"
@@ -127,40 +136,40 @@ Item {
         }
         Item {
             visible: musicCard.live && (music.duration || 0) > 0
-            x: 26; y: 202; width: parent.width - 52; height: 4
+            x: 28; y: 232; width: parent.width - 56; height: 4
             readonly property real pos: Math.min(music.duration || 0, (music.position || 0) + (music.playing ? home.now - music.at : 0))
-            Rectangle { anchors.fill: parent; radius: 2; color: Qt.rgba(1, 1, 1, 0.13) }
+            Rectangle { anchors.fill: parent; radius: 2; color: Qt.rgba(1, 1, 1, 0.16) }
             Rectangle { height: 4; radius: 2; width: parent.width * (music.duration > 0 ? parent.pos / music.duration : 0); color: Theme.ink }
         }
         Row {
             visible: musicCard.live
             anchors.horizontalCenter: parent.horizontalCenter
-            anchors.bottom: parent.bottom; anchors.bottomMargin: 26
-            spacing: 70
-            RoundBtn { size: 96; icon: "prev"; iconSize: 26; anchors.verticalCenter: parent.verticalCenter; onTapped: room.previous() }
-            RoundBtn { size: 112; icon: music.playing ? "pause" : "play"; iconSize: 32; fill: Theme.ink; ink: "#111"; onTapped: room.playPause() }
-            RoundBtn { size: 96; icon: "next"; iconSize: 26; anchors.verticalCenter: parent.verticalCenter; onTapped: room.next() }
+            anchors.bottom: parent.bottom; anchors.bottomMargin: 22
+            spacing: 64
+            RoundBtn { size: 88; icon: "prev"; iconSize: 24; fill: Qt.rgba(1, 1, 1, 0.12); anchors.verticalCenter: parent.verticalCenter; onTapped: room.previous() }
+            RoundBtn { size: 100; icon: music.playing ? "pause" : "play"; iconSize: 30; fill: Theme.ink; ink: "#111"; onTapped: room.playPause() }
+            RoundBtn { size: 88; icon: "next"; iconSize: 24; fill: Qt.rgba(1, 1, 1, 0.12); anchors.verticalCenter: parent.verticalCenter; onTapped: room.next() }
         }
     }
 
     // ---------------------------------------------------------------- top bar, right: All off · Dim · Night · mic · settings
-    Rectangle { x: 690; y: 40; width: 1; height: 832; color: Qt.rgba(1, 1, 1, 0.06) }
     Row {
         anchors.right: parent.right; anchors.rightMargin: 72; y: Theme.topY; spacing: 10
         Repeater {
             model: [["All off", "power", 124], ["Dim", "dim", 104], ["Night", "moon", 118]]
             Pill {
-                width: modelData[2]; height: 68; text: modelData[0]; icon: modelData[1]; fontSize: 17
+                width: modelData[2]; height: 68; text: modelData[0]; icon: modelData[1]; fontSize: 17; fill: Qt.rgba(1, 1, 1, 0.09)
                 onTapped: index === 0 ? room.allOff() : index === 1 ? room.dimAll() : room.night()
             }
         }
-        RoundBtn { size: 68; icon: "mic"; iconSize: 26; onTapped: home.openAssistant() }
-        RoundBtn { size: 68; icon: "settings"; iconSize: 24; onTapped: home.openSettings() }
+        RoundBtn { size: 68; icon: "mic"; iconSize: 26; fill: Qt.rgba(1, 1, 1, 0.09); onTapped: home.openAssistant() }
+        RoundBtn { size: 68; icon: "settings"; iconSize: 24; fill: Qt.rgba(1, 1, 1, 0.09); onTapped: home.openSettings() }
     }
 
     // ---------------------------------------------------------------- right: what's next (to read)
+    Glass { x: 744; y: Theme.deadA0 + 14; width: 552; height: 220; tinted: home.coloured }
     Column {
-        x: 744; y: Theme.deadA0 + 36; width: 552
+        x: 784; y: Theme.deadA0 + 50; width: 472
         spacing: 10
         readonly property var ev: room.events
         SectionCap { text: parent.ev.length ? "Next  ·  " + parent.ev[0].when : "Next" }
@@ -173,41 +182,37 @@ Item {
     }
 
     // ---------------------------------------------------------------- right: the rooms, as tiles in the lower part
-    SectionCap { x: 744; y: Theme.capY; text: "Lights" }
-    T {
-        anchors.right: parent.right; anchors.rightMargin: 72; y: Theme.capY - 4
-        text: rooms.length ? lit.length + " of " + rooms.length + " rooms on" : ""
-        font.pixelSize: 18; color: Theme.sub
-    }
+    Glass { x: 696; y: Theme.deadB1 + 12; width: 600; height: 880 - y; tinted: home.coloured }
+    SectionCap { x: 726; y: Theme.deadB1 + 36; text: "Lights" + (rooms.length ? "  ·  " + lit.length + " of " + rooms.length + " on" : "") }
     GridView {
         id: grid
-        x: 744; y: Theme.deadB1 + 8; width: 552 + 16; height: 880 - y + 16
-        cellWidth: 284; cellHeight: 196
+        x: 718; y: Theme.deadB1 + 70; width: 556 + 14; height: 866 - y + 14
+        cellWidth: 285; cellHeight: 154
         clip: true
         interactive: rooms.length > 4
         boundsBehavior: Flickable.StopAtBounds
         model: rooms
         delegate: Press {
-            width: 268; height: 180
+            width: 271; height: 140
             pressScale: 0.985
             onTapped: if (modelData.reachable) room.toggleRoom(modelData.name)
             onHeld: home.openRoom(modelData.name)
             opacity: modelData.reachable ? 1 : 0.45
             Rectangle {
                 anchors.fill: parent; radius: 24
-                color: modelData.on ? Qt.rgba(modelData.glow[0] / 255, modelData.glow[1] / 255, modelData.glow[2] / 255, 0.08) : Qt.rgba(1, 1, 1, 0.035)
-                border.color: Qt.rgba(1, 1, 1, 0.06)
+                color: modelData.on ? Qt.rgba(modelData.glow[0] / 255, modelData.glow[1] / 255, modelData.glow[2] / 255, 0.12) : Qt.rgba(1, 1, 1, 0.06)
+                border.color: Qt.rgba(1, 1, 1, 0.08)
             }
             Rectangle {
-                x: parent.width - 34; y: 26; width: 12; height: 12; radius: 6
+                x: parent.width - 34; y: 24; width: 12; height: 12; radius: 6
                 color: modelData.on ? Theme.rgb(modelData.glow) : Qt.rgba(1, 1, 1, 0.2)
                 Glow { anchors.centerIn: parent; width: 40; height: 40; visible: modelData.on > 0; color: Theme.rgb(modelData.glow); strength: 0.6 }
             }
-            T { x: 22; y: 18; width: parent.width - 64; text: modelData.name; font.pixelSize: 25; elide: Text.ElideRight }
-            T { x: 22; y: 56; width: parent.width - 44; text: modelData.sub; font.pixelSize: 17; color: Theme.sub; elide: Text.ElideRight }
+            T { x: 22; y: 16; width: parent.width - 64; text: modelData.name; font.pixelSize: 24; elide: Text.ElideRight }
+            T { x: 22; y: 52; width: parent.width - 44; text: modelData.sub; font.pixelSize: 16; color: Theme.sub; elide: Text.ElideRight }
             LevelSlider {
-                x: 18; anchors.bottom: parent.bottom; anchors.bottomMargin: 18
-                width: parent.width - 36; height: 56
+                x: 16; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
+                width: parent.width - 32; height: 46
                 value: modelData.on ? modelData.level : 0
                 tint: Theme.rgb(modelData.glow)
                 enabled: modelData.reachable > 0
@@ -217,13 +222,13 @@ Item {
     }
     T {
         visible: rooms.length === 0
-        x: 744; y: Theme.deadB1 + 24; width: 552; wrapMode: Text.WordWrap
+        x: 726; y: Theme.deadB1 + 80; width: 540; wrapMode: Text.WordWrap
         text: "No lights yet — add your rooms to config.json"; font.pixelSize: 21; color: Theme.sub
     }
-    T {
+    T {     // a quiet hint beside the heading
         visible: rooms.length > 0
-        x: 744; y: grid.y + Math.min(2, Math.ceil(rooms.length / 2)) * 196 + 2      // right under the last tile
-        text: "Tap a room to switch it  ·  hold for more"; font.pixelSize: 15; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.3)
+        anchors.right: parent.right; anchors.rightMargin: 102; y: Theme.deadB1 + 36
+        text: "tap to switch  ·  hold for more"; font.pixelSize: 14; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.35)
     }
 
     // ---------------------------------------------------------------- the scenes sheet (low on the screen, where touch works)

@@ -67,6 +67,11 @@ class Output:
             sid = n["id"]
             if self.moved.get(sid) == (bt or ""):
                 continue
+            if sid not in self.moved:
+                # a new music stream starts at full: PipeWire may have kept a lower level for this app from an
+                # old duck that was never undone (how AirPlay got quiet)
+                subprocess.run(["wpctl", "set-volume", str(sid), "1.0"], timeout=3,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if bt:
                 subprocess.run(["pw-metadata", "-n", "default", str(sid), "target.object", bt], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

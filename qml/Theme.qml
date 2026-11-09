@@ -47,6 +47,19 @@ QtObject {
     function lit(rgb) { var m = Math.max(1, rgb[0], rgb[1], rgb[2]), k = Math.max(1, 225 / m); return [Math.min(255, rgb[0] * k), Math.min(255, rgb[1] * k), Math.min(255, rgb[2] * k)] }
     function mmss(s) { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ":" + two(s % 60) }
     function countdown(s) { s = Math.max(0, Math.ceil(s)); var h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ":" + two(m) : two(m)) + ":" + two(s % 60) }
+    // The line under the clock (design D1): "Monday evening, 9 November." then "22° and clear, rain around 4 pm."
+    function dayPart(h) { return h >= 5 && h < 12 ? "morning" : h >= 12 && h < 17 ? "afternoon" : h >= 17 && h < 21 ? "evening" : "night" }
+    function dayLine(d) { return Qt.formatDate(d, "dddd") + " " + dayPart(d.getHours()) + ", " + Qt.formatDate(d, "d MMMM") + "." }
+    function wxLine(wx, h24) {
+        if (!wx || wx.ok !== true) return "Getting the weather\u2026"
+        var d = (wx.d || "").toLowerCase(), s = (wx.t === undefined || wx.t === null ? "" : wx.t + "\u00b0 and ") + d
+        var r = rainAt(wx.hours), wet = /rain|drizzle|shower|thunder|storm/.test(d)
+        // rain only when it's actually due; bad air only when there's no rain to mention
+        if (r > 0) s += ", rain around " + hourText(wx.hours[r].h, h24)
+        else if (r === 0 && !wet) s += ", rain any minute"
+        else if (r < 0 && wx.aqi && wx.aqi > 150) s += ", air is " + aqiWord(wx.aqi) + " today"
+        return s + "."
+    }
     // the first hour (of the next 12) rain is likely, or -1
     function rainAt(hours) { for (var i = 0; i < (hours || []).length && i < 12; i++) if ((hours[i].p || 0) >= 50) return i; return -1 }
 }

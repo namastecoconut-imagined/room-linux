@@ -108,17 +108,11 @@ Item {
         fragmentShader: shaderDir + "standby.frag.qsb"
     }
 
-    // ---------------------------------------------------------------- top: the date, ⚡ status
+    // ---------------------------------------------------------------- top right: ⚡ status
     readonly property real margin: 96
     readonly property color txt: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.92)
     readonly property color sub: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.5)
     readonly property color capC: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.42)
-    T {
-        id: dayL
-        x: sb.margin; y: 72; width: implicitWidth
-        text: Qt.formatDate(new Date(sb.now * 1000), "dddd  d MMMM")
-        font.pixelSize: 28; color: sb.sub
-    }
     T {
         id: statusL
         x: sb.width - sb.margin - width; y: 74; width: implicitWidth
@@ -130,10 +124,18 @@ Item {
     // ---------------------------------------------------------------- the clock, on the screen's middle line
     ClockDots {
         id: clock
-        x: sb.margin; y: (sb.height - height) / 2
+        x: sb.margin; y: (sb.height - height) / 2 - 56
         pitch: 24
         ink: sb.txt
         text: Theme.clock(new Date(sb.now * 1000), room.clock24)
+    }
+
+    // ---------------------------------------------------------------- under the clock: day, date and weather as one sentence
+    Column {
+        id: dayL
+        x: sb.margin; y: clock.y + clock.height + 40; width: 640; spacing: 4
+        T { width: parent.width; text: Theme.dayLine(new Date(sb.now * 1000)); font.pixelSize: 30; font.weight: Font.Light; color: sb.txt }
+        T { width: parent.width; text: Theme.wxLine(wx, room.clock24); font.pixelSize: 30; font.weight: Font.Light; color: sb.sub }
     }
 
     // ---------------------------------------------------------------- under the clock: a running timer, the next alarm
@@ -141,7 +143,7 @@ Item {
     readonly property var nextAlarm: room.things.nextAlarm || ({})
     Column {
         id: underClock
-        x: sb.margin; y: clock.y + clock.height + 52
+        x: sb.margin; y: dayL.y + dayL.height + 40
         width: implicitWidth
         visible: sb.timers.length > 0 || sb.nextAlarm.in !== undefined
         spacing: 0
@@ -183,7 +185,7 @@ Item {
         }
     }
 
-    // ---------------------------------------------------------------- right: now, next, the lights
+    // ---------------------------------------------------------------- right: next, a reminder, the lights
     readonly property var hours: (wx.hours || []).slice(0, 12)
     readonly property int rainAt: {
         for (var i = 0; i < hours.length; i++) if ((hours[i].p || 0) >= 50) return i
@@ -200,26 +202,6 @@ Item {
     Column {
         id: rightCol
         x: 800; y: clock.y - 14; width: sb.width - sb.margin - x
-        // now
-        Column {
-            visible: wx.ok === true
-            width: parent.width
-            Cap2 { text: "Now"; bottomPadding: 10 }
-            Row {
-                spacing: 16
-                T { id: tNow; text: (wx.t || 0) + "°"; font.pixelSize: 46; font.weight: Font.Light; color: sb.txt }
-                T { anchors.baseline: tNow.baseline; text: Theme.cap(wx.d || ""); font.pixelSize: 28; color: sb.sub }
-            }
-            T {
-                topPadding: 6; width: parent.width
-                text: [(wx.hi !== null && wx.hi !== undefined ? wx.hi + "° / " + wx.lo + "°" : ""),
-                       (wx.aqi ? "air " + wx.aqi : ""),
-                       (sb.rainAt >= 0 ? "rain ~" + sb.hourText(sb.hours[sb.rainAt].h) : "")]
-                      .filter(function (s) { return s }).join("   ·   ")
-                font.pixelSize: 22; color: sb.sub
-            }
-        }
-        Rule { visible: wx.ok === true }
         // next
         Cap2 { text: sb.ev.length ? "Next   ·   " + sb.ev[0].when + (sb.ev[0].today ? "" : "") : "Next"; bottomPadding: 10 }
         T {

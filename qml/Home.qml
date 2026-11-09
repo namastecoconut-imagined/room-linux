@@ -1,7 +1,8 @@
 import QtQuick
 
 // Home. Top bar: four shortcuts (Alarms, Weather, Reminders, Scenes); All off · Dim · Night, the mic, settings.
-// The middle band (the touch screen doesn't answer there) is for reading: date, dot clock, weather, what's set,
+// The middle band (the touch screen doesn't answer there) is for reading: dot clock, one sentence (day, date,
+// weather), what's set,
 // what's next. Lower part: what's playing with its controls, and every room as a tile (tap to switch it, slide the
 // bar for brightness, hold for the room).
 // Laid out on the 1368 × 912 stage (the Surface at 200%).
@@ -41,21 +42,15 @@ Item {
     }
 
     // ---------------------------------------------------------------- left: date, clock, weather, what's set (to read)
-    T { x: 72; y: Theme.deadA0 + 14; text: Qt.formatDate(new Date(home.now * 1000), "dddd d MMMM"); font.pixelSize: 24; color: Theme.sub }
-    DotText { x: 72; y: Theme.deadA0 + 58; pitch: 20; text: Theme.clock(new Date(home.now * 1000), room.clock24) }
-    Row {
-        x: 72; y: Theme.deadA0 + 214; spacing: 14
-        T { id: tNow; text: wx.ok === true ? wx.t + "°" : "—"; font.pixelSize: 40; font.weight: Font.Light }
-        T {
-            anchors.baseline: tNow.baseline
-            text: wx.ok !== true ? "Getting the weather…"
-                  : [Theme.cap(wx.d || ""), (home.rainAt >= 0 ? "rain ~" + Theme.hourText(wx.hours[home.rainAt].h, room.clock24) : ""),
-                     (wx.hi !== null && wx.hi !== undefined ? wx.hi + "° / " + wx.lo + "°" : "")].filter(function (s) { return s }).join("  ·  ")
-            font.pixelSize: 22; color: Theme.sub
-        }
+    DotText { id: hClock; x: 72; y: Theme.deadA0 + 34; pitch: 20; text: Theme.clock(new Date(home.now * 1000), room.clock24) }
+    Column {
+        id: hLine
+        x: 72; y: hClock.y + hClock.height + 34; width: 546; spacing: 4
+        T { width: parent.width; text: Theme.dayLine(new Date(home.now * 1000)); font.pixelSize: 26; font.weight: Font.Light; color: Theme.ink }
+        T { width: parent.width; text: Theme.wxLine(home.wx, room.clock24); font.pixelSize: 26; font.weight: Font.Light; color: Theme.sub }
     }
     T {
-        x: 72; y: Theme.deadA0 + 280; width: 546; elide: Text.ElideRight; font.pixelSize: 20; color: Theme.sub
+        x: 72; y: hLine.y + hLine.height + 26; width: 546; elide: Text.ElideRight; font.pixelSize: 20; color: Theme.sub
         visible: text !== ""
         text: [(home.things.timers || []).length ? "Timer " + Theme.countdown(home.things.timers[0].left) : "",
                (home.things.nextAlarm && home.things.nextAlarm.h !== undefined ? "Alarm " + Theme.hm(home.things.nextAlarm.h, home.things.nextAlarm.m, room.clock24) + (room.clock24 ? "" : " " + Theme.ampm(home.things.nextAlarm.h, false)) : ""),

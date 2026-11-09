@@ -61,7 +61,7 @@ class Output:
             if p.get("media.class") != "Stream/Output/Audio":
                 continue
             who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
-            spot = "soloist" in who or "spotify" in who or "uxplay" in who   # (UxPlay: AirPlay video)
+            spot = "soloist" in who or "spotify" in who
             if "airplay" not in who and "shairport" not in who and not spot:
                 continue                    # (Soloist: the Surface's own Spotify speaker, same rule as AirPlay)
             sid = n["id"]
@@ -75,7 +75,7 @@ class Output:
             if bt:
                 subprocess.run(["pw-metadata", "-n", "default", str(sid), "target.object", bt], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                print(f"[room] output: {'Spotify/video' if spot else 'AirPlay'} → {bt}", flush=True)
+                print(f"[room] output: {'Spotify' if spot else 'AirPlay'} → {bt}", flush=True)
             else:
                 subprocess.run(["pw-metadata", "-n", "default", "-d", str(sid), "target.object"], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

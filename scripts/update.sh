@@ -25,12 +25,14 @@ pkill -f "echo-cancel.conf" 2>/dev/null || true
 rm -rf ~/.local/share/room/voice/echo-cancel.conf ~/.local/share/room/voice/lines ~/.local/share/room/bench \
        ~/.local/bin/room-heard ~/.local/bin/room-mic-compare ~/.local/bin/room-stt-bench \
        ~/room-heard ~/room-mic-compare ~/room-check-*.wav
-# YouTube cast (replaced by AirPlay video): gone
-if [ -f ~/.config/systemd/user/room-cast.service ]; then
-  systemctl --user disable --now room-cast.service >/dev/null 2>&1 || true
-  rm -f ~/.config/systemd/user/room-cast.service; systemctl --user daemon-reload
-fi
+# the video experiments (YouTube cast, AirPlay video): gone — their services, files and downloads
+for u in room-cast room-airplay-video; do
+  if [ -f ~/.config/systemd/user/$u.service ]; then
+    systemctl --user disable --now $u.service >/dev/null 2>&1 || true
+    rm -f ~/.config/systemd/user/$u.service; systemctl --user daemon-reload
+  fi
+done
 rm -rf "$HERE/cast"
-"$HERE/.venv/bin/pip" uninstall -y -q yt-dlp yt-dlp-ejs deno >/dev/null 2>&1 || true   # (only the old video search used them)
+"$HERE/.venv/bin/pip" uninstall -y -q yt-dlp yt-dlp-ejs deno >/dev/null 2>&1 || true
 systemctl --user restart room.service
 echo "Room updated to $(git log -1 --format='%h · %s')"

@@ -60,8 +60,6 @@ Window {
     readonly property string voiceStage: room.voice.stage || ""
     onVoiceStageChanged: if (voiceState === "idle" && screen === "assistant") voiceClose.restart()
     Timer { id: voiceClose; interval: room.voice.card ? 7000 : win.voiceStage === "miss" ? 3400 : 2600; onTriggered: if (win.screen === "assistant" && !win.talking) win.screen = win.beforeVoice === "assistant" ? "home" : win.beforeVoice }
-    readonly property bool videoComing: room.videoWait.waiting === true
-    onVideoComingChanged: if (videoComing) wake()
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
@@ -205,8 +203,6 @@ Window {
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
-        // an iPhone sending a video to "Room Screen": "getting the video ready" until its window takes over
-        VideoWait {}
         // (checks) where the touch screen doesn't respond
         Repeater {
             model: showDead ? [[Theme.deadA0, Theme.deadB1]] : []

@@ -56,3 +56,10 @@ def fill_things(t):
     if os.environ.get("ROOM_DEMO_ALERT"):
         t.alert = {"kind": os.environ["ROOM_DEMO_ALERT"], "id": "t1", "title": "Time's up" if os.environ["ROOM_DEMO_ALERT"] == "timer" else "7:00 am",
                    "sub": "Pasta" if os.environ["ROOM_DEMO_ALERT"] == "timer" else "Alarm", "at": time.time()}
+
+
+BLUETOOTH = [
+    {"mac": "00:11:22:33:44:55", "name": "Marshall Emberton", "kind": "Speaker", "paired": True, "connected": True},
+    {"mac": "00:11:22:33:44:56", "name": "JBL Flip 5", "kind": "Speaker", "paired": True, "connected": False},
+    {"mac": "00:11:22:33:44:57", "name": "Sony WH-1000XM4", "kind": "Headphones", "paired": False, "connected": False},
+]

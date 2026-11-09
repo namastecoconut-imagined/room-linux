@@ -98,7 +98,7 @@ Item {
         property vector4d r1: sb.rectPt(dayL, 0)
         property vector4d r2: sb.rectPt(statusL, 0)
         property vector4d r3: sb.rectPt(rightCol, 0)
-        property vector4d r4: Qt.vector4d(0, 0, 0, 0)
+        property vector4d r4: sb.rectPt(underClock, 0)
         property vector4d r5: Qt.vector4d(0, 0, 0, 0)
         property vector4d rip0: sb.rips[0]
         property vector4d rip1: sb.rips[1]
@@ -134,6 +134,53 @@ Item {
         pitch: 24
         ink: sb.txt
         text: Theme.clock(new Date(sb.now * 1000), room.clock24)
+    }
+
+    // ---------------------------------------------------------------- under the clock: a running timer, the next alarm
+    readonly property var timers: (room.things.timers || []).filter(function (t) { return !t.done })
+    readonly property var nextAlarm: room.things.nextAlarm || ({})
+    Column {
+        id: underClock
+        x: sb.margin; y: clock.y + clock.height + 52
+        width: implicitWidth
+        visible: sb.timers.length > 0 || sb.nextAlarm.in !== undefined
+        spacing: 0
+        Cap2 {
+            visible: sb.timers.length > 0
+            text: "Timer" + (sb.timers.length && sb.timers[0].label ? "   ·   " + sb.timers[0].label : "")
+                  + (sb.timers.length > 1 ? "   ·   +" + (sb.timers.length - 1) : "")
+            bottomPadding: 6
+        }
+        Row {
+            visible: sb.timers.length > 0
+            spacing: 26
+            T {
+                id: tLeft
+                text: sb.timers.length ? Theme.countdown(sb.timers[0].left) : ""
+                font.pixelSize: 68; font.weight: Font.Light
+                color: sb.timers.length && sb.timers[0].paused ? sb.sub : sb.txt
+            }
+            Item {
+                width: 220; height: tLeft.height
+                Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 4; radius: 2; color: Qt.rgba(1, 1, 1, 0.1) }
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter; height: 4; radius: 2
+                    width: sb.timers.length && sb.timers[0].total > 0 ? parent.width * (1 - sb.timers[0].left / sb.timers[0].total) : 0
+                    color: Qt.rgba(1, 190 / 255, 122 / 255, 0.85)
+                }
+            }
+        }
+        Item { width: 1; height: 18; visible: sb.timers.length > 0 && sb.nextAlarm.in !== undefined }
+        Row {
+            visible: sb.nextAlarm.in !== undefined
+            spacing: 12
+            Icon { name: "alarm"; size: 22; color: sb.sub; anchors.verticalCenter: parent.verticalCenter }
+            T {
+                text: sb.nextAlarm.in !== undefined ? "Alarm " + Theme.hm(sb.nextAlarm.h, sb.nextAlarm.m, room.clock24)
+                      + (room.clock24 ? "" : " " + Theme.ampm(sb.nextAlarm.h, false)) + "   ·   in " + sb.nextAlarm.in : ""
+                font.pixelSize: 22; color: sb.sub
+            }
+        }
     }
 
     // ---------------------------------------------------------------- right: now, next, the lights

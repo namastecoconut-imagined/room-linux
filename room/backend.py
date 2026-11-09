@@ -5,6 +5,8 @@ import time
 from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 
 from .airplay import AirPlay
+from .bluetooth import Bluetooth
+from .display import Display
 from .calendar import Calendar
 from .lights import Lights
 from .screen import Screen
@@ -25,6 +27,7 @@ class Room(QObject):
     thingsChanged = Signal()
     alertChanged = Signal()
     voiceChanged = Signal()
+    settingsChanged = Signal()
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -56,6 +59,12 @@ class Room(QObject):
         self._things.alertChanged.connect(self.alertChanged)
         if self.demo:
             demo.fill_things(self._things)
+        self._display = Display()
+        self._display.changed.connect(self.settingsChanged)
+        self.bt = Bluetooth()
+        self.bt.changed.connect(self.settingsChanged)
+        self._kiosk = False
+        self._desktop_note = ""
         self.assistant = Assistant(self)
         self.assistant.changed.connect(self.voiceChanged)
         self.assistant.levelChanged.connect(self._voice_level)
@@ -63,7 +72,11 @@ class Room(QObject):
     def start(self):
         self._things.start()
         if self.demo:
+            self.bt.devices = demo.BLUETOOTH; self.settingsChanged.emit()
             return
+        self._display.start()
+        self.bt.refresh()
+        self._kiosk = self._session() == "room-panel"
         self.wx.start()
         self.screen.start()
         self.calendar.start()
@@ -74,6 +87,7 @@ class Room(QObject):
         from .output import Output
         self.output = Output(self.cfg); self.output.start()
         self.airplay.changed.connect(self.output.poke)
+        self.bt.connectedChanged.connect(self.output.poke)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
         # the room-sound ripple on standby comes from the voice process's mic when voice is on; the Qt mic is only a
@@ -236,6 +250,7 @@ class Room(QObject):
     def setScreenState(self, standby, dim):
         """Standby on/off and night-dim → screen brightness, and Spotify polls less while nobody's looking."""
         self.screen.set_state(standby, dim)
+        self._display.set_dim(standby and dim)
         self.spotify.relaxed = standby
 
     @Property(bool, notify=voiceChanged)
@@ -452,6 +467,78 @@ class Room(QObject):
     @Slot()
     def listen(self):
         self.assistant.listen()
+
+    # ---------------------------------------------------------------- Settings: screen, Bluetooth, the desktop
+    @Property("QVariantMap", notify=settingsChanged)
+    def display(self):
+        if self.demo:
+            return {"auto": True, "level": 0.38, "sensor": True, "canSet": True, "lux": 40}
+        return self._display.snapshot()
+
+    @Slot(bool)
+    def setAutoBrightness(self, on): self._display.set_auto(on)
+
+    @Slot(float)
+    def setBrightness(self, v): self._display.set_level(v)
+
+    @Property("QVariantMap", notify=settingsChanged)
+    def bluetooth(self):
+        return self.bt.snapshot()
+
+    @Slot()
+    def btSearch(self):
+        if not self.demo:
+            self.bt.search()
+
+    @Slot()
+    def btStop(self):
+        if not self.demo:
+            self.bt.stop_search()
+
+    @Slot(str)
+    def btPair(self, mac): self.bt.pair(mac)
+
+    @Slot(str)
+    def btConnect(self, mac): self.bt.connect(mac)
+
+    @Slot(str)
+    def btDisconnect(self, mac): self.bt.disconnect(mac)
+
+    @Slot(str)
+    def btForget(self, mac): self.bt.forget(mac)
+
+    @Property(bool, notify=settingsChanged)
+    def kiosk(self):
+        """Started as just the panel (room-kiosk on), not inside GNOME."""
+        return self._kiosk or self.demo
+
+    @Property(str, notify=settingsChanged)
+    def desktopNote(self):
+        return self._desktop_note
+
+    @staticmethod
+    def _session():
+        import subprocess
+        try:
+            out = subprocess.run(["busctl", "get-property", "org.freedesktop.Accounts",
+                                  f"/org/freedesktop/Accounts/User{os.getuid()}", "org.freedesktop.Accounts.User",
+                                  "Session"], capture_output=True, text=True, timeout=3).stdout
+            return out.split('"')[1] if '"' in out else ""
+        except Exception:
+            return ""
+
+    @Slot()
+    def switchToDesktop(self):
+        """Next start into GNOME, and restart now."""
+        import subprocess
+        r = subprocess.run(["busctl", "call", "org.freedesktop.Accounts", f"/org/freedesktop/Accounts/User{os.getuid()}",
+                            "org.freedesktop.Accounts.User", "SetSession", "s", "gnome"], capture_output=True, text=True, timeout=10)
+        if r.returncode != 0 or self._session() != "gnome":
+            self._desktop_note = "Couldn't switch here — use Ctrl+Alt+F3 and run room-kiosk off"
+            print(f"[room] switch to desktop: {r.stderr.strip()}")
+            self.settingsChanged.emit()
+            return
+        subprocess.Popen(["systemctl", "reboot"])
 
     @Slot()
     def cancelVoice(self):

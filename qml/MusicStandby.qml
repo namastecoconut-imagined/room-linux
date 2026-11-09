@@ -124,6 +124,19 @@ Item {
         text: Qt.formatDate(new Date(ms.now * 1000), "dddd, d MMMM")
         font.pixelSize: 26; color: ms.soft
     }
+    // a running timer and the next alarm, quietly under the date
+    readonly property var timers: (room.things.timers || []).filter(function (t) { return !t.done })
+    readonly property var nextAlarm: room.things.nextAlarm || ({})
+    T {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: clockBox.y + clockBox.height + 6
+        visible: text !== ""
+        textFormat: Text.StyledText
+        text: [ms.timers.length ? "<font color='#f4eee6'>" + (ms.timers[0].label || "Timer") + "  " + Theme.countdown(ms.timers[0].left) + "</font>" : "",
+               ms.nextAlarm.in !== undefined ? "Alarm " + Theme.hm(ms.nextAlarm.h, ms.nextAlarm.m, room.clock24) + (room.clock24 ? "" : " " + Theme.ampm(ms.nextAlarm.h, false)) : ""]
+              .filter(function (s) { return s }).join("   ·   ")
+        font.pixelSize: 24; color: ms.soft
+    }
     T {
         anchors.right: parent.right; anchors.rightMargin: 72; y: 64
         visible: text !== ""

@@ -31,7 +31,7 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: ["music", "room", "clock", "weather", "reminders", "assistant"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: ["music", "room", "clock", "weather", "reminders", "assistant", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
@@ -125,6 +125,7 @@ Window {
             onOpenClock: win.screen = "clock"
             onOpenWeather: win.screen = "weather"
             onOpenReminders: win.screen = "reminders"
+            onOpenSettings: win.screen = "settings"
             onOpenAssistant: { win.beforeVoice = "home"; win.screen = "assistant"; room.listen() }
         }
         RoomScreen {
@@ -141,6 +142,11 @@ Window {
         }
         WeatherScreen {
             opacity: win.screen === "weather" ? 1 : 0; visible: opacity > 0 && !win.covered
+            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
+            onBack: win.screen = "home"
+        }
+        SettingsScreen {
+            opacity: win.screen === "settings" ? 1 : 0; visible: opacity > 0 && !win.covered
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }

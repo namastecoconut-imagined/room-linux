@@ -13,6 +13,7 @@ U="$(id -un)"
 ACC="/org/freedesktop/Accounts/User$(id -u)"
 session() { busctl get-property org.freedesktop.Accounts "$ACC" org.freedesktop.Accounts.User Session 2>/dev/null | cut -d'"' -f2; }
 set_session() {
+  busctl call org.freedesktop.Accounts "$ACC" org.freedesktop.Accounts.User SetSession s "$1" >/dev/null 2>&1 && return
   if ! sudo busctl call org.freedesktop.Accounts "$ACC" org.freedesktop.Accounts.User SetSession s "$1" >/dev/null 2>&1; then
     # older AccountsService: the same setting, in its file
     F="/var/lib/AccountsService/users/$U"

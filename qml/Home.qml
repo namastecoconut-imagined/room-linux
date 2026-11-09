@@ -15,6 +15,7 @@ Item {
     readonly property var lit: rooms.filter(function (r) { return r.on > 0 })
     readonly property int rainAt: Theme.rainAt(wx.hours)
     signal openMusic()
+    signal openSettings()
     signal openRoom(string name)
     signal openClock()
     signal openWeather()
@@ -130,8 +131,9 @@ Item {
     // ---------------------------------------------------------------- right: lights
     Rectangle { x: 690; y: 40; width: 1; height: 832; color: Qt.rgba(1, 1, 1, 0.06) }
     SectionCap { x: 744; y: 68; text: "Lights" }
+    RoundBtn { x: 1296 - 56; y: 50; size: 56; icon: "settings"; iconSize: 22; onTapped: home.openSettings() }
     T {
-        anchors.right: parent.right; anchors.rightMargin: 72; y: 64
+        anchors.right: parent.right; anchors.rightMargin: 72 + 56 + 20; y: 64
         text: rooms.length ? lit.length + " of " + rooms.length + " rooms on" : ""
         font.pixelSize: 18; color: Theme.sub
     }

@@ -205,7 +205,7 @@ Window {
         Alert {}
         // (checks) where the touch screen doesn't respond
         Repeater {
-            model: showDead ? [[Theme.deadA0, Theme.deadA1], [Theme.deadB0, Theme.deadB1]] : []
+            model: showDead ? [[Theme.deadA0, Theme.deadB1]] : []
             Rectangle { y: modelData[0]; width: Theme.stageW; height: modelData[1] - modelData[0]; color: Qt.rgba(1, 0, 0, 0.18) }
         }
         // burn-in care: once a night (refreshAt, 04:00), while on standby, a minute of slow full-screen colour washes

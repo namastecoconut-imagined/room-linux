@@ -20,7 +20,7 @@ Item {
 
     Header {
         title: rs.name
-        note: r ? r.total + (r.total === 1 ? " lamp" : " lamps") + "  ·  " + (r.on ? r.on + " on" : "off") : ""
+        note: ""
         onBack: rs.back()
     }
 
@@ -28,17 +28,17 @@ Item {
 
     // ---------------------------------------------------------------- the level, to read
     Row {
-        x: 96; y: Theme.deadA0 + 20
+        x: 96; y: Theme.deadA0 + 50
         T { id: big; text: fader.shown > 0 ? fader.shown : "Off"; font.pixelSize: 96; font.weight: Font.Light }
         T { visible: fader.shown > 0; anchors.baseline: big.baseline; text: "%"; font.pixelSize: 40; font.weight: Font.Light }
     }
-    T { x: 98; y: Theme.deadA0 + 140; text: r ? r.sub : ""; font.pixelSize: 22; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.7) }
-    Pill {
-        x: 96; y: Theme.liveMid - 34; width: 400; height: 68
-        text: rs.on ? "Turn off" : "Turn on"; icon: "power"
+    T { x: 98; y: Theme.deadA0 + 172; text: r ? (r.sub + "   ·   " + r.total + (r.total === 1 ? " lamp" : " lamps") + ", " + (r.on ? r.on + " on" : "off")) : ""; font.pixelSize: 22; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.7) }
+    Pill {     // top bar
+        x: 430; y: Theme.topY; width: 160; height: 68
+        text: rs.on ? "Turn off" : "Turn on"; icon: "power"; fontSize: 17
         onTapped: room.toggleRoom(rs.name)
     }
-    SectionCap { x: 96; y: Theme.deadB0 + 12; text: "Brightness  ·  drag up and down" }
+    SectionCap { x: 96; y: Theme.capY; text: "Brightness  ·  drag up and down" }
 
     // ---------------------------------------------------------------- the fader
     Item {
@@ -72,10 +72,9 @@ Item {
     }
 
     // ---------------------------------------------------------------- warmth
-    SectionCap { x: 600; y: Theme.deadA1 - 34; text: "Warmth" }
-    Item {
+    Item {     // warmth, in the top bar
         id: warmth
-        x: 600; y: Theme.liveMid - 32; width: 696; height: 64
+        x: 620; y: Theme.topY + 2; width: 676; height: 64
         readonly property real k: r && r.kelvin ? r.kelvin : 2700
         property real f: drag2.pressed ? local : (k - 2200) / 4300
         property real local: 0
@@ -109,10 +108,10 @@ Item {
         }
     }
     Item {
-        x: 600; y: Theme.deadB0 + 10; width: 696; height: 20
+        x: 620; y: Theme.deadA0 + 12; width: 676; height: 20
         T { x: 0; text: "Candle"; font.pixelSize: 16; color: Theme.sub }
-        T { x: 696 * 0.3; text: "Warm"; font.pixelSize: 16; color: Theme.sub }
-        T { x: 696 * 0.62; text: "Neutral"; font.pixelSize: 16; color: Theme.sub }
+        T { x: 676 * 0.3; text: "Warm"; font.pixelSize: 16; color: Theme.sub }
+        T { x: 676 * 0.62; text: "Neutral"; font.pixelSize: 16; color: Theme.sub }
         T { anchors.right: parent.right; text: "Daylight"; font.pixelSize: 16; color: Theme.sub }
     }
 

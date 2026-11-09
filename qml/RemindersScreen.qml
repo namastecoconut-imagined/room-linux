@@ -11,13 +11,13 @@ Item {
     signal back()
     signal talk()
 
-    Header { title: "Reminders"; note: "kept on this panel only"; onBack: rm.back() }
+    Header { title: "Reminders"; onBack: rm.back() }
     readonly property var open_: rm.list.filter(function (r) { return !r.done })
     readonly property var dueToday: rm.list.filter(function (r) { return !r.done && (r.today || r.dueNow) })
 
     // ---------------------------------------------------------------- to read (in the strip that doesn't take touch)
     Column {
-        x: 96; y: Theme.deadA0 + 26; spacing: 10
+        x: 96; y: Theme.deadA0 + 40; spacing: 10
         SectionCap { text: "Reminders" }
         T {
             text: rm.open_.length ? rm.open_.length + (rm.open_.length === 1 ? " to remember" : " to remember") : "Nothing to remember"
@@ -30,13 +30,13 @@ Item {
     }
     T {
         x: 744; y: Theme.deadA0 + 60; width: 528; wrapMode: Text.WordWrap; lineHeight: 1.3
-        text: "When one's due, Room chimes and shows it on standby until you tick it off. Tap a reminder to tick it, hold to delete it — or say “Alexa, remind me to … at 6”."
+        text: "Kept on this panel only. When one's due, Room chimes and shows it on standby until you tick it off. Tap a reminder to tick it, hold to delete it — or say “Alexa, remind me to … at 6”."
         font.pixelSize: 19; color: Theme.sub
     }
 
     // ---------------------------------------------------------------- add (in the working strip)
-    Pill {
-        x: 96; y: Theme.liveMid - 34; width: 260; height: 68
+    Pill {     // in the top bar
+        x: 1296 - width; y: Theme.topY; width: 260; height: 68
         text: "Add a reminder"; icon: "plus"
         onTapped: adder.show()
     }

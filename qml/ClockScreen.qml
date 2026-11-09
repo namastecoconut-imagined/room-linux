@@ -19,21 +19,21 @@ Item {
     // (the touch screen doesn't respond in two strips — Theme.deadA*, deadB*: only things to read go there)
 
     // ---------------------------------------------------------------- left: the time (to read), quick timers, timers
-    DotText { x: 96; y: Theme.deadA0 + 4; pitch: 22; text: Theme.clock(new Date(cs.now * 1000), room.clock24) }
-    T { x: 96; y: Theme.deadA1 - 36; text: Qt.formatDate(new Date(cs.now * 1000), "dddd d MMMM"); font.pixelSize: 22; color: Theme.sub }
+    DotText { x: 96; y: Theme.deadA0 + 40; pitch: 22; text: Theme.clock(new Date(cs.now * 1000), room.clock24) }
+    T { x: 96; y: Theme.deadA0 + 214; text: Qt.formatDate(new Date(cs.now * 1000), "dddd d MMMM"); font.pixelSize: 22; color: Theme.sub }
 
-    Row {
-        x: 96; y: Theme.liveMid - 34; spacing: 12
+    Row {     // quick timers, in the top bar
+        x: 290; y: Theme.topY; spacing: 10
         Repeater {
             model: [["+1 min", 60], ["5 min", 300], ["10 min", 600], ["15 min", 900]]
             Pill {
-                width: 120; height: 68; text: modelData[0]; fontSize: 18
+                width: 108; height: 68; text: modelData[0]; fontSize: 18
                 onTapped: index === 0 && cs.timers.length ? room.addTime(cs.timers[0].id, 60) : room.startTimer(modelData[1], "")
             }
         }
     }
 
-    SectionCap { x: 96; y: Theme.deadB0 + 12; text: "Timers" }
+    SectionCap { x: 96; y: Theme.capY; text: "Timers" }
     Column {
         x: 96; y: Theme.deadB1 + 8; spacing: 14
         Repeater {
@@ -69,7 +69,7 @@ Item {
     Rectangle { x: 690; y: 150; width: 1; height: 720; color: Qt.rgba(1, 1, 1, 0.06) }
     readonly property var na: things.nextAlarm || ({})
     Column {
-        x: 744; y: Theme.deadA0 + 26; width: 552; spacing: 10
+        x: 744; y: Theme.deadA0 + 40; width: 552; spacing: 10
         SectionCap { text: "Next alarm" }
         Row {
             visible: cs.na.h !== undefined
@@ -82,11 +82,11 @@ Item {
         }
     }
     Pill {
-        x: 744; y: Theme.liveMid - 34; width: 220; height: 68
+        x: 1296 - width; y: Theme.topY; width: 210; height: 68
         text: "New alarm"; icon: "plus"
         onTapped: editor.edit(null)
     }
-    SectionCap { x: 744; y: Theme.deadB0 + 12; text: "Alarms" }
+    SectionCap { x: 744; y: Theme.capY; text: "Alarms" }
     ListView {
         id: alarmList
         x: 744; y: Theme.deadB1 + 4; width: 552; height: 896 - y
@@ -147,10 +147,10 @@ Item {
         MouseArea { anchors.fill: parent; onClicked: editor.open = false }
         Rectangle { anchors.fill: parent; color: Qt.rgba(0, 0, 0, 0.9) }
         T {   // (to read, up in the strip that doesn't take touch)
-            x: 96; y: Theme.deadA0 + 60; font.pixelSize: 44
+            x: 96; y: Theme.deadA0 + 100; font.pixelSize: 44
             text: (editor.alarm ? "Change alarm" : "New alarm")
         }
-        T { x: 96; y: Theme.deadA0 + 122; font.pixelSize: 20; color: Theme.sub; text: "Turn the wheels to set the time" }
+        T { x: 96; y: Theme.deadA0 + 162; font.pixelSize: 20; color: Theme.sub; text: "Turn the wheels to set the time" }
         Rectangle {
             x: 64; y: Theme.deadB1 + 4; width: 1240; height: 900 - y; radius: 32
             color: "#141312"; border.color: Qt.rgba(1, 1, 1, 0.07)

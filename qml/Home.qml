@@ -1,8 +1,9 @@
 import QtQuick
 
-// Home. Left: the date, dot clock and weather, four shortcuts (Alarms, Weather, Reminders, Scenes) and what's
-// playing, with its controls. Right: what's next, All off · Dim · Night and the mic, then every room as a tile (tap to
-// switch it, slide the bar for brightness, hold for the room).
+// Home. Top bar: four shortcuts (Alarms, Weather, Reminders, Scenes); All off · Dim · Night, the mic, settings.
+// The middle band (the touch screen doesn't answer there) is for reading: date, dot clock, weather, what's set,
+// what's next. Lower part: what's playing with its controls, and every room as a tile (tap to switch it, slide the
+// bar for brightness, hold for the room).
 // Laid out on the 1368 × 912 stage (the Surface at 200%).
 Item {
     id: home
@@ -26,14 +27,24 @@ Item {
     Glow { x: 300 - 520; y: 820 - 520; width: 1040; height: 1040; strength: music.exists ? 0.22 : 0; color: Theme.rgb(Theme.lit(music.rgb || [160, 138, 108])) }
     Glow { x: 1020 - 500; y: 300 - 500; width: 1000; height: 1000; strength: lit.length ? 0.07 : 0; color: Theme.warm }
 
-    // The touch screen doesn't respond in two strips (Theme.deadA*, deadB*): they hold only what's read — the clock,
-    // the weather, what's next, labels — and everything tapped sits in the working areas around them.
-
-    // ---------------------------------------------------------------- left: date, clock, weather (to read)
-    T { x: 72; y: 60; text: Qt.formatDate(new Date(home.now * 1000), "dddd d MMMM"); font.pixelSize: 24; color: Theme.sub }
-    DotText { x: 72; y: Theme.deadA0 + 8; pitch: 20; text: Theme.clock(new Date(home.now * 1000), room.clock24) }
+    // ---------------------------------------------------------------- top bar, left: the shortcuts
+    readonly property var dueToday: (things.reminders || []).filter(function (r) { return !r.done && (r.today || r.dueNow) })
     Row {
-        x: 72; y: Theme.deadA1 - 52; spacing: 14
+        x: 72; y: Theme.topY; spacing: 10
+        Repeater {
+            model: [["Alarms", "alarm", 128], ["Weather", "cloud", 140], ["Reminders", "check", 162], ["Scenes", "scenes", 128]]
+            Pill {
+                width: modelData[2]; height: 68; text: modelData[0]; icon: modelData[1]; fontSize: 17
+                onTapped: index === 0 ? home.openClock() : index === 1 ? home.openWeather() : index === 2 ? home.openReminders() : scenes.open = true
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- left: date, clock, weather, what's set (to read)
+    T { x: 72; y: Theme.deadA0 + 14; text: Qt.formatDate(new Date(home.now * 1000), "dddd d MMMM"); font.pixelSize: 24; color: Theme.sub }
+    DotText { x: 72; y: Theme.deadA0 + 58; pitch: 20; text: Theme.clock(new Date(home.now * 1000), room.clock24) }
+    Row {
+        x: 72; y: Theme.deadA0 + 214; spacing: 14
         T { id: tNow; text: wx.ok === true ? wx.t + "°" : "—"; font.pixelSize: 40; font.weight: Font.Light }
         T {
             anchors.baseline: tNow.baseline
@@ -43,28 +54,13 @@ Item {
             font.pixelSize: 22; color: Theme.sub
         }
     }
-
-    // ---------------------------------------------------------------- left: shortcuts (in the working strip)
-    readonly property var dueToday: (things.reminders || []).filter(function (r) { return !r.done && (r.today || r.dueNow) })
-    Row {
-        x: 72; y: Theme.deadA1 + 12; spacing: 14
-        Repeater {
-            model: [
-                { icon: "alarm", label: "Alarms", note: (home.things.timers || []).length ? Theme.countdown(home.things.timers[0].left) : (home.things.nextAlarm && home.things.nextAlarm.h !== undefined ? Theme.hm(home.things.nextAlarm.h, home.things.nextAlarm.m, room.clock24) : "") },
-                { icon: "cloud", label: "Weather", note: home.wx.ok === true ? home.wx.t + "°" : "" },
-                { icon: "check", label: "Reminders", note: home.dueToday.length ? "" + home.dueToday.length : "" },
-                { icon: "scenes", label: "Scenes", note: "" }
-            ]
-            Press {
-                width: 126; height: Theme.deadB0 - Theme.deadA1 - 22
-                pressScale: 0.96
-                onTapped: index === 0 ? home.openClock() : index === 1 ? home.openWeather() : index === 2 ? home.openReminders() : scenes.open = true
-                Rectangle { anchors.fill: parent; radius: 24; color: Qt.rgba(1, 1, 1, 0.035); border.color: Qt.rgba(1, 1, 1, 0.06) }
-                Icon { x: 20; y: 16; name: modelData.icon; size: 26; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.8) }
-                T { anchors.right: parent.right; anchors.rightMargin: 18; y: 18; text: modelData.note; font.pixelSize: 16; color: index === 2 ? Theme.warm : Theme.sub }
-                T { x: 20; anchors.bottom: parent.bottom; anchors.bottomMargin: 16; text: modelData.label; font.pixelSize: 18 }
-            }
-        }
+    T {
+        x: 72; y: Theme.deadA0 + 280; width: 546; elide: Text.ElideRight; font.pixelSize: 20; color: Theme.sub
+        visible: text !== ""
+        text: [(home.things.timers || []).length ? "Timer " + Theme.countdown(home.things.timers[0].left) : "",
+               (home.things.nextAlarm && home.things.nextAlarm.h !== undefined ? "Alarm " + Theme.hm(home.things.nextAlarm.h, home.things.nextAlarm.m, room.clock24) + (room.clock24 ? "" : " " + Theme.ampm(home.things.nextAlarm.h, false)) : ""),
+               (home.dueToday.length ? home.dueToday.length + " reminder" + (home.dueToday.length > 1 ? "s" : "") + " today" : "")]
+              .filter(function (s) { return s }).join("   ·   ")
     }
 
     // ---------------------------------------------------------------- left: what's playing — big, with its controls
@@ -103,15 +99,28 @@ Item {
         }
     }
 
-    // ---------------------------------------------------------------- right: what's next (to read)
+    // ---------------------------------------------------------------- top bar, right: All off · Dim · Night · mic · settings
     Rectangle { x: 690; y: 40; width: 1; height: 832; color: Qt.rgba(1, 1, 1, 0.06) }
-    RoundBtn { x: 1296 - 56; y: 50; size: 56; icon: "settings"; iconSize: 22; onTapped: home.openSettings() }
+    Row {
+        anchors.right: parent.right; anchors.rightMargin: 72; y: Theme.topY; spacing: 10
+        Repeater {
+            model: [["All off", "power", 124], ["Dim", "dim", 104], ["Night", "moon", 118]]
+            Pill {
+                width: modelData[2]; height: 68; text: modelData[0]; icon: modelData[1]; fontSize: 17
+                onTapped: index === 0 ? room.allOff() : index === 1 ? room.dimAll() : room.night()
+            }
+        }
+        RoundBtn { size: 68; icon: "mic"; iconSize: 26; onTapped: home.openAssistant() }
+        RoundBtn { size: 68; icon: "settings"; iconSize: 24; onTapped: home.openSettings() }
+    }
+
+    // ---------------------------------------------------------------- right: what's next (to read)
     Column {
-        x: 744; y: Theme.deadA0 + 26; width: 552
+        x: 744; y: Theme.deadA0 + 36; width: 552
         spacing: 10
         readonly property var ev: room.events
         SectionCap { text: parent.ev.length ? "Next  ·  " + parent.ev[0].when : "Next" }
-        T { width: parent.width; text: parent.ev.length ? parent.ev[0].title : "Nothing coming up"; font.pixelSize: 40; elide: Text.ElideRight; color: parent.ev.length ? Theme.ink : Theme.sub }
+        T { width: parent.width; text: parent.ev.length ? parent.ev[0].title : "Nothing coming up"; font.pixelSize: 44; elide: Text.ElideRight; color: parent.ev.length ? Theme.ink : Theme.sub }
         T {
             width: parent.width; visible: text !== ""; elide: Text.ElideRight
             text: parent.ev.length > 1 ? "then " + parent.ev[1].title + "  ·  " + parent.ev[1].when : ""
@@ -119,23 +128,10 @@ Item {
         }
     }
 
-    // ---------------------------------------------------------------- right: All off · Dim · Night · mic (working strip)
-    Row {
-        x: 744; y: Theme.liveMid - 34; spacing: 12
-        Repeater {
-            model: [["All off", "power"], ["Dim", "dim"], ["Night", "moon"]]
-            Pill {
-                width: 150; height: 68; text: modelData[0]; icon: modelData[1]
-                onTapped: index === 0 ? room.allOff() : index === 1 ? room.dimAll() : room.night()
-            }
-        }
-        RoundBtn { size: 68; icon: "mic"; iconSize: 26; onTapped: home.openAssistant() }
-    }
-
-    // ---------------------------------------------------------------- right: the rooms, as tiles under the thin strip
-    SectionCap { x: 744; y: Theme.deadB0 + 12; text: "Lights" }
+    // ---------------------------------------------------------------- right: the rooms, as tiles in the lower part
+    SectionCap { x: 744; y: Theme.capY; text: "Lights" }
     T {
-        anchors.right: parent.right; anchors.rightMargin: 72; y: Theme.deadB0 + 8
+        anchors.right: parent.right; anchors.rightMargin: 72; y: Theme.capY - 4
         text: rooms.length ? lit.length + " of " + rooms.length + " rooms on" : ""
         font.pixelSize: 18; color: Theme.sub
     }

@@ -18,14 +18,14 @@ QtObject {
     readonly property string face: Qt.fontFamilies().indexOf("Helvetica Neue") >= 0 ? "Helvetica Neue" : "Inter Tight"
     readonly property real stageW: 1368
     readonly property real stageH: 912
-    // This Surface's touch screen doesn't respond in two strips across it (a fault in the digitiser, found with a touch
-    // test): stage y 119–317 and 436–476. Every screen keeps buttons, sliders and lists out of them and puts things
-    // only to be read there (the clock, the weather, labels). If the strips are ever measured again, change them here.
-    readonly property real deadA0: 119
-    readonly property real deadA1: 317
-    readonly property real deadB0: 436
-    readonly property real deadB1: 476
-    readonly property real liveMid: deadA1 + (deadB0 - deadA1) / 2      // the middle of the working strip between them
+    // This Surface's touch screen doesn't respond across a wide band of it (a fault in the digitiser, found with touch
+    // tests): stage y deadA0–deadB1. Every screen keeps buttons, sliders and lists out of it — in the top bar (topY)
+    // or the lower part — and puts only things to read there (the clock, the weather, labels). If it's measured
+    // again, change it here.
+    readonly property real deadA0: 114
+    readonly property real deadB1: 478
+    readonly property real topY: 40                 // where a top-bar control (68 high) sits
+    readonly property real capY: deadB1 - 34         // a label just above the lower part
 
     function rgb(a, alpha) { return Qt.rgba(a[0] / 255, a[1] / 255, a[2] / 255, alpha === undefined ? 1 : alpha) }
     function two(n) { return (n < 10 ? "0" : "") + n }

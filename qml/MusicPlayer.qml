@@ -68,7 +68,7 @@ Item {
     function seekTo_(sec) { seekTo = sec; seekAt = now; room.seek(sec) }
     readonly property real f: seekDrag >= 0 ? seekDrag : (music.duration > 0 ? pos / music.duration : 0)
 
-    // ---------------------------------------------------------------- volume (slide anywhere)
+    // ---------------------------------------------------------------- volume (the slider at the bottom right)
     property real volDrag: -1                        // 0…1 while sliding
     readonly property bool sliding: volDrag >= 0
     Timer { id: volSend; interval: 500; onTriggered: room.setVolume(Math.round(mp.volDrag * 100)) }
@@ -150,8 +150,10 @@ Item {
     }
 
     // ================================================================= gestures (under the buttons)
-    // Where a drag starts and which way it goes decides what it does: along the bottom strip → seek; mostly
-    // vertical → volume; mostly sideways → cover flow. A tap on the cover plays/pauses; a tap on the strip seeks.
+    // Where a drag starts and which way it goes decides what it does: along the bottom strip → seek; sideways on the
+    // cover → cover flow (the arrows on the cover show where). Volume has its own slider, bottom right — a drag
+    // across the whole screen would run through the band the touch screen doesn't answer in. A tap on the cover
+    // plays/pauses; a tap on the strip seeks.
     MouseArea {
         id: pad
         anchors.fill: parent
@@ -159,7 +161,6 @@ Item {
         property string mode: ""
         property real x0: 0
         property real y0: 0
-        property real v0: 0
         function inSeek(x, y) { return x >= mp.cx - mp.rw / 2 && x <= mp.cx + mp.rw / 2 && y >= mp.cy + mp.rw / 2 - 30 && y <= mp.cy + mp.rw / 2 + 82 }
         function seekF(x) { return Math.max(0, Math.min(1, (x - (mp.cx - mp.cs / 2)) / mp.cs)) }
         onPressed: (e) => { mode = ""; x0 = e.x; y0 = e.y }
@@ -167,17 +168,15 @@ Item {
             var dx = e.x - x0, dy = e.y - y0
             if (mode === "" && Math.abs(dx) + Math.abs(dy) > 14) {
                 if (inSeek(x0, y0)) mode = music.duration > 0 && music.canSeek ? "seek" : "none"   // never volume by accident
-                else if (Math.abs(dy) >= Math.abs(dx)) { mode = "vol"; v0 = (music.volume || 0) / 100 }
+                else if (Math.abs(dy) >= Math.abs(dx)) mode = "none"
                 else mode = "flow"
             }
             if (mode === "seek") mp.seekDrag = seekF(e.x)
-            else if (mode === "vol") { mp.volDrag = Math.max(0, Math.min(1, v0 - dy / 572)); if (!volSend.running) volSend.start() }
             else if (mode === "flow") mp.flowDx = dx
         }
         onReleased: (e) => {
             var dx = e.x - x0
             if (mode === "seek") { mp.seekTo_(seekF(e.x) * music.duration); mp.seekDrag = -1 }
-            else if (mode === "vol") { volSend.stop(); room.setVolume(Math.round(mp.volDrag * 100)); mp.volDrag = -1 }
             else if (mode === "flow") mp.flowEnd(dx)
             else if (mode === "") {
                 // a tap
@@ -216,7 +215,7 @@ Item {
     Connections { target: mp; function onMusicChanged() { if (mp.flyArt && mp.music.art === mp.flyArt) mp.flyArt = "" } }
 
     // ================================================================= the covers
-    readonly property bool fade: sliding
+    readonly property bool fade: false
     // the cover, with a soft shadow under it
     Item {
         id: box
@@ -377,9 +376,9 @@ Item {
             font.pixelSize: 68; font.weight: Font.Medium; font.letterSpacing: -0.6
             fontSizeMode: Text.HorizontalFit; minimumPixelSize: 44
         }
-        // like — in the working strip under the title (the title's band doesn't take touch)
+        // like — up in the top bar, beside the library (the title's band doesn't take touch)
         RoundBtn {
-            x: parent.width - 84; y: Theme.liveMid - 42; size: 84; iconSize: 32
+            x: 1368 - 28 - 96 - 96 - mp.col; y: 28; size: 96; iconSize: 34
             visible: music.exists && mp.spotify && music.liked !== null && music.liked !== undefined
             icon: music.liked ? "heartOn" : "heart"; fill: "transparent"
             ink: music.liked ? Theme.accent : Theme.tx
@@ -391,20 +390,20 @@ Item {
             font.pixelSize: 30; color: Qt.rgba(0.96, 0.95, 0.94, 0.65)
         }
         T {
-            y: Theme.liveMid - 14; visible: music.exists && music.duration > 0
+            y: 332; visible: music.exists && music.duration > 0
             text: Theme.mmss(mp.f * music.duration) + "  ·  -" + Theme.mmss(music.duration - mp.f * music.duration)
             font.pixelSize: 22; color: Qt.rgba(0.96, 0.95, 0.94, 0.45)
         }
 
         // up next: tap one to skip straight to it (under the thin strip, which holds just its label)
         T {
-            y: Theme.deadB0 + 12; visible: nextUp.length > 0
+            y: Theme.capY; visible: nextUp.length > 0
             text: "UP NEXT"; font.pixelSize: 15; font.letterSpacing: 2.4; color: Qt.rgba(0.96, 0.95, 0.94, 0.55)
         }
         Column {
             y: Theme.deadB1 + 10; width: parent.width; spacing: 12
             Repeater {
-                model: nextUp.slice(0, 3)
+                model: nextUp.slice(0, 2)
                 Press {
                     width: info.width; height: 64; pressScale: 0.98
                     Cover { width: 56; height: 56; radius: 12; source: modelData.art || ""; rgb: [[110, 138, 138], [140, 94, 78], [122, 106, 140], [94, 140, 132]][index % 4]; rgb2: [30, 28, 26] }
@@ -425,40 +424,48 @@ Item {
         }
     }
 
-    // ================================================================= the volume fader (shows while you slide)
+    // ================================================================= the swipe hint, on the lower part of the cover
+    Rectangle {
+        visible: music.exists
+        x: mp.cx - width / 2; y: mp.cy + mp.cs / 2 - 92; width: hintRow.width + 40; height: 44; radius: 22
+        color: Qt.rgba(0, 0, 0, 0.32)
+        opacity: Math.abs(mp.flowDx) > 4 ? 0 : 0.9
+        Behavior on opacity { NumberAnimation { duration: 160 } }
+        Row {
+            id: hintRow
+            anchors.centerIn: parent; spacing: 14
+            Icon { name: "back"; size: 18; color: Qt.rgba(1, 1, 1, 0.8); anchors.verticalCenter: parent.verticalCenter }
+            T { text: "swipe here"; font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.8); anchors.verticalCenter: parent.verticalCenter }
+            Icon { name: "chev"; size: 18; color: Qt.rgba(1, 1, 1, 0.8); anchors.verticalCenter: parent.verticalCenter }
+        }
+    }
+
+    // ================================================================= volume: a slider at the bottom right
     Item {
-        anchors.fill: parent
-        opacity: mp.sliding ? 1 : 0
-        visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: 200 } }
-        Rectangle {
-            anchors.fill: parent
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.2) }
-                GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.55) }
-            }
-        }
-        DotText {
-            x: 1080; y: 331; pitch: 26; glide: 0
-            text: "" + Math.round(Math.max(0, mp.volDrag) * 100)
-        }
-        T {
-            x: 1080; y: 524; width: 190; wrapMode: Text.WordWrap
-            text: ("volume" + (music.device ? " · " + music.device.toLowerCase() : "")).toUpperCase()
-            font.pixelSize: 24; font.letterSpacing: 1.6; color: Qt.rgba(0.96, 0.95, 0.94, 0.6)
-        }
-        Rectangle {
-            x: 1290; y: 76; width: 46; height: 760; radius: 23; clip: true
-            color: Qt.rgba(1, 1, 1, 0.14)
+        id: vol
+        x: mp.col; y: 664; width: mp.colR - mp.col; height: 56
+        visible: music.exists
+        readonly property real v: mp.sliding ? mp.volDrag : (music.volume || 0) / 100
+        Icon { anchors.verticalCenter: parent.verticalCenter; name: "speaker"; size: 22; color: Qt.rgba(0.96, 0.95, 0.94, 0.65) }
+        Item {
+            id: track
+            x: 44; width: parent.width - 44 - 64; height: parent.height
+            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 6; radius: 3; color: Qt.rgba(1, 1, 1, 0.16) }
+            Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width * vol.v; height: 6; radius: 3; color: Theme.tx }
             Rectangle {
-                anchors.bottom: parent.bottom; width: parent.width; radius: 23
-                height: parent.height * Math.max(0, mp.volDrag)
-                gradient: Gradient {
-                    GradientStop { position: 0; color: "#ffe2c4" }
-                    GradientStop { position: 1; color: "#d9a37c" }
-                }
+                x: parent.width * vol.v - 14; anchors.verticalCenter: parent.verticalCenter
+                width: 28; height: 28; radius: 14; color: Theme.tx
             }
+        }
+        T { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: Math.round(vol.v * 100); font.pixelSize: 20; color: Qt.rgba(0.96, 0.95, 0.94, 0.65) }
+        MouseArea {
+            x: track.x - 16; width: track.width + 32; height: parent.height
+            preventStealing: true
+            function at(px) { return Math.max(0, Math.min(1, (px - 16) / track.width)) }
+            onPressed: (e) => { mp.volDrag = at(e.x) }
+            onPositionChanged: (e) => { mp.volDrag = at(e.x); if (!volSend.running) volSend.start() }
+            onReleased: { volSend.stop(); room.setVolume(Math.round(mp.volDrag * 100)); mp.volDrag = -1 }
+            onCanceled: { mp.volDrag = -1 }
         }
     }
 

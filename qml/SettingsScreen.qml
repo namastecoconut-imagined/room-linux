@@ -32,7 +32,7 @@ Item {
 
     // ---------------------------------------------------------------- left: the screen
     Column {
-        x: 96; y: Theme.deadA0 + 26; width: 528; spacing: 10
+        x: 96; y: Theme.deadA0 + 40; width: 528; spacing: 10
         SectionCap { text: "Screen" }
         T { text: "Brightness  " + Math.round((st.disp.level || 0) * 100) + "%"; font.pixelSize: 44; font.weight: Font.Light }
         T {
@@ -43,13 +43,13 @@ Item {
         }
     }
     LevelSlider {
-        x: 96; y: Theme.liveMid - 40; width: 528; height: 80
+        x: 96; y: Theme.deadB1 + 104; width: 528; height: 80
         value: Math.round((st.disp.level || 0.5) * 100)
         tint: Theme.warm
         onMoved: (v) => room.setBrightness(v / 100)
     }
     T {
-        x: 96; y: Theme.deadB0 + 10; font.pixelSize: 17; color: Theme.sub
+        x: 96; y: Theme.deadB1 + 194; font.pixelSize: 17; color: Theme.sub
         text: st.disp.sensor ? "Sliding it turns automatic off" : ""
     }
     Item {
@@ -58,10 +58,10 @@ Item {
         T { anchors.verticalCenter: parent.verticalCenter; text: "Automatic brightness"; font.pixelSize: 28 }
         Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: st.disp.auto === true; onTapped: room.setAutoBrightness(!on) }
     }
-    SectionCap { x: 96; y: Theme.deadB1 + 128; text: "This panel" }
+    SectionCap { x: 96; y: Theme.deadB1 + 248; text: "This panel" }
     Press {
         visible: room.kiosk
-        x: 96; y: Theme.deadB1 + 160; width: 528; height: 120; pressScale: 0.985
+        x: 96; y: Theme.deadB1 + 280; width: 528; height: 112; pressScale: 0.985
         onTapped: confirm.open = true
         Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
         T { x: 28; y: 24; text: "Switch to desktop"; font.pixelSize: 26 }
@@ -70,12 +70,12 @@ Item {
     }
     T {
         visible: !room.kiosk
-        x: 96; y: Theme.deadB1 + 164; width: 528; wrapMode: Text.WordWrap; font.pixelSize: 19; color: Theme.sub
+        x: 96; y: Theme.deadB1 + 284; width: 528; wrapMode: Text.WordWrap; font.pixelSize: 19; color: Theme.sub
         text: "Running inside the GNOME desktop. To start as just the panel, run  room-kiosk on  and restart."
     }
     T {
         visible: room.desktopNote !== ""
-        x: 96; y: Theme.deadB1 + 300; width: 528; wrapMode: Text.WordWrap
+        x: 96; y: Theme.capY - 30; width: 528; wrapMode: Text.WordWrap
         text: room.desktopNote; font.pixelSize: 18; color: Theme.warm
     }
 
@@ -83,7 +83,7 @@ Item {
     Rectangle { x: 690; y: 150; width: 1; height: 720; color: Qt.rgba(1, 1, 1, 0.06) }
     readonly property var connected: st.devices.filter(function (d) { return d.connected })
     Column {
-        x: 744; y: Theme.deadA0 + 26; width: 552; spacing: 10
+        x: 744; y: Theme.deadA0 + 40; width: 552; spacing: 10
         SectionCap { text: "Bluetooth" }
         T {
             width: parent.width; elide: Text.ElideRight; font.pixelSize: 40; font.weight: Font.Light
@@ -98,8 +98,8 @@ Item {
                 : st.connected.length ? "Connected  ·  AirPlay plays here" : "Put a speaker in pairing mode and search"
         }
     }
-    Press {
-        x: 744; y: Theme.liveMid - 34; height: 68; width: searchRow.width + 56
+    Press {     // top bar
+        x: 1296 - width; y: Theme.topY; height: 68; width: searchRow.width + 56
         onTapped: if (!st.bt.searching) room.btSearch()
         Rectangle { anchors.fill: parent; radius: 34; color: Qt.rgba(1, 1, 1, 0.06) }
         Row {
@@ -117,7 +117,7 @@ Item {
             T { text: st.bt.searching ? "Searching for speakers…" : "Search for speakers"; font.pixelSize: 20; anchors.verticalCenter: parent.verticalCenter }
         }
     }
-    SectionCap { x: 744; y: Theme.deadB0 + 12; text: "Your devices and nearby" }
+    SectionCap { x: 744; y: Theme.capY; text: "Your devices and nearby" }
 
     component DeviceRow: Item {
         id: dr

@@ -13,6 +13,13 @@ if [ -z "${SOLOIST_API_KEY:-}" ]; then
   exit 1
 fi
 
+# Started with the session, it can come up before Wi-Fi has: it then can't log in ("login failed: make sure
+# --api-key is valid") and stays logged out. So wait (up to 2 min) until Spotify can be reached.
+for _ in $(seq 60); do
+  curl -s -o /dev/null --max-time 3 https://api.spotify.com/ && break
+  sleep 2
+done
+
 fetch() {
   local arch tmp
   case "$(uname -m)" in x86_64) arch=x86_64 ;; aarch64) arch=arm64 ;; armv7l) arch=arm32 ;; *) echo "unsupported $(uname -m)" >&2; return 1 ;; esac

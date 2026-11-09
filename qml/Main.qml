@@ -108,6 +108,7 @@ Window {
 
     Item {
         id: stage
+        visible: !win.asleep             // screen off: nothing drawn at all
         width: Theme.stageW; height: Theme.stageH
         anchors.centerIn: parent
         scale: Math.min(win.width / Theme.stageW, win.height / Theme.stageH)
@@ -254,6 +255,15 @@ Window {
             if (onCover) win.screen = "music"
         }
     }
+    // screen off (room/sleep.py: a quiet room on standby, or the power button): black, backlight off; a touch
+    // anywhere brings standby back (and does nothing else)
+    readonly property bool asleep: room.asleep
+    onAsleepChanged: if (asleep && !standbyOn) enterStandby()
+    Rectangle {
+        anchors.fill: parent; color: "black"; visible: win.asleep
+        MouseArea { anchors.fill: parent; onPressed: room.wakeScreen() }
+    }
+
     // ROOM_SHOT: save a picture of the screen and quit (used to check builds)
     Timer {
         interval: shotMs; running: shotPath !== ""

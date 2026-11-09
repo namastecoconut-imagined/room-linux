@@ -28,6 +28,7 @@ class Room(QObject):
     alertChanged = Signal()
     voiceChanged = Signal()
     settingsChanged = Signal()
+    asleepChanged = Signal()
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -61,6 +62,10 @@ class Room(QObject):
             demo.fill_things(self._things)
         self._display = Display()
         self._display.changed.connect(self.settingsChanged)
+        from .sleep import Sleep
+        self.sleep = Sleep(self._display, self._needs_screen)
+        self.sleep.changed.connect(self.asleepChanged)
+        self.alertChanged.connect(lambda: self.alert and self.alert.get("kind") and self.sleep.wake("alert"))
         self.bt = Bluetooth()
         self.bt.changed.connect(self.settingsChanged)
         self._kiosk = False
@@ -253,6 +258,7 @@ class Room(QObject):
     def setScreenState(self, standby, dim):
         """Standby on/off and night-dim → screen brightness, and Spotify polls less while nobody's looking."""
         self.screen.set_state(standby, dim)
+        self.sleep.set_standby(standby)
         self._display.set_dim(standby and dim)
         self.spotify.relaxed = standby
 
@@ -298,6 +304,9 @@ class Room(QObject):
 
     def _voice_level(self):
         import math
+        self.sleep.hear(self.assistant.level)
+        if self.assistant.state in ("listening", "thinking", "speaking"):
+            self.sleep.wake("Alexa")
         db = 20 * math.log10(max(self.assistant.level, 1e-5))
         v = max(0.0, min(1.0, (db + 60) / 45))
         self._level += (v - self._level) * (0.5 if v > self._level else 0.12)
@@ -449,6 +458,39 @@ class Room(QObject):
             self.musicChanged.emit()
         else:
             self.spotify.set_volume(v)
+
+    # ---------------------------------------------------------------- screen off / on, the Surface's buttons
+    def _needs_screen(self):
+        m = self.music
+        return bool(m.get("playing")) or bool(self.alert and self.alert.get("kind")) or \
+            self.assistant.state in ("listening", "thinking", "speaking")
+
+    @Property(bool, notify=asleepChanged)
+    def asleep(self):
+        return self.sleep.asleep
+
+    @Slot()
+    def wakeScreen(self):
+        self.sleep.touched()
+
+    def power_button(self):
+        self.sleep.power_button()
+
+    def volume_step(self, delta: int):
+        """The Surface's volume buttons: the music's volume while something's playing, else the speaker's."""
+        m = self.music
+        if m.get("exists") and m.get("playing"):
+            self.setVolume(max(0, min(100, int(m.get("volume") or 50) + delta)))
+        else:
+            import subprocess
+            subprocess.Popen(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@",
+                              f"{abs(delta)}%{'+' if delta > 0 else '-'}"])
+
+    @Slot()
+    def shutDown(self):
+        import subprocess
+        print("[room] shutting down (Settings)", flush=True)
+        subprocess.Popen(["systemctl", "poweroff"])
 
     @Slot()
     def toggleLiked(self):

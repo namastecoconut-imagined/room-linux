@@ -66,17 +66,24 @@ Item {
     SectionCap { x: 96; y: Theme.deadB1 + 248; text: "This panel" }
     Press {
         visible: room.kiosk
-        x: 96; y: Theme.deadB1 + 280; width: 528; height: 112; pressScale: 0.985
-        onTapped: confirm.open = true
+        x: 96; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
+        onTapped: { confirm.kind = "desktop"; confirm.open = true }
         Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
-        T { x: 28; y: 24; text: "Switch to desktop"; font.pixelSize: 26 }
-        T { x: 28; y: 66; width: parent.width - 90; text: "Restarts into GNOME"; font.pixelSize: 18; color: Theme.sub }
-        Icon { anchors.right: parent.right; anchors.rightMargin: 28; anchors.verticalCenter: parent.verticalCenter; name: "chev"; size: 22; color: Theme.sub }
+        T { x: 24; y: 24; text: "Switch to desktop"; font.pixelSize: 22 }
+        T { x: 24; y: 64; width: parent.width - 48; text: "Restarts into GNOME"; font.pixelSize: 17; color: Theme.sub }
     }
     T {
         visible: !room.kiosk
-        x: 96; y: Theme.deadB1 + 284; width: 528; wrapMode: Text.WordWrap; font.pixelSize: 19; color: Theme.sub
-        text: "Running inside the GNOME desktop. To start as just the panel, run  room-kiosk on  and restart."
+        x: 96; y: Theme.deadB1 + 284; width: 258; wrapMode: Text.WordWrap; font.pixelSize: 16; color: Theme.sub
+        text: "In the GNOME desktop. For just the panel: room-kiosk on, then restart."
+    }
+    Press {
+        x: 366; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
+        onTapped: { confirm.kind = "off"; confirm.open = true }
+        Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
+        T { x: 24; y: 24; text: "Shut down"; font.pixelSize: 22 }
+        T { x: 24; y: 64; width: parent.width - 48; text: "Turns the Surface off"; font.pixelSize: 17; color: Theme.sub }
+        Icon { anchors.right: parent.right; anchors.rightMargin: 24; y: 26; name: "power"; size: 22; color: Theme.sub }
     }
     T {
         visible: room.desktopNote !== ""
@@ -174,11 +181,12 @@ Item {
         }
     }
 
-    // ---------------------------------------------------------------- switch to desktop: are you sure?
+    // ---------------------------------------------------------------- switch to desktop / shut down: are you sure?
     Item {
         id: confirm
         anchors.fill: parent
         property bool open: false
+        property string kind: "desktop"          // desktop · off
         visible: opacity > 0
         opacity: open ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 200 } }
@@ -187,18 +195,19 @@ Item {
         Rectangle {
             x: 384; y: Theme.deadB1 + 20; width: 600; height: 330; radius: 26; color: "#141210"
             MouseArea { anchors.fill: parent }
-            T { x: 44; y: 44; text: "Switch to the desktop?"; font.pixelSize: 32 }
+            T { x: 44; y: 44; text: confirm.kind === "off" ? "Shut down the Surface?" : "Switch to the desktop?"; font.pixelSize: 32 }
             T {
                 x: 44; y: 100; width: 512; wrapMode: Text.WordWrap; font.pixelSize: 20; color: Theme.sub; lineHeight: 1.3
-                text: "The Surface restarts into GNOME. To come back to just the panel, run  room-kiosk on  and restart."
+                text: confirm.kind === "off" ? "Room, AirPlay and “Alexa” stop until you press the power button to start it again."
+                    : "The Surface restarts into GNOME. To come back to just the panel, run  room-kiosk on  and restart."
             }
             Row {
                 anchors.right: parent.right; anchors.rightMargin: 44; anchors.bottom: parent.bottom; anchors.bottomMargin: 40; spacing: 16
                 Pill { width: 140; height: 60; text: "Cancel"; fontSize: 21; onTapped: confirm.open = false }
                 Pill {
-                    width: 260; height: 60; text: "Restart to desktop"; fontSize: 21
+                    width: 260; height: 60; text: confirm.kind === "off" ? "Shut down" : "Restart to desktop"; fontSize: 21
                     fill: Qt.rgba(239 / 255, 231 / 255, 222 / 255, 0.95)
-                    onTapped: { confirm.open = false; room.switchToDesktop() }
+                    onTapped: { confirm.open = false; confirm.kind === "off" ? room.shutDown() : room.switchToDesktop() }
                 }
             }
         }

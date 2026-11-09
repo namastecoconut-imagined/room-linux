@@ -29,6 +29,15 @@ on)
   echo "▸ cage (the full-screen host)"
   rpm -q cage >/dev/null 2>&1 || sudo dnf install -y -q cage
 
+  echo "▸ The power button: screen off / on (Room handles it), not shutting down"
+  # Without GNOME, a press of the power button shuts the Surface down (the system default). Now the system leaves a
+  # press to Room — screen off, Room keeps listening; press again (or a sound, a touch) and it's back. Holding the
+  # button for a few seconds still turns the Surface off.
+  sudo mkdir -p /etc/systemd/logind.conf.d
+  printf '[Login]\nHandlePowerKey=ignore\nHandlePowerKeyLongPress=poweroff\nHandleSuspendKey=ignore\n' \
+    | sudo tee /etc/systemd/logind.conf.d/room-panel.conf >/dev/null
+  sudo systemctl kill -s HUP systemd-logind 2>/dev/null || true
+
   echo "▸ Wi-Fi passwords where the system can reach them without the desktop"
   # Saved from GNOME's settings, a Wi-Fi password usually lives in your desktop keyring, which won't be running
   # without GNOME — the Surface would come up with no Wi-Fi. Each saved network's password is copied to the system.

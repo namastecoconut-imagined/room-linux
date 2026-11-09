@@ -33,6 +33,7 @@ class Display(QObject):
         self.auto = bool(s.get("auto", True))
         self.manual = float(s.get("level", 0.6))
         self.dim = False                     # night standby: a little lower still
+        self.blanked = False                 # screen off (room/sleep.py): backlight at 0 until it wakes
         bl = sorted(glob.glob("/sys/class/backlight/*"), key=lambda p: "intel" not in p)
         self.bl = bl[0] if bl else ""
         self.max = _read(self.bl + "/max_brightness", int) if self.bl else None
@@ -74,7 +75,7 @@ class Display(QObject):
         return max(0.06, min(1.0, 0.08 + 0.22 * math.log10(lux + 1)))
 
     def _tick(self):
-        if not (self.auto and self.als and self.bl and self.max):
+        if self.blanked or not (self.auto and self.als and self.bl and self.max):
             return
         lux = self._read_lux()
         if lux is None:
@@ -96,12 +97,24 @@ class Display(QObject):
         v = _read(self.bl + "/brightness", int)
         return v / self.max if v is not None else None
 
+    def blank(self, on: bool):
+        """Backlight fully off (on) — or back to the level it had (automatic carries on from there)."""
+        self.blanked = bool(on)
+        if on:
+            self._write(0)
+        else:
+            self._apply(self.level)
+
     def _apply(self, v):
         v = max(0.03, min(1.0, v))
         self.level = v
+        if not (self.bl and self.max) or self.blanked:
+            return
+        self._write(max(1, round(v * self.max)))
+
+    def _write(self, raw):
         if not (self.bl and self.max):
             return
-        raw = max(1, round(v * self.max))
         name = os.path.basename(self.bl)
         try:
             r = subprocess.run(["busctl", "call", "org.freedesktop.login1", "/org/freedesktop/login1/session/auto",

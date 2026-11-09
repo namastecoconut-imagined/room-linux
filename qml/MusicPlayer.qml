@@ -340,7 +340,8 @@ Item {
         Icon { x: 10; anchors.verticalCenter: parent.verticalCenter; name: "speaker"; size: 24; color: Qt.rgba(0.96, 0.95, 0.94, 0.65) }
         T {
             id: spk; x: 46; anchors.verticalCenter: parent.verticalCenter
-            text: music.exists && music.device ? "on " + music.device.toLowerCase() + "  ›" : "Choose a speaker  ›"
+            // the arrow only where tapping does something (AirPlay's speaker is chosen on the phone)
+            text: (music.exists && music.device ? "on " + music.device.toLowerCase() : "Choose a speaker") + (mp.spotify ? "  ›" : "")
             font.pixelSize: 24; color: Qt.rgba(0.96, 0.95, 0.94, 0.65)
         }
         onTapped: { room.refreshDevices(); mp.picking = true }

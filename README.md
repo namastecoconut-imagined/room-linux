@@ -18,7 +18,7 @@ Room starts with the desktop session. It doesn't restart itself while we're stil
 - Run it in a terminal so errors show: `cd ~/room && .venv/bin/python -m room` (Esc leaves full screen, Ctrl-C quits)
 - AirPlay only: `bash scripts/airplay.sh`
 - Spotify on the Surface itself (Spotify Connect speaker "Room", via Spotify Soloist): `bash scripts/spotify-connect.sh`
-- YouTube cast (the Surface in the YouTube app's Cast menu, like a TV): `bash scripts/cast.sh`
+- AirPlay video and screen mirroring ("Room Screen" — YouTube's AirPlay button, Screen Mirroring): `bash scripts/airplay-video.sh`
 
 ## Update
 

@@ -4,4 +4,3 @@ __pycache__/
 .venv/
 *.png
 !assets/**/*.png
-cast/node_modules/

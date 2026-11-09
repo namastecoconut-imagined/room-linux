@@ -1,9 +1,0 @@
-{
-  "name": "room-cast",
-  "private": true,
-  "type": "module",
-  "description": "YouTube cast receiver for Room: the Surface shows up as \"Room\" in the YouTube app's Cast menu and plays in mpv",
-  "dependencies": {
-    "yt-cast-receiver": "2.1.0"
-  }
-}

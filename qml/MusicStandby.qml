@@ -20,7 +20,8 @@ Item {
     readonly property var next: music.nextUp && music.nextUp.length ? music.nextUp[0] : null
     readonly property var lit: Theme.lit(music.rgb || [255, 190, 140])
     // the cover's colour, softened towards warm white so the dots glow, not burn
-    readonly property color glowC: Qt.rgba((lit[0] + 255) / 510, (lit[1] + 235) / 510, (lit[2] + 215) / 510, 1)
+    property color glowC: Qt.rgba((lit[0] + 255) / 510, (lit[1] + 235) / 510, (lit[2] + 215) / 510, 1)
+    Behavior on glowC { ColorAnimation { duration: 1200; easing.type: Easing.InOutQuad } }
     readonly property int rainAt: Theme.rainAt(wx.hours)
 
     // ---------------------------------------------------------------- the beat: the room's sound, while music plays
@@ -59,15 +60,31 @@ Item {
 
     // ---------------------------------------------------------------- the room: the cover's wash, darkened at the edges
     Rectangle { anchors.fill: parent; color: "black" }
-    Image {
+    // two layers, so a new song's wash fades in over the old one
+    property int washFront: 0
+    property string washWant: music.wash || ""
+    onWashWantChanged: {
+        var n = washFront === 0 ? w1 : w0
+        if (n.source == washWant && n.status === Image.Ready) washShow(n); else n.source = washWant
+    }
+    function washShow(img) {
+        var other = img === w0 ? w1 : w0
+        washFront = img === w0 ? 0 : 1
+        img.opacity = night ? 0.3 : 0.5
+        other.opacity = 0
+    }
+    Component.onCompleted: w0.source = washWant
+    component Wash: Image {
         anchors.fill: parent
-        source: music.wash || ""
         smooth: true; fillMode: Image.Stretch
-        opacity: ms.night ? 0.3 : 0.5
-        visible: status === Image.Ready
+        opacity: 0
+        Behavior on opacity { NumberAnimation { duration: 1400; easing.type: Easing.InOutQuad } }
         layer.enabled: true                          // softened further: a wash of colour, no blocks or edges
         layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 64 }
+        onStatusChanged: if (status === Image.Ready && source == ms.washWant) ms.washShow(this)
     }
+    Wash { id: w0 }
+    Wash { id: w1 }
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
@@ -78,9 +95,18 @@ Item {
     }
 
     // ---------------------------------------------------------------- the light behind the clock: the cover, blurred
+    // the halo dips, takes the new cover's colours, and comes back up — no jump
+    property string haloArt: music.art || ""
+    property real haloK: 1
+    onHaloArtChanged: haloSwap.restart()
+    SequentialAnimation {
+        id: haloSwap
+        NumberAnimation { target: ms; property: "haloK"; to: 0; duration: 500; easing.type: Easing.InQuad }
+        ScriptAction { script: haloSrc.source = ms.haloArt }
+        NumberAnimation { target: ms; property: "haloK"; to: 1; duration: 1000; easing.type: Easing.OutQuad }
+    }
     Image {
         id: haloSrc
-        source: music.art || ""
         sourceSize: Qt.size(4, 4)
         width: 4; height: 4
         smooth: true; visible: false
@@ -94,7 +120,7 @@ Item {
         property real sat: 1.4
         property real spread: 0.22                  // only the cover's colours, none of its shapes
         fragmentShader: shaderDir + "halo.frag.qsb"
-        opacity: (ms.night ? 0.3 : 0.5) * (0.9 + 0.1 * ms.breath + 0.12 * ms.beatNow)
+        opacity: ms.haloK * (ms.night ? 0.3 : 0.5) * (0.9 + 0.1 * ms.breath + 0.12 * ms.beatNow)
     }
 
     // ---------------------------------------------------------------- the clock, glowing

@@ -99,7 +99,7 @@ Item {
             smooth: true; mipmap: false
             fillMode: Image.Stretch
             opacity: 0
-            Behavior on opacity { NumberAnimation { duration: 600 } }
+            Behavior on opacity { NumberAnimation { duration: 1100; easing.type: Easing.InOutQuad } }
         }
     }
     property int washSlot: 0
@@ -134,7 +134,8 @@ Item {
         opacity: music.playing ? 0.62 + 0.38 * mp.beatNow : 0
         Behavior on opacity { enabled: !music.playing; NumberAnimation { duration: 600 } }
         preferredRendererType: Shape.CurveRenderer
-        readonly property color c: Theme.rgb(music.rgb || [200, 185, 163])
+        property color c: Theme.rgb(music.rgb || [200, 185, 163])
+        Behavior on c { ColorAnimation { duration: 1100; easing.type: Easing.InOutQuad } }      // the new song's colour eases in
         ShapePath {
             strokeColor: "transparent"
             fillGradient: RadialGradient {
@@ -238,8 +239,11 @@ Item {
     Item {
         id: ring
         x: mp.cx - mp.rw / 2; y: mp.cy - mp.rw / 2; width: mp.rw; height: mp.rw
-        opacity: mp.fade ? 0 : 1
-        Behavior on opacity { NumberAnimation { duration: 200 } }
+        opacity: 1
+        // a new song's words fade in, rather than snapping
+        property string song: music.title || ""
+        onSongChanged: infoIn.restart()
+        NumberAnimation { id: infoIn; target: info; property: "opacity"; from: 0.15; to: 1; duration: 900; easing.type: Easing.OutQuad }
         readonly property real w: mp.rw
         readonly property real r: mp.ringR
         readonly property string path: {
@@ -412,19 +416,19 @@ Item {
         }
     }
 
-    // ================================================================= the swipe hint, on the lower part of the cover
-    Rectangle {
-        visible: music.exists
-        x: mp.cx - width / 2; y: mp.cy + mp.cs / 2 - 92; width: hintRow.width + 40; height: 44; radius: 22
-        color: Qt.rgba(0, 0, 0, 0.32)
-        opacity: Math.abs(mp.flowDx) > 4 ? 0 : 0.9
-        Behavior on opacity { NumberAnimation { duration: 160 } }
-        Row {
-            id: hintRow
-            anchors.centerIn: parent; spacing: 14
-            Icon { name: "back"; size: 18; color: Qt.rgba(1, 1, 1, 0.8); anchors.verticalCenter: parent.verticalCenter }
-            T { text: "swipe here"; font.pixelSize: 16; color: Qt.rgba(1, 1, 1, 0.8); anchors.verticalCenter: parent.verticalCenter }
-            Icon { name: "chev"; size: 18; color: Qt.rgba(1, 1, 1, 0.8); anchors.verticalCenter: parent.verticalCenter }
+    // ================================================================= the swipe hint: two quiet arrows just outside the cover,
+    // level with its lower part (where the screen answers) — nothing drawn over the art
+    Repeater {
+        model: [-1, 1]
+        Icon {
+            visible: music.exists
+            name: modelData < 0 ? "back" : "chev"
+            size: 30
+            color: Qt.rgba(1, 1, 1, 0.45)
+            x: mp.cx + modelData * (mp.rw / 2 + 4) - (modelData < 0 ? 30 : 0) + (modelData < 0 ? -2 : 2)
+            y: mp.cy + mp.cs / 2 - 150
+            opacity: Math.abs(mp.flowDx) > 4 ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 200 } }
         }
     }
 

@@ -86,6 +86,7 @@ def main():
     engine.rootContext().setContextProperty("room", room)
     engine.rootContext().setContextProperty("shaderDir", QUrl.fromLocalFile(str(ROOT / "shaders") + "/").toString())
     engine.rootContext().setContextProperty("startScreen", os.environ.get("ROOM_SCREEN", "home"))
+    engine.rootContext().setContextProperty("showDead", os.environ.get("ROOM_SHOW_DEAD") == "1")   # (checks) the dead strips, in red
     engine.rootContext().setContextProperty("shotPath", os.environ.get("ROOM_SHOT", ""))
     engine.rootContext().setContextProperty("shotMs", int(os.environ.get("ROOM_SHOT_MS", "2500")))
     engine.rootContext().setContextProperty("windowed", os.environ.get("ROOM_WINDOWED") == "1")

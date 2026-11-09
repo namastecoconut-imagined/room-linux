@@ -1,7 +1,8 @@
 import QtQuick
 
-// One room: a tall brightness fader (drag up and down; the button at its foot switches the room), warmth from
-// candle to daylight, seven colours, each lamp on its own, and four presets for the room.
+// One room: the level to read up top, on/off, a brightness fader (drag up and down), warmth from candle to daylight,
+// seven colours, each lamp on its own, and four presets for the room — the controls all clear of the two strips
+// the touch screen doesn't answer in.
 Item {
     id: rs
     width: Theme.stageW; height: Theme.stageH
@@ -23,10 +24,26 @@ Item {
         onBack: rs.back()
     }
 
+    // (the touch screen doesn't respond in two strips — Theme.deadA*, deadB*: only things to read go there)
+
+    // ---------------------------------------------------------------- the level, to read
+    Row {
+        x: 96; y: Theme.deadA0 + 20
+        T { id: big; text: fader.shown > 0 ? fader.shown : "Off"; font.pixelSize: 96; font.weight: Font.Light }
+        T { visible: fader.shown > 0; anchors.baseline: big.baseline; text: "%"; font.pixelSize: 40; font.weight: Font.Light }
+    }
+    T { x: 98; y: Theme.deadA0 + 140; text: r ? r.sub : ""; font.pixelSize: 22; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.7) }
+    Pill {
+        x: 96; y: Theme.liveMid - 34; width: 400; height: 68
+        text: rs.on ? "Turn off" : "Turn on"; icon: "power"
+        onTapped: room.toggleRoom(rs.name)
+    }
+    SectionCap { x: 96; y: Theme.deadB0 + 12; text: "Brightness  ·  drag up and down" }
+
     // ---------------------------------------------------------------- the fader
     Item {
         id: fader
-        x: 96; y: 160; width: 400; height: 660
+        x: 96; y: Theme.deadB1 + 8; width: 400; height: 888 - y
         property int local: 0
         readonly property int shown: drag.pressed ? local : (rs.on ? r.level : 0)
         Rectangle { anchors.fill: parent; radius: 44; color: Qt.rgba(1, 1, 1, 0.05) }
@@ -42,12 +59,6 @@ Item {
                 radius: 44; color: Theme.rgb(rs.glow, 0.42)
             }
         }
-        Row {
-            x: 36; y: 36
-            T { id: big; text: fader.shown > 0 ? fader.shown : "Off"; font.pixelSize: 76; font.weight: Font.Light }
-            T { visible: fader.shown > 0; anchors.baseline: big.baseline; text: "%"; font.pixelSize: 34; font.weight: Font.Light }
-        }
-        T { x: 38; y: 132; text: r ? r.sub : ""; font.pixelSize: 20; color: Qt.rgba(244 / 255, 238 / 255, 230 / 255, 0.7) }
         Timer { id: throttle; interval: 120; onTriggered: room.setRoomLevel(rs.name, fader.local) }
         MouseArea {
             id: drag
@@ -58,19 +69,13 @@ Item {
             onPositionChanged: (e) => { fader.local = at(e.y); if (!throttle.running) throttle.start() }
             onReleased: { throttle.stop(); room.setRoomLevel(rs.name, fader.local) }
         }
-        Pill {
-            x: 36; anchors.bottom: parent.bottom; anchors.bottomMargin: 36; width: 128; height: 60
-            text: rs.on ? "Turn off" : "Turn on"; fontSize: 18
-            fill: Qt.rgba(0, 0, 0, 0.28)
-            onTapped: room.toggleRoom(rs.name)
-        }
     }
 
     // ---------------------------------------------------------------- warmth
-    SectionCap { x: 600; y: 166; text: "Warmth" }
+    SectionCap { x: 600; y: Theme.deadA1 - 34; text: "Warmth" }
     Item {
         id: warmth
-        x: 600; y: 204; width: 696; height: 64
+        x: 600; y: Theme.liveMid - 32; width: 696; height: 64
         readonly property real k: r && r.kelvin ? r.kelvin : 2700
         property real f: drag2.pressed ? local : (k - 2200) / 4300
         property real local: 0
@@ -104,7 +109,7 @@ Item {
         }
     }
     Item {
-        x: 600; y: 284; width: 696; height: 20
+        x: 600; y: Theme.deadB0 + 10; width: 696; height: 20
         T { x: 0; text: "Candle"; font.pixelSize: 16; color: Theme.sub }
         T { x: 696 * 0.3; text: "Warm"; font.pixelSize: 16; color: Theme.sub }
         T { x: 696 * 0.62; text: "Neutral"; font.pixelSize: 16; color: Theme.sub }
@@ -112,9 +117,8 @@ Item {
     }
 
     // ---------------------------------------------------------------- colour
-    SectionCap { x: 600; y: 354; text: "Colour" }
     Row {
-        x: 600; y: 392; spacing: (696 - 7 * 76) / 6
+        x: 600; y: Theme.deadB1 + 12; spacing: (696 - 7 * 76) / 6
         Repeater {
             model: [[232, 100, 74], [232, 152, 42], [233, 200, 74], [224, 74, 142], [138, 90, 224], [58, 144, 224], [58, 191, 142]]
             Press {
@@ -126,10 +130,10 @@ Item {
     }
 
     // ---------------------------------------------------------------- lamps
-    SectionCap { x: 600; y: 516; text: "Lamps" }
+    SectionCap { x: 600; y: Theme.deadB1 + 112; text: "Lamps" }
     Flickable {
         id: lampsF
-        x: 600; y: 552; width: 696; height: 132
+        x: 600; y: Theme.deadB1 + 144; width: 696; height: 124
         contentWidth: lampsRow.width
         interactive: contentWidth > width
         clip: true
@@ -141,7 +145,7 @@ Item {
                 model: r ? r.lamps : []
                 Press {
                     readonly property int n: rs.r ? rs.r.lamps.length : 1
-                    width: n <= 3 ? (696 - 14 * (n - 1)) / Math.max(1, n) : 220; height: 132
+                    width: n <= 3 ? (696 - 14 * (n - 1)) / Math.max(1, n) : 220; height: 124
                     opacity: modelData.reachable ? 1 : 0.4
                     onTapped: room.toggleLamp(modelData.id)
                     Rectangle {
@@ -163,7 +167,7 @@ Item {
 
     // ---------------------------------------------------------------- presets
     Row {
-        x: 600; y: 752; spacing: 12
+        x: 600; y: Theme.deadB1 + 292; spacing: 12
         Repeater {
             model: ["Relax", "Read", "Movie", "Night"]
             Pill { width: (696 - 36) / 4; height: 68; text: modelData; onTapped: room.roomScene(rs.name, modelData) }

@@ -16,7 +16,7 @@ Item {
     readonly property var recent: music.recent || []
     signal back()
     property bool picking: false
-    property bool library: false
+    property bool library: startScreen === "musiclib"         // (checks: opened by name)
 
     // ---------------------------------------------------------------- geometry (stage px)
     // the grid: 64 px margins; cover column 64–648 (the ring's box), info column 720–1304; content between y 152 and 848
@@ -116,7 +116,7 @@ Item {
         layers[1 - washSlot].opacity = 0
     }
     onMusicChanged: showWash()
-    Component.onCompleted: showWash()
+    Component.onCompleted: { showWash(); if (startScreen === "musicspk") picking = true }
     // the phone's dim: darker to the right, where the controls are
     Rectangle {
         anchors.fill: parent
@@ -377,9 +377,9 @@ Item {
             font.pixelSize: 68; font.weight: Font.Medium; font.letterSpacing: -0.6
             fontSizeMode: Text.HorizontalFit; minimumPixelSize: 44
         }
-        // like, beside the title
+        // like — in the working strip under the title (the title's band doesn't take touch)
         RoundBtn {
-            x: parent.width - 80; y: 196; size: 80; iconSize: 32
+            x: parent.width - 84; y: Theme.liveMid - 42; size: 84; iconSize: 32
             visible: music.exists && mp.spotify && music.liked !== null && music.liked !== undefined
             icon: music.liked ? "heartOn" : "heart"; fill: "transparent"
             ink: music.liked ? Theme.accent : Theme.tx
@@ -391,23 +391,22 @@ Item {
             font.pixelSize: 30; color: Qt.rgba(0.96, 0.95, 0.94, 0.65)
         }
         T {
-            y: 316; visible: music.exists && music.duration > 0
+            y: Theme.liveMid - 14; visible: music.exists && music.duration > 0
             text: Theme.mmss(mp.f * music.duration) + "  ·  -" + Theme.mmss(music.duration - mp.f * music.duration)
             font.pixelSize: 22; color: Qt.rgba(0.96, 0.95, 0.94, 0.45)
         }
 
-        // up next: tap one to skip straight to it
-        Rectangle { y: 384; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.1); visible: nextUp.length > 0 }
+        // up next: tap one to skip straight to it (under the thin strip, which holds just its label)
         T {
-            y: 408; visible: nextUp.length > 0
+            y: Theme.deadB0 + 12; visible: nextUp.length > 0
             text: "UP NEXT"; font.pixelSize: 15; font.letterSpacing: 2.4; color: Qt.rgba(0.96, 0.95, 0.94, 0.55)
         }
         Column {
-            y: 442; width: parent.width; spacing: 12
+            y: Theme.deadB1 + 10; width: parent.width; spacing: 12
             Repeater {
-                model: nextUp.slice(0, 4)
+                model: nextUp.slice(0, 3)
                 Press {
-                    width: info.width; height: 56; pressScale: 0.98
+                    width: info.width; height: 64; pressScale: 0.98
                     Cover { width: 56; height: 56; radius: 12; source: modelData.art || ""; rgb: [[110, 138, 138], [140, 94, 78], [122, 106, 140], [94, 140, 132]][index % 4]; rgb2: [30, 28, 26] }
                     T { x: 76; y: 3; width: parent.width - 76; text: modelData.title; font.pixelSize: 22 }
                     T { x: 76; y: 31; width: parent.width - 76; text: modelData.artist || ""; font.pixelSize: 17; color: Qt.rgba(0.96, 0.95, 0.94, 0.65) }

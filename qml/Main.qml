@@ -31,7 +31,7 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: ["music", "room", "clock", "weather", "reminders", "assistant", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: startScreen === "clockedit" ? "clock" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "assistant", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
@@ -203,6 +203,11 @@ Window {
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
+        // (checks) where the touch screen doesn't respond
+        Repeater {
+            model: showDead ? [[Theme.deadA0, Theme.deadA1], [Theme.deadB0, Theme.deadB1]] : []
+            Rectangle { y: modelData[0]; width: Theme.stageW; height: modelData[1] - modelData[0]; color: Qt.rgba(1, 0, 0, 0.18) }
+        }
         // burn-in care: once a night (refreshAt, 04:00), while on standby, a minute of slow full-screen colour washes
         // exercises every pixel and clears any image that's started to stick
         Rectangle {

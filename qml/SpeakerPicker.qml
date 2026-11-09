@@ -17,15 +17,20 @@ Item {
     Rectangle {
         id: sheet
         radius: 30; border.color: Qt.rgba(1, 1, 1, 0.08); clip: true
-        width: 560; height: Math.min(640, 120 + Math.max(1, sp.devices.length) * 88)
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: sp.open ? 0 : 40
-        Behavior on anchors.verticalCenterOffset { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+        // low on the screen, under the strips the touch screen doesn't answer in
+        width: 640; height: Math.min(896 - Theme.deadB1 - 6, 100 + Math.max(1, sp.devices.length) * 88)
+        x: (parent.width - width) / 2
+        y: 896 - height + (sp.open ? 0 : 40)
+        Behavior on y { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
         color: "#141312"
         MouseArea { anchors.fill: parent }   // taps on the sheet don't close it
-        Cap { x: 32; y: 32; text: "Play on" }
+        Cap { x: 32; y: 28; text: "Play on" }
+        Flickable {
+            x: 16; y: 64; width: parent.width - 32; height: parent.height - 76
+            contentHeight: spCol.height; clip: true; boundsBehavior: Flickable.StopAtBounds
         Column {
-            x: 16; y: 72; width: parent.width - 32
+            id: spCol
+            width: parent.width
             Repeater {
                 model: sp.devices
                 Press {
@@ -41,6 +46,7 @@ Item {
                 }
             }
             T { visible: sp.devices.length === 0; x: 16; y: 16; text: "No speakers awake — open Spotify on one"; color: Theme.dim; font.pixelSize: 21 }
+        }
         }
     }
 }

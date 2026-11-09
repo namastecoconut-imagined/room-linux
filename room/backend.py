@@ -466,7 +466,24 @@ class Room(QObject):
 
     @Slot(str)
     def playUri(self, uri):
-        self.spotify.play_uri(uri)
+        if uri == "liked":
+            self.spotify.play_liked()
+        else:
+            self.spotify.play_uri(uri)
+
+    # how long music can sit paused before the home card goes back to its shortcuts (minutes; 0 = never)
+    @Property(int, notify=settingsChanged)
+    def idleAfterMin(self):
+        return int(self.spotify.idle_after // 60)
+
+    @Slot()
+    def cycleIdleAfter(self):
+        steps = [2, 5, 10, 0]
+        cur = self.idleAfterMin
+        nxt = steps[(steps.index(cur) + 1) % len(steps)] if cur in steps else 2
+        self.spotify.set_idle_after(nxt)
+        self.settingsChanged.emit()
+        self.musicChanged.emit()
 
     @Slot()
     def refreshDevices(self):

@@ -17,7 +17,7 @@ Item {
 
     RoundBtn { x: 24; y: 24; size: 110; iconSize: 40; icon: "back"; fill: "transparent"; onTapped: lib.close() }
     T { x: 96; y: Theme.deadA0 + 40; text: "Playlists"; font.pixelSize: 64; font.weight: Font.Light }
-    T { x: 98; y: Theme.deadA0 + 130; text: lib.playlists.length + " of yours  ·  the arrows go through them, tap one to play"; font.pixelSize: 22; color: Theme.sub }
+    T { x: 98; y: Theme.deadA0 + 130; text: (lib.playlists.length - 1) + " of yours  ·  the arrows go through them, tap one to play"; font.pixelSize: 22; color: Theme.sub }
 
     ListView {
         id: grid
@@ -40,6 +40,16 @@ Item {
                 source: modelData.art || ""
                 rgb: [[140, 94, 78], [78, 110, 140], [110, 140, 94], [140, 122, 78], [122, 106, 140], [94, 140, 132]][index % 6]
                 rgb2: [21, 21, 21]
+            }
+            Rectangle {      // Liked Songs: Spotify's own look, a heart on purple-blue
+                visible: modelData.uri === "liked"
+                width: parent.width; height: 296; radius: 30
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: "#4a2fc4" }
+                    GradientStop { position: 1; color: "#8fb7ff" }
+                }
+                Icon { anchors.centerIn: parent; name: "heartOn"; size: 96; color: "white" }
             }
             T { y: 312; width: parent.width; text: modelData.name; font.pixelSize: 24; elide: Text.ElideRight }
             onTapped: lib.play(modelData.uri)

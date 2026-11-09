@@ -472,7 +472,7 @@ Item {
     Library {
         anchors.fill: parent
         open: mp.library
-        playlists: music.playlists || []
+        playlists: [{ name: "Liked Songs", uri: "liked", art: "" }].concat(music.playlists || [])
         onClose: mp.library = false
         onPlay: (uri) => { room.playUri(uri); mp.library = false }
     }

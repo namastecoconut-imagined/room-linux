@@ -21,7 +21,7 @@ if command -v firewall-cmd >/dev/null && sudo firewall-cmd --state >/dev/null 2>
   sudo firewall-cmd -q --reload
 fi
 
-# -n/-nh: the name, as is · -p: fixed ports (for the firewall) · -fs + waylandsink: full screen on the panel
+# -n/-nh: the name, as is · -p: fixed ports (for the firewall) · waylandsink: drawn straight on the panel
 # -hls: YouTube's AirPlay button (it sends the video, not a mirror of the phone) · -nohold: a new phone can take over
 cat > ~/.config/systemd/user/room-airplay-video.service <<UNIT
 [Unit]
@@ -30,7 +30,10 @@ After=network-online.target pipewire-pulse.service avahi-daemon.service
 Wants=pipewire-pulse.service
 
 [Service]
-ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -p $PORT -fs -vs waylandsink -hls -nohold
+# no -fs: UxPlay's full-screen switch is X11 code and crashes on Wayland — the panel's compositor (cage) shows the
+# window full screen anyway. No DISPLAY either, so none of UxPlay's X11 window handling runs.
+UnsetEnvironment=DISPLAY
+ExecStart=/usr/bin/uxplay -n "Room Screen" -nh -p $PORT -vs waylandsink -hls -nohold
 Restart=on-failure
 RestartSec=5
 

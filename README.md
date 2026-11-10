@@ -12,12 +12,14 @@ The Room panel as a native Qt Quick app. The screens are drawn on the GPU, and t
    ```
 4. **Config.** Copy `config.json` from the Mac (`Downloads/RoomPanel/config.json`) to `~/.config/room/config.json`. Then set `"here": "Living room"` and add the living-room lights under `"rooms"`.
 
-Room starts with the desktop session. It doesn't restart itself while we're still fixing things.
+Room starts with the session. It doesn't restart itself.
 
-- Stop it: `systemctl --user stop room`
-- Run it in a terminal so errors show: `cd ~/room && .venv/bin/python -m room` (Esc leaves full screen, Ctrl-C quits)
-- AirPlay only: `bash scripts/airplay.sh`
+- Just the panel, no desktop (cage, signs in by itself): `room-kiosk on` · back to GNOME: `room-kiosk off`
+- AirPlay music ("Room"): `bash scripts/airplay.sh`
 - Spotify on the Surface itself (Spotify Connect speaker "Room", via Spotify Soloist): `bash scripts/spotify-connect.sh`
+- Teach "Alexa" your voice (about 6 minutes, over SSH, near the panel): `bash scripts/train-alexa.sh`
+- Stop it: `systemctl --user stop room` · run it in a terminal: `cd ~/room && .venv/bin/python -m room`
+- From the Mac: `ssh namastecoconut@room.local`
 
 ## Update
 
@@ -37,10 +39,14 @@ journalctl --user -u room -f                                          # live log
 
 | | |
 |---|---|
-| `qml/Home.qml` | home screen: time, weather, today · lights · now playing, mic |
+| `qml/Home.qml` | home: glass cards over the song's moving colours — dot clock, next, music, lights |
 | `qml/Standby.qml` + `shaders/standby.frag` | breathing dot field and morning glow (GPU shader), dot clock |
-| `qml/MusicStandby.qml` | music standby: cover, blurred-cover background, drifting artist name |
+| `qml/MusicStandby.qml` | music standby, the Zune way: moving colours, giant drifting words |
+| `qml/ColourWash.qml` · `qml/Glass.qml` | the song's colours as a moving background · frosted cards |
+| `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `qml/DotText.qml` | the 5×7 dot numerals; dots glide to their new places each minute |
+| `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound, touch, "Alexa" |
+| `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected |
 | `room/wiz.py` | WiZ bulbs (UDP 38899) |
 | `room/spotify.py` | Spotify Web API (shares the iPhone panel's login) |
 | `room/weather.py` · `room/calendar.py` | Open-Meteo, Google Calendar iCal |
@@ -52,17 +58,18 @@ Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
 
 Set up once with `bash scripts/voice.sh` (install.sh runs it too).
 
-- **Listening** (`voice/ears.py`) — the system's default mic as it is (on the Surface: the noise-suppressed "Surface
-  Mic"), no processing of Room's own. "Alexa" is spotted on the Surface (openWakeWord) and Room reacts at once; what
-  follows streams to Sarvam (saaras:v4, en-IN — `sarvamKey`), one stream per request. You've finished after ~0.8 s
-  without speech (Silero VAD).
+- **Listening** (`voice/ears.py`) — the Surface mic (raw, at 70 %) through Room's echo canceller (`voice/aec.py`:
+  what's playing on the music speaker taken back out, then a gentle noise filter and level control). "Alexa" is
+  spotted on the Surface (openWakeWord, plus a model of your own voice once `train-alexa.sh` has run); what follows
+  streams to Sarvam (saaras:v4, en-IN — `sarvamKey`). You've finished after ~0.7 s without speech (Silero VAD).
+  Keep the Bluetooth speaker a metre or more from the panel, facing away — that's most of hearing "Alexa" over music.
 - **Understanding** — Claude (`room/brain.py`, the iPhone panel's prompt and tool) with a snapshot of the home;
   `room/intents.py`, plain rules, when there's no key or no internet. `room/assistant.py` carries out the actions.
 - **Answers** — Deepgram's Aura voice, streamed (`deepgramKey`); Kokoro (`af_heart`) offline. Chimes in `voice/cues`.
 
 The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on.
 Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"listen": true, "wakeThreshold": 0.4,
-"bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
+"echoCancel": true, "micLevel": 0.70, "wakeVerifier": true, "bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
 Room's voice never plays quieter than voiceMinLevel of the speakers (the output is lifted while it talks, then put back).
 
 ## Burn-in care
@@ -70,3 +77,10 @@ Room's voice never plays quieter than voiceMinLevel of the speakers (the output 
 The Surface's LCD is old, so: everything drifts very slowly round a small loop (±6 px in use, ±28 px on standby), and
 once a night (`"refreshAt": "04:00"`, `""` to turn it off) while on standby a minute of slow full-screen colour washes
 exercises every pixel. A tap stops it.
+
+## Buttons and screen
+
+- Power button: screen off (Room keeps listening); a sound, a touch or "Alexa" brings it back. Hold it to power off.
+- Volume buttons: the music's volume while something plays, else the speaker's.
+- On standby, after 5 quiet minutes the backlight goes fully off; any real sound brings it back.
+- Settings → This panel: switch to the desktop, or shut down.

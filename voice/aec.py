@@ -128,7 +128,13 @@ class EchoCancel:
         self.proc = subprocess.Popen(["pipewire", "-c", self.conf], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                      preexec_fn=die_with_me)
         self.started = time.time()
-        self.log(f"echo cancelling: mic {mic} · taking out what plays on {ref}")
+        # the mic's own level, held where it tested best (70 %: strong, never distorting; 100 % distorted, 40 % too
+        # quiet) — so nothing else can drift it ("micLevel" in voiceSettings to change it)
+        lvl = float(self.cfg.get("micLevel", 0.70))
+        nid = next((str(n["id"]) for n in _dump() if _props(n).get("node.name") == mic), None)
+        if nid:
+            subprocess.run(["wpctl", "set-volume", nid, f"{lvl:.2f}"], timeout=3)
+        self.log(f"echo cancelling: mic {mic} at {round(lvl * 100)} % · taking out what plays on {ref}")
 
     def _watch(self):
         while True:

@@ -9,10 +9,6 @@ HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 ENVF="$HOME/.config/room/soloist.env"
 mkdir -p ~/.config/room ~/.config/systemd/user
 
-# the earlier attempt (go-librespot: Spotify now refuses it the audio for every song) — gone
-systemctl --user disable --now room-spotify.service >/dev/null 2>&1 || true
-rm -rf "$HOME/.local/bin/go-librespot" "$HOME/.config/go-librespot"
-
 if ! grep -q '^SOLOIST_API_KEY=.' "$ENVF" 2>/dev/null; then
   echo "▸ Paste your Soloist API key (developer.spotify.com/dashboard/soloist) and press Enter:"
   read -rs KEY; echo

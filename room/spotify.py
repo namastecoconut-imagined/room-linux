@@ -97,7 +97,7 @@ class Spotify(QObject):
                 self.expiry = time.monotonic() + float(obj.get("expires_in", 3600)) - 60
                 self.error, self._fails = "", 0
             else:
-                self.error = "Spotify login expired — run tools/spotify_token.py again" if obj else "Couldn't reach Spotify"
+                self.error = "Spotify login expired — sign in to Spotify again (refreshToken in config.json)" if obj else "Couldn't reach Spotify"
             if obj.get("refresh_token"):
                 self.refresh_token = obj["refresh_token"]
                 self.store.write({"refreshToken": self.refresh_token, "from": self.cfg_token})

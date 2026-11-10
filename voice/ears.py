@@ -349,7 +349,11 @@ class Ears:
         s = SarvamStream(self.cfg, self.words, self._text, self._end)
         self.stream = s
         if preroll:
-            for c in self.ring:
+            # Only the last ~0.4 s before "Alexa" was spotted, not the whole second: sent whole, Sarvam often mishears
+            # the "Alexa" in it ("However,", "Alexander Johnson") — shown as words, and sometimes all that's heard.
+            # The spotting fires as "Alexa" ends, so 0.4 s still catches a quick "Alexa, lights off". When Room was
+            # talking, the whole second goes: there "Alexa" is the marker between its voice and yours.
+            for c in (self.ring if mine_first else self.ring[-5:]):
                 s.push(c)
         self.emit(ev="listening", follow=follow)
 

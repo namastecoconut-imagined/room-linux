@@ -1,8 +1,7 @@
 import QtQuick
 
 // The voice assistant on screen: light moving behind fluted glass (shaders/fluted.frag), in the panel's colours,
-// brighter and wider with your voice, and a soft light round the screen's edge (shaders/edge.frag) that glows with
-// it too. Live words aren't shown (the recogniser's guesses are rough); your words come in once it's sure of them,
+// brighter and wider with your voice. Live words aren't shown (the recogniser's guesses are rough); your words come in once it's sure of them,
 // then the answer below them. Tap anywhere to stop.
 Item {
     id: vo
@@ -49,7 +48,7 @@ Item {
         }
     }
 
-    // ---------------------------------------------------------------- the backdrop and the glowing edge (D)
+    // ---------------------------------------------------------------- the backdrop
     Rectangle { anchors.fill: parent; color: "#050608"; opacity: vo.mode === "gone" ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 350 } } }
     // ---------------------------------------------------------------- light behind fluted glass (shaders/fluted.frag)
@@ -65,21 +64,6 @@ Item {
         fragmentShader: shaderDir + "fluted.frag.qsb"
     }
 
-    ShaderEffect {
-        anchors.fill: parent
-        opacity: vo.mode === "gone" ? 0 : vo.mode === "miss" ? 0.35 : vo.mode === "done" ? 0.55 : 1
-        Behavior on opacity { NumberAnimation { duration: 500 } }
-        visible: opacity > 0
-        property size res: Qt.size(width, height)
-        property real t: vo.phase
-        property real level: vo.mode === "listen" ? vo.cur : vo.cur * 0.5
-        property real depth: 26
-        property color c0: vo.col(vo.c0, 1)
-        property color c1: vo.col(vo.c1, 1)
-        property color c2: vo.col(vo.c2, 1)
-        property color c3: vo.col(vo.c3, 1)
-        fragmentShader: shaderDir + "edge.frag.qsb"
-    }
 
     // ---------------------------------------------------------------- the label: LISTENING / GO ON / THINKING
     Text {

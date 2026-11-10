@@ -365,8 +365,19 @@ class Ears:
             self.last_text, self.text_at = text, time.time()
         if self.mine_first and not WAKE_RE.search(text):
             return                          # still only Room's own voice before "Alexa"
-        if t:
-            self.emit(ev="partial", text=t)
+        # Sarvam's early guesses change from one update to the next ("However, whatever." → "what's the weather
+        # like?"); only the words two updates in a row agree on are shown, so the screen holds what's settled and
+        # never shows a guess that's about to vanish. The final words are still taken as Sarvam gives them.
+        prev = getattr(s, "prev_partial", "")
+        s.prev_partial = t
+        k = lambda x: re.sub(r"[^a-z0-9' ]", "", x.lower()).split()
+        a, b, n = k(prev), k(t), 0
+        while n < min(len(a), len(b)) and a[n] == b[n]:
+            n += 1
+        steady = " ".join(t.split()[:n])
+        if steady and len(steady) >= len(getattr(s, "steady", "")):
+            s.steady = steady
+            self.emit(ev="partial", text=steady)
 
     def _end(self, text, s):
         if s is not self.stream:

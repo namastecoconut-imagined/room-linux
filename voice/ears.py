@@ -313,16 +313,19 @@ class Ears:
             # finished: ~1.1 s without speech AND no new words for 0.8 s (a short pause — "set a timer… for five
             # minutes", "play something… chill" — was ending requests early)
             still = time.time() - self.text_at
-            if said and not s.closing and now - self.started > 1.0 and still > float(self.cfg.get("endStill", 0.5)) and (
+            # (only once you've spoken after "Alexa": the 0.4 s sent from before it can come back as a stray "Ah." on
+            # its own, which was ending requests before you'd started — "Alexa … what's the weather" was a miss)
+            if said and self.voice_at and not s.closing and now - self.started > 1.0 and still > float(self.cfg.get("endStill", 0.5)) and (
                     (quiet > float(self.cfg.get("endQuiet", 0.7)) and not unfinished(said)) or quiet > 2.5):
                 s.finish()
             # nothing said: close after `wait` — but not while someone is talking and the words just haven't come
             # back yet ("set a timer…" was cut to "set a" when the first words took 5 s to arrive)
-            if not s.closing and ((not said and now - self.started > self.wait and quiet > 1.0)
+            if not s.closing and (((not said or not self.voice_at) and now - self.started > self.wait and quiet > 1.0)
                                   or now - self.started > 15):
                 s.finish()
             if s.closing and not self.closed_at:
                 self.closed_at = now
+                s.nobody = not self.voice_at
                 print(f"[voice] request: speech from {self.voice_at - self.started if self.voice_at else -1:.1f} s, "
                       f"last speech {self.spoke_at - self.started:.1f} s, closed {now - self.started:.1f} s "
                       f"(quiet {quiet:.1f} s)")
@@ -384,6 +387,8 @@ class Ears:
         if self.mine_first and not WAKE_RE.search(text or ""):
             text = ""
         said = after_wake(text)
+        if getattr(s, "nobody", False) and len(said.split()) <= 2:
+            said = ""                       # you didn't speak after "Alexa": a word or two is just its tail misheard
         # the best other reading along the way, if the final one changed it ("play something chill on spot" →
         # "please drink chill on spotify"): Claude gets both
         alt = ""

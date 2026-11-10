@@ -64,10 +64,37 @@ def kokoro(text, lang, voice):
     return np.asarray(a, dtype=np.float32), sr, time.time() - t
 
 
+def speed():
+    """Kokoro's two builds on this processor: int8 (smaller) vs full precision — on CPUs without int8 instructions
+    (this i5) the full one can be the faster. Times the first clause alone (what decides when Room starts talking)
+    and the whole answer."""
+    import urllib.request
+    from kokoro_onnx import Kokoro
+    first = "It's twenty seven degrees and cloudy in Bangalore right now,"
+    for f in ("kokoro-v1.0.int8.onnx", "kokoro-v1.0.fp16.onnx", "kokoro-v1.0.onnx"):
+        p = os.path.join(KDIR, f)
+        if not os.path.exists(p):
+            print(f"  downloading {f}…", flush=True)
+            try:
+                urllib.request.urlretrieve(f"{KURL}/{f}", p + ".part"); os.rename(p + ".part", p)
+            except Exception as e:
+                print(f"  ✗ {f}: {e}"); continue
+        k = Kokoro(p, os.path.join(KDIR, "voices-v1.0.bin"))
+        k.create("Warm up.", voice="af_heart", lang="en-us")
+        res = []
+        for text in (first, TEXT):
+            t = time.time(); a, sr = k.create(text, voice="af_heart", lang="en-us"); took = time.time() - t
+            res.append(f"{took:.2f} s for {len(a) / sr:.1f} s ({len(a) / sr / took:.1f}×)")
+        print(f"{f:24s} first clause {res[0]} · whole answer {res[1]}", flush=True)
+
+
 def main():
+    if "--speed" in __import__("sys").argv:
+        return speed()
     ap = argparse.ArgumentParser()
     ap.add_argument("--text", default=TEXT)
     ap.add_argument("--only", default="")
+    ap.add_argument("--speed", action="store_true")
     o = ap.parse_args()
     cfg = json.load(open(os.path.expanduser("~/.config/room/config.json")))
     key = cfg.get("sarvamKey") or (cfg.get("voiceSettings") or {}).get("sarvamKey")

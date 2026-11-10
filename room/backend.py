@@ -470,9 +470,14 @@ class Room(QObject):
 
     # ---------------------------------------------------------------- screen off / on, the Surface's buttons
     def _needs_screen(self):
-        m = self.music
-        return bool(m.get("playing")) or bool(self.alert and self.alert.get("kind")) or \
-            self.assistant.state in ("listening", "thinking", "speaking")
+        """'' when nothing needs the screen, else why (it's logged)."""
+        if self.music.get("playing"):
+            return "music playing"
+        if self.alert and self.alert.get("kind"):
+            return "an alarm or timer is showing"
+        if self.assistant.state in ("listening", "thinking", "speaking"):
+            return "Alexa is busy"
+        return ""
 
     @Property(bool, notify=asleepChanged)
     def asleep(self):

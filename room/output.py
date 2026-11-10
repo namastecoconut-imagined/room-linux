@@ -80,8 +80,8 @@ class Output:
             sid = n["id"]
             if (n.get("info") or {}).get("state") != "running":
                 continue                    # paused / idle: nothing to move (it's checked again when it plays)
-            if sid not in self.moved:
-                # a new music stream starts at full: PipeWire may have kept a lower level for this app from an
+            if sid not in self.moved and not spot:
+                # a new AirPlay stream starts at full (not Spotify's: its loudness is Spotify's volume): PipeWire may have kept a lower level for this app from an
                 # old duck that was never undone (how AirPlay got quiet)
                 subprocess.run(["wpctl", "set-volume", str(sid), "1.0"], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

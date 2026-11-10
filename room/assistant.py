@@ -232,6 +232,9 @@ class Assistant(QObject):
                 node = (props.get("node.name") or "").lower()
                 if "pw-play" in app or "pw-cat" in app or "room voice" in app:
                     continue
+                if "soloist" in app or "spotify" in app or "soloist" in (props.get("application.process.binary") or "").lower():
+                    continue        # the Surface's Spotify speaker: its loudness IS Spotify's volume (ducked through
+                                    # Spotify) — setting the stream too sent it to full after "Alexa"
                 if node.startswith(("effect_", "output.", "input.")) or props.get("node.virtual") or \
                         props.get("factory.name") == "filter-chain" or "filter" in node or "loopback" in node:
                     continue

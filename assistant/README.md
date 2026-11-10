@@ -20,7 +20,7 @@ What it runs on (each chosen by a test on this Surface):
 | | | why |
 |---|---|---|
 | mic | the raw Surface mic, held at 65 % | 100 % clipped; the noise-suppressed mic was worse for every speech-to-text option |
-| wake word | LiveKit WakeWord, your own trained "Alexa" (stock openWakeWord until then) | stock caught 3–7/10 |
+| wake word | Room's own "Alexa" (LiveKit WakeWord, `models/alexa.onnx`) | 10/10 quiet, 18/20 over music, 0 false (stock: 7/10, 3/20) |
 | finished talking | Silero VAD: 1 s of quiet once you've started; up to 5 s to start | |
 | words | Sarvam (saarika), the whole request at once | 7.1 % word errors, all the Hinglish right, 0.4 s — Whisper turbo 18.6 % in 12 s on the Surface |
 | understanding | Claude (Haiku), the home's state with every request | |

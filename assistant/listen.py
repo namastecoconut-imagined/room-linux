@@ -9,8 +9,8 @@ Built on step 3 and 4's measurements on this Surface:
   • you've finished when, after you've started talking, there's END_QUIET of silence (Silero VAD); before you
     start, it waits up to ONSET for you (a pause after "Alexa" is fine).
 
-Wake-word engines: LiveKit WakeWord (a trained alexa*.onnx in the models folder — preferred) or openWakeWord's stock
-"alexa" (until one's trained).
+Wake word: Room's own "Alexa" (assistant/models/alexa.onnx, LiveKit WakeWord); openWakeWord's stock "alexa" only
+if that's missing.
 """
 import io
 import json
@@ -86,19 +86,28 @@ class Mic:
 
 # ---------------------------------------------------------------- the wake word
 class Wake:
+    """Room's own "Alexa" (assistant/models/alexa.onnx, LiveKit WakeWord, trained for Room: 10/10 in a quiet room and
+    18/20 over music on this Surface's raw mic, no false alarms — the stock model caught 7/10 and 3/20). It ships with
+    the repo, so every install and update has it. If it's missing or won't load, the stock openWakeWord "alexa"
+    (downloaded by scripts/assistant.sh) takes over, so the assistant always has a wake word."""
+    OWN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "alexa.onnx")
+
     def __init__(self, threshold=None):
-        lk = sorted(f for f in os.listdir(MODELS) if f.lower().startswith("alexa") and f.endswith(".onnx")
-                    and f != "alexa_v0.1.onnx") if os.path.isdir(MODELS) else []
-        if lk:
-            from livekit.wakeword import WakeWordModel
-            self.m = WakeWordModel(models=[os.path.join(MODELS, lk[0])])
-            self.name, self.threshold = f"LiveKit {lk[0]}", threshold or 0.5
-        else:
+        self.threshold = float(threshold or 0.5)
+        self.m = None
+        if os.path.exists(self.OWN):
+            try:
+                from livekit.wakeword import WakeWordModel
+                self.m = WakeWordModel(models=[self.OWN])
+                self.name = "Room's own alexa.onnx (LiveKit)"
+            except Exception as e:
+                log(f"couldn't load Room's own wake word ({e!r}) — using the stock one")
+        if self.m is None:
             from openwakeword.model import Model
             self.m = Model(wakeword_models=[os.path.join(MODELS, "alexa_v0.1.onnx")], inference_framework="onnx",
                            melspec_model_path=os.path.join(MODELS, "melspectrogram.onnx"),
                            embedding_model_path=os.path.join(MODELS, "embedding_model.onnx"))
-            self.name, self.threshold = "openWakeWord alexa (stock)", threshold or 0.5
+            self.name = "openWakeWord alexa (stock — Room's own model is missing)"
         log("wake word:", self.name, "· threshold", self.threshold)
 
     def score(self, frame) -> float:

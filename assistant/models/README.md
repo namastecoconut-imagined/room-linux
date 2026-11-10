@@ -1,12 +1,18 @@
-# Wake-word models
+# Wake-word model
 
 `alexa.onnx` — Room's own "Alexa", trained with LiveKit WakeWord (`livekit-wakeword`, 5000 steps on the M1, 10 Nov 2026).
-On LiveKit's own test (500 "Alexa"s, an hour of other speech): 92.8 % caught at threshold 0.5, 0 false alarms an hour,
-3.8 % of sound-alikes accepted.
+The assistant uses it straight from here (assistant/listen.py `Wake`); the stock openWakeWord "alexa" is only a
+fallback if this file is missing or won't load.
 
-It isn't used until it's copied where the assistant looks (`~/.local/share/room/assistant/models`) — score it on the
-Surface's own recordings first (`python -m assistant.bench.wake_eval ~/room-wake-test/<time>`), then:
+| | stock openWakeWord | this model |
+|---|---|---|
+| LiveKit's test (500 "Alexa"s, 1 h of other speech) | — | 92.8 % caught, 0 false alarms / h |
+| Surface raw mic, quiet room | 7 / 10 | 10 / 10 |
+| Surface raw mic, over music | 3 / 20 | 18 / 20 |
+| Surface raw mic, music only (false alarms) | 0 | 0 |
 
-    cp ~/room/assistant/models/alexa.onnx ~/.local/share/room/assistant/models/ && systemctl --user restart room-assistant
+Threshold 0.5 (config.json `"assistant": {"wakeThreshold": …}`): lower it if it misses you, raise it if it wakes by
+itself. The live log shows the score at the moment it crossed the threshold (so mostly just above 0.5), not the peak.
 
-To go back to the stock openWakeWord "alexa", delete that copy and restart the assistant.
+To retrain (on the Mac): `livekit-wakeword train` in `~/alexa-wake`, then replace this file, commit, `room-update`;
+score it first with `python -m assistant.bench.wake_eval ~/room-wake-test/<time>`.

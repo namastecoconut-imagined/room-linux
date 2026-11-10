@@ -24,6 +24,8 @@ if [ -f "$C" ] && ! grep -q ignore_volume_control "$C"; then
   sed -i 's/^\(\s*\)volume_range_db = 50;/&\n\1ignore_volume_control = "yes";/' "$C"
   grep -q ignore_volume_control "$C" && systemctl --user try-restart room-airplay.service 2>/dev/null || true
 fi
+# Room's own wake word is used straight from the repo now (assistant/models): drop the hand-copied one
+rm -f "$HOME/.local/share/room/assistant/models/alexa.onnx"
 # the assistant (its own Python and service), if it's set up
 if [ -x "$HERE/assistant/.venv/bin/python" ]; then
   export PATH="$HOME/.local/bin:$PATH"

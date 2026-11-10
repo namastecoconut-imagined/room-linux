@@ -59,6 +59,7 @@ bash "$HERE/scripts/airplay.sh"
 bash "$HERE/scripts/spotify-connect.sh"
 bash "$HERE/scripts/assistant.sh"
 bash "$HERE/scripts/no-suspend.sh"
+bash "$HERE/scripts/cool.sh"
 
 echo "▸ Sound"
 # a Bluetooth speaker stays a speaker: never switched to its low-quality "headset" mode when something listens

@@ -6,6 +6,26 @@ Quick app (PySide6) with its own voice assistant. This covers 8–10 November 20
 
 ---
 
+## v1.1 — 10 Nov 2026, late evening: stable and cool
+- **Sound kept dropping, and the Bluetooth speaker kept disconnecting.**
+  - Cause: echo cancelling's stream (the mic and the speakers in one) got PipeWire killed every 8 s, taking all
+    sound, the mic and the Xiaomi down each time.
+  - Fix: echo cancelling now links only the Surface's own speakers, never a Bluetooth one. On the Xiaomi, "Alexa"
+    is 10/10 without cancelling anyway.
+  - Safety switch: if PipeWire still restarts twice within 3 min while it's on, echo cancelling turns itself off
+    until the assistant restarts. At worst a short drop, never a loop.
+  - Checked: 0 crashes in 30 min with the Xiaomi playing and echo cancelling on.
+- **The Surface ran hot.**
+  - Cause: the wake word ran on onnxruntime's default threads, which spin between its 12-a-second runs. That held
+    three cores at ~60 % nonstop (the assistant at 214 %).
+  - Fix: the wake word now runs on one thread with no spinning. Scores are identical; the assistant is down to ~9 %.
+  - On top of that, Room's own power profile (`scripts/cool.sh`): Fedora's balanced, but the CPU leans to saving
+    power. Idle went from 2.6 GHz to 1 GHz on every core, and Room's voice is unaffected.
+- Commits: `30f0ef1` (wake word threads), `eb03406` (echo cancelling), and this one (cool profile). Each can be
+  rolled back on its own.
+
+---
+
 ## v1.0 — 10 Nov 2026: what Room is now
 
 ### The panel
@@ -65,6 +85,7 @@ Quick app (PySide6) with its own voice assistant. This covers 8–10 November 20
   - Live, with music at 80–85% on the Surface's speakers: "Alexa" went from **3/9 to 9/9**.
   - On the Xiaomi it's 10/10 either way.
   - It can never make the mic worse, and it rests while Room speaks.
+  - *(v1.1: the Surface's speakers only, plus a safety switch; see above.)*
 - **Hearing a request**: the raw mic is held at 65%. Silero VAD decides when you've finished (1 s of quiet once you've started).
 - **Speech to text**: Sarvam (saarika, en-IN), with the whole request sent at once.
   - 7.1% word error, all the Hinglish right, 0.4 s.
@@ -151,5 +172,5 @@ music videos, YouTube cast and AirPlay video · go-librespot · new chimes (the 
 
 ## Still to do
 - Talking over Room while it speaks. The echo canceller already removes Room's voice; listening during the answer is what's left.
-- Cancelling the Xiaomi's sound well enough for that: its delay slides from 375 to 220 ms as it settles.
+- Cancelling a Bluetooth speaker's sound without putting it in the mic's stream (that crashed PipeWire); its delay also slides from 375 to 220 ms as it settles.
 - Update the Figma file's listening and thinking colours to match the app.

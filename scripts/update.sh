@@ -42,6 +42,9 @@ if [ -f ~/.config/systemd/user/room-assistant.service ] && [ ! -f "$D/perf.conf"
   systemctl --user daemon-reload
 fi
 command -v powerprofilesctl >/dev/null && [ "$(powerprofilesctl get 2>/dev/null)" = performance ] && powerprofilesctl set balanced 2>/dev/null || true
+# Room's cool power profile (scripts/cool.sh, needs the password once — so room-update only reminds)
+command -v tuned-adm >/dev/null && ! tuned-adm active 2>/dev/null | grep -q ': room$' && \
+  echo "  (the Surface isn't on Room's cool power profile — run: bash $HERE/scripts/cool.sh)" || true
 # the assistant (its own Python and service), if it's set up
 if [ -x "$HERE/assistant/.venv/bin/python" ]; then
   export PATH="$HOME/.local/bin:$PATH"

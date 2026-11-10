@@ -27,6 +27,7 @@ class VoiceLink(QObject):
         self.room = room
         self.peer: QLocalSocket | None = None
         self.buf = b""
+        self.level = 0.0
         self.st = {"state": "off", "stage": "idle", "heard": "", "reply": "", "line": "", "card": "", "follow": False}
         self.server = QLocalServer(self)
         self.server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
@@ -79,6 +80,10 @@ class VoiceLink(QObject):
 
     def _handle(self, m: dict):
         t = m.get("t")
+        if t == "level":
+            self.level = float(m.get("v", 0))
+            self.changed.emit()
+            return
         if t == "state":
             for k in self.st:
                 if k in m:

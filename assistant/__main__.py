@@ -45,6 +45,7 @@ class Assistant:
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         self.voice = Voice(voice=a.get("voice", "af_heart"))
         self.duck = Duck()
+        self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False
         if not self.sarvam_key:
             log("no sarvamKey in config.json — it can't understand speech")

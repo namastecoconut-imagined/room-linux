@@ -298,6 +298,11 @@ class Room(QObject):
         self._level += (v - self._level) * (0.5 if v > self._level else 0.12)
         self.levelChanged.emit()
 
+    @Property(float, notify=voiceChanged)
+    def voiceLevel(self):
+        """Your voice as the assistant hears it (0…1), while it's listening — the assistant screen moves with it."""
+        return self.voicelink.level
+
     @Property(float, notify=levelChanged)
     def level(self):
         """Room loudness, 0…1 — the standby dots ripple with it."""
@@ -446,6 +451,9 @@ class Room(QObject):
         sid = self._soloist_stream()
         if sid:
             subprocess.Popen(["wpctl", "set-volume", str(sid), f"{max(0, min(100, int(v))) / 100:.2f}"])
+        if not getattr(self, "_live_said", 0) or time.time() - self._live_said > 3:
+            self._live_said = time.time()
+            print(f"[room] volume slider: Spotify here → its stream {sid or '(not found)'} at {v}", flush=True)
 
     def _soloist_stream(self):
         import json, subprocess

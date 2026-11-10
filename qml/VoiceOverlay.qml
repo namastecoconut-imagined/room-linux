@@ -35,12 +35,12 @@ Item {
         interval: 33; repeat: true; running: vo.active && vo.visible
         onTriggered: {
             vo.phase += 0.033
-            var want = vo.mode === "listen" ? Math.min(1, room.level * 1.4)
+            var want = vo.mode === "listen" ? Math.min(1, room.voiceLevel * 1.3)
                      : vo.mode === "speak" ? 0.25 + Math.min(0.5, room.level * 0.6)
                      : vo.mode === "think" ? 0.18 + 0.08 * Math.sin(vo.phase * 3) : 0.1
             vo.cur += (want - vo.cur) * (want > vo.cur ? 0.35 : 0.08)
             vo.thinkMix += ((vo.mode === "think" ? 1 : 0) - vo.thinkMix) * 0.06
-            var l = room.level
+            var l = vo.mode === "listen" ? room.voiceLevel : room.level
             if (vo.beatFloor < 0) vo.beatFloor = l
             else vo.beatFloor += (l - vo.beatFloor) * (l < vo.beatFloor ? 0.2 : 0.02)
             var b = vo.mode === "listen" || vo.mode === "speak" ? Math.max(0, Math.min(1, (l - vo.beatFloor) * 4)) : 0

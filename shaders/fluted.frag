@@ -22,8 +22,8 @@ vec3 pal(float a) {
 
 vec3 light(vec2 p) {
     vec2 q = p / res;
-    float sweep = 0.5 + 0.38 * sin(t * 0.42);
-    float spread = 0.15 + 0.20 * level + 0.04 * think;
+    float sweep = 0.5 + 0.38 * sin(t * 0.42) + 0.06 * level * sin(t * 7.0);   // a quiver with the voice
+    float spread = 0.13 + 0.30 * level + 0.04 * think;
     float b1 = exp(-pow((q.x - sweep) / spread, 2.0));
     float b2 = exp(-pow((q.x - (0.5 - 0.3 * sin(t * 0.29 + 1.0))) / (0.09 + 0.14 * level), 2.0)) * 0.7;
     float v = exp(-pow((q.y - 0.28) / 0.40, 2.0));
@@ -36,7 +36,7 @@ void main() {
     vec2 p = qt_TexCoord0 * res;
     float w = res.x / 46.0;                                   // rib width
     float local = fract(p.x / w);
-    float sx = p.x + (local - 0.5) * w * -2.2;                // each rib squeezes and flips the light behind it
+    float sx = p.x + (local - 0.5) * w * (-2.2 - 1.6 * level); // each rib squeezes and flips the light behind it — more as you speak
     vec3 c = light(vec2(sx, p.y));
     float shade = 0.6 + 0.4 * sin(local * 3.14159);           // rounded ribs
     float hi = smoothstep(0.9, 1.0, local) * 0.28;            // a fine highlight on each rib's edge

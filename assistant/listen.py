@@ -185,6 +185,7 @@ class Listener:
         self.last_wake = 0.0
         self.tap = threading.Event()        # a tap on the panel: listen now, no wake word needed
         self.abort = threading.Event()      # stop listening to this request (a tap to cancel)
+        self.on_level = None                # called ~12 times a second with your voice's level (0…1) while recording
 
     verbose = False         # print the mic level and the best "Alexa" score every 2 s (tests)
 
@@ -230,6 +231,9 @@ class Listener:
             except queue.Empty:
                 continue
             frames.append(f)
+            if self.on_level:
+                rms = float(np.sqrt(np.mean((f.astype(np.float32) / 32768) ** 2)))
+                self.on_level(max(0.0, min(1.0, (20 * np.log10(max(rms, 1e-5)) + 60) / 45)))
             t = len(frames) * FRAME / RATE
             p = self.vad.prob(f)
             if p >= 0.5 and t > self.TAIL:

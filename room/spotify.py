@@ -485,7 +485,10 @@ class Spotify(QObject):
         pct = max(0, min(100, int(pct)))
         if self.player and self.player.get("device"):
             self.player["device"]["volume_percent"] = pct
-        self._api("PUT", f"/me/player/volume?volume_percent={pct}")
+        def done(status, data):
+            if status not in (200, 202, 204):
+                print(f"[room] spotify volume {pct}: {status} {bytes(data or b'')[:160]!r}", flush=True)
+        self._api("PUT", f"/me/player/volume?volume_percent={pct}", done)
 
 
 def colours(img: QImage):

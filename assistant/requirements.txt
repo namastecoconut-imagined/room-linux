@@ -1,3 +1,8 @@
 numpy>=2
 sounddevice>=0.5
 soxr>=0.5
+onnxruntime>=1.17
+tqdm
+requests
+scipy
+scikit-learn

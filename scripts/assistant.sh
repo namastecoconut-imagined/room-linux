@@ -17,4 +17,12 @@ cd "$HERE/assistant"
 uv python install -q 3.12
 [ -x .venv/bin/python ] || uv venv -q --python 3.12 .venv
 uv pip install -q --python .venv/bin/python -r requirements.txt
-echo "✓ Assistant set up. Test the speaker:  cd ~/room && assistant/.venv/bin/python -m assistant.bench.play_test"
+# the wake-word engines (their heavy training extras aren't needed to run them)
+uv pip install -q --python .venv/bin/python --no-deps "openwakeword==0.6.0" "livekit-wakeword==2.1.1"
+
+echo "▸ Assistant: wake-word models"
+M="$HOME/.local/share/room/assistant/models"; mkdir -p "$M"
+get() { if [ ! -s "$2" ]; then curl -fsSL --retry 3 -o "$2.part" "$1" && mv "$2.part" "$2"; fi; }
+OWW=https://github.com/dscripka/openWakeWord/releases/download/v0.5.1
+for f in alexa_v0.1.onnx melspectrogram.onnx embedding_model.onnx; do get "$OWW/$f" "$M/$f"; done
+echo "✓ Assistant set up."

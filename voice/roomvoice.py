@@ -119,6 +119,30 @@ def voice_out():
     return ["--volume", f"{min(1.0, float(CFG.get('voiceVolume', 1.0))):.2f}", *props]
 
 
+def stream_cmd(out):
+    """The player for Room's streamed voice. pw-play reads the pipe in step with the speakers and has nothing in hand,
+    so any moment it isn't given its turn is a gap — on the Surface it dropped hundreds of pieces per answer (pw-top
+    ERR), the voice "breaking up". pacat (PipeWire's Pulse side) keeps ~0.3 s buffered for the stream itself, so
+    the same hiccups pass unheard. pw-play if pacat isn't there. Takes voice_out()'s pw-play options."""
+    if not shutil.which("pacat"):
+        return ["pw-play", *out, "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"]
+    cmd = ["pacat", "--playback", "--raw", "--format=s16le", "--rate=24000", "--channels=1",
+           f"--latency-msec={int(CFG.get('voiceLatencyMs', 300))}", "--client-name=Room voice",
+           "--stream-name=Room voice", "--property=application.name=Room voice",
+           "--property=state.restore-props=false", "--property=state.restore-target=false"]
+    i = 0
+    while i < len(out):
+        if out[i] == "--target":
+            cmd.append(f"--device={out[i + 1]}"); i += 2
+        elif out[i] == "--volume":
+            cmd.append(f"--volume={int(float(out[i + 1]) * 65536)}"); i += 2
+        elif out[i] == "-P":
+            i += 2
+        else:
+            i += 1
+    return cmd
+
+
 def surface_target():
     """The Surface's own speakers (for chimes), or [] for the system's output."""
     try:
@@ -308,7 +332,7 @@ class Speaker:
                 log(f"aura: dropped — something new started {time.time() - t0:.1f} s in")
                 r.close()
                 return True
-            self.proc = subprocess.Popen(["pw-play", *voice_out(), "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
+            self.proc = subprocess.Popen(stream_cmd(voice_out()),
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         first = True
         odd = b""

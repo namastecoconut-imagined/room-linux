@@ -124,6 +124,9 @@ class Room(QObject):
             self._ap_playing = self.airplay.playing
         self.spotify.changed.connect(spot)
         self.airplay.changed.connect(airplay)
+        # the phone's AirPlay volume moves the speaker (and the slider) too, as before; the slider still sets the
+        # speaker directly (AirPlay can't move the phone's volume back)
+        self.airplay.volumeSet.connect(self._phone_volume)
         self.bt.connectedChanged.connect(self.output.poke)
         # the volume slider works on the speaker the music is on: a Bluetooth speaker when one's connected, otherwise
         # the Surface's own (the Dolby tuning). Looked up off the screen's thread (pw-dump is slow), at start, when a
@@ -502,6 +505,11 @@ class Room(QObject):
         if time.time() - getattr(self, "_vol_said", 0) > 3:
             self._vol_said = time.time()
             print(f"[room] volume: {v} on {'the Bluetooth speaker' if self._sink[0] != '@' else 'the Surface'}", flush=True)
+
+    def _phone_volume(self, v):
+        print(f"[room] AirPlay: the phone's volume is {v}", flush=True)
+        self._vol_said = 0
+        self._set_sink(v)
 
     def _spotify_full(self):
         """Room's own Spotify plays at full — the speaker's volume is the one that changes. Once, when it starts

@@ -37,6 +37,7 @@ def fourcc(h: bytes) -> str:
 
 class AirPlay(QObject):
     changed = Signal()
+    volumeSet = Signal(int)         # the phone's volume was changed (0–100): Room sets the speaker to it
 
     def __init__(self):
         super().__init__()
@@ -152,6 +153,7 @@ class AirPlay(QObject):
             try:   # "airplay_volume,volume,lowest,highest" — airplay_volume is −30…0 (−144 = muted)
                 av = float(s().split(",")[0])
                 self.volume = 0 if av <= -30 else int(round((av + 30) / 30 * 100))
+                self.volumeSet.emit(self.volume)
             except ValueError:
                 pass
             return True

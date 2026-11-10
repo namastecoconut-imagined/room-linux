@@ -65,6 +65,7 @@ general = {
   name = "Room";
   output_backend = "__OUT__";
   volume_range_db = 50;
+  ignore_volume_control = "yes";   # the phone's volume sets the speaker's (Room does that), not a second one in here
   mpris_service_bus = "Session";
   dbus_service_bus = "Session";
 };

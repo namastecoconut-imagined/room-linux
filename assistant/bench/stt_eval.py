@@ -76,7 +76,8 @@ def whisper(size):
         m = WhisperModel(size, device="cpu", compute_type="int8", cpu_threads=4)
         def run(path):
             t = time.time()
-            segs, _ = m.transcribe(path, language="en", beam_size=1, vad_filter=True,
+            audio = load(path).astype(np.float32) / 32768     # (passing the file made faster-whisper's audio
+            segs, _ = m.transcribe(audio, language="en",       #  reader fail with this PyAV version) beam_size=1, vad_filter=True,
                                    initial_prompt="Smart home commands: " + ", ".join(KEYTERMS) + ".")
             txt = " ".join(s.text.strip() for s in segs)
             return txt, time.time() - t
@@ -127,9 +128,12 @@ def sarvam():
     def run(path):
         t = time.time()
         r = requests.post("https://api.sarvam.ai/speech-to-text", headers={"api-subscription-key": key},
-                          files={"file": open(path, "rb")},
-                          data={"model": "saarika:v2.5", "language_code": "en-IN"}, timeout=30)
-        return (r.json().get("transcript") or f"[{r.status_code}]"), time.time() - t
+                          files={"file": ("command.wav", open(path, "rb"), "audio/wav")},
+                          data={"model": CFG.get("sarvamBatchModel", "saarika:v2.5"), "language_code": "en-IN"},
+                          timeout=30)
+        if r.status_code != 200:
+            raise RuntimeError(f"{r.status_code} {r.text[:160]}")
+        return r.json().get("transcript") or "", time.time() - t
     return run
 
 

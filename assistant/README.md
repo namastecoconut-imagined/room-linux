@@ -20,7 +20,7 @@ What it runs on (each chosen by a test on this Surface):
 | | | why |
 |---|---|---|
 | mic | the raw Surface mic, held at 65 % | 100 % clipped; the noise-suppressed mic was worse for every speech-to-text option |
-| echo | Room's own linear canceller (`echo.py`): what every speaker is sent, taken back out of the mic | over music, "Alexa" 4/10 → 10/10 (Surface speakers), 9/10 → 10/10 (Xiaomi); Sarvam 2/10 → 8/10 lines right. WebRTC's AEC3 removed more music but ate the voice (0/10) |
+| echo | Room's own linear canceller (`echo.py`): the mic and what every speaker is sent, in one stream, the music taken back out | live, music at 80–85 % on the Surface's speakers: "Alexa" 3/9 → 9/9. Xiaomi: 10/10 either way (it's across the room; its delay slides 375 → 220 ms as it settles, so little to take out). WebRTC's AEC3 ate the voice (1/10) |
 | wake word | Room's own "Alexa" (LiveKit WakeWord, `models/alexa.onnx`) | 10/10 quiet, 18/20 over music, 0 false (stock: 7/10, 3/20) |
 | finished talking | Silero VAD: 1 s of quiet once you've started; up to 5 s to start | |
 | words | Sarvam (saarika), the whole request at once | 7.1 % word errors, all the Hinglish right, 0.4 s — Whisper turbo 18.6 % in 12 s on the Surface |

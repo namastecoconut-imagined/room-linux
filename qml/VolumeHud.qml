@@ -3,7 +3,8 @@ import QtQuick.Effects
 
 // The Surface's volume buttons: a big capsule in the middle of the screen, Apple's volume slider — the level fills
 // it in solid white from the left (straight edge), the rest is frosted glass with a fine light rim, and a speaker
-// sits at the start with one, two or three waves for how loud it is. Fades in, settles, fades out after 1.5 s.
+// sits at the start with one, two or three waves for how loud it is; everything behind blurs while it's up.
+// Fades in, settles, fades out after 1.5 s.
 Item {
     id: hud
     width: Theme.stageW; height: Theme.stageH
@@ -15,6 +16,26 @@ Item {
         function onVolumeShown(v, w) { hud.level = v; hud.what = w; cap.shown = true; hide.restart() }
     }
     Timer { id: hide; interval: 1500; onTriggered: cap.shown = false }
+
+    // everything behind goes soft while the capsule's up
+    ShaderEffectSource {
+        id: whole
+        anchors.fill: parent
+        sourceItem: hud.backdrop
+        live: veil.visible
+        visible: false
+    }
+    MultiEffect {
+        id: veil
+        anchors.fill: parent
+        source: whole
+        visible: hud.backdrop !== null && opacity > 0
+        opacity: cap.opacity
+        blurEnabled: true; blur: 1.0; blurMax: 40
+        brightness: -0.08
+        autoPaddingEnabled: false
+    }
+    MouseArea { anchors.fill: parent; enabled: cap.shown; onPressed: (m) => { cap.shown = false; m.accepted = false } }
 
     Item {
         id: cap
@@ -45,6 +66,7 @@ Item {
             blurEnabled: true; blur: 1.0; blurMax: 48
             saturation: 0.1; brightness: 0.06
             maskEnabled: true; maskSource: capsule
+            autoPaddingEnabled: false         // blurred edges stay inside the capsule (no square halo)
         }
         Rectangle {
             anchors.fill: parent; radius: height / 2

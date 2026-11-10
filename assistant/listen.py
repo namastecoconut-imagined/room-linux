@@ -75,7 +75,7 @@ class Mic:
 
     @staticmethod
     def _link(out_port, in_port, passive=False):
-        cmd = ["pw-link"] + (["-P", "{ link.passive = true }"] if passive else []) + [out_port, in_port]
+        cmd = ["pw-link"] + (["--passive"] if passive else []) + [out_port, in_port]   # (--passive is a flag here)
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
         return r.returncode == 0 or "exist" in (r.stderr or "").lower()
 

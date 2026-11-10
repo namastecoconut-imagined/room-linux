@@ -32,15 +32,24 @@ def log(*a):
 
 
 # ---------------------------------------------------------------- the mic
+EARS = "room-assistant-ears"
+
+
 class Mic:
     """The raw Surface mic at a fixed level, 80 ms frames (int16) on a queue — with what Room is playing (music, its
     own voice) taken back out first (assistant/echo.py; "assistant": {"echoCancel": false} in config.json turns it
-    off)."""
+    off).
+
+    With echo cancelling it records one two-channel stream that nothing links by itself: Room links the mic into the
+    left channel and every output's monitor (the Surface's speakers, a Bluetooth speaker) into the right, so the two
+    arrive in step, sample for sample. The monitor links are passive — they never wake a sleeping speaker or keep it
+    on. Outputs are checked again every 10 s (a Bluetooth speaker connecting). If that ever doesn't deliver sound, it
+    falls back to the plain mic without echo cancelling, so the assistant always hears."""
 
     def __init__(self, level=0.65, echo=True):
         self.level = level
         self.echo = None
-        if echo:                            # take what Room is playing back out of the mic (assistant/echo.py)
+        if echo:
             try:
                 from .echo import EchoCanceller
                 self.echo = EchoCanceller()
@@ -49,6 +58,8 @@ class Mic:
         self.q: queue.Queue = queue.Queue(maxsize=200)
         self.proc = None
         self.stopping = False
+        self.tee = None                     # tests: called with (mic, playing, cleaned) for every frame
+        self.linked = set()
 
     @staticmethod
     def raw_source():
@@ -62,36 +73,104 @@ class Mic:
     def start(self):
         threading.Thread(target=self._run, daemon=True).start()
 
+    @staticmethod
+    def _link(out_port, in_port, passive=False):
+        cmd = ["pw-link"] + (["-P", "{ link.passive = true }"] if passive else []) + [out_port, in_port]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        return r.returncode == 0 or "exist" in (r.stderr or "").lower()
+
+    def _wire(self, mic):
+        """(Re)link the mic and every output's monitor into the ears. True if the mic is in."""
+        ok = self._link(f"{mic}:capture_FL", f"{EARS}:input_FL")
+        from .echo import outputs
+        for o in outputs():
+            for ch in ("FL", "FR"):
+                if self._link(f"{o}:monitor_{ch}", f"{EARS}:input_FR", passive=True) and o not in self.linked:
+                    self.linked.add(o)
+                    log(f"echo: listening to what's playing on {o}")
+        return ok
+
     def _run(self):
         while not self.stopping:
             name, nid = self.raw_source()
             if not name:
                 log("no mic found — trying again in 5 s"); time.sleep(5); continue
             subprocess.run(["wpctl", "set-volume", str(nid), f"{self.level:.2f}"], timeout=3)
-            self.proc = subprocess.Popen(["pw-record", "--raw", "--target", name, "--rate", str(RATE), "--channels", "1",
-                                          "--format", "s16", "--latency", "40ms", "-P",
-                                          '{ application.name = "Room assistant" }', "-"],
-                                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-            log(f"listening on {name} at {round(self.level * 100)} %")
-            while not self.stopping:
-                b = self.proc.stdout.read(FRAME * 2)
-                if len(b) < FRAME * 2:
-                    break
-                f = np.frombuffer(b, dtype="<i2")
-                if self.echo:
-                    try:
-                        f = self.echo.process(f)
-                    except Exception as e:
-                        log(f"echo cancelling failed, off from here — {e!r}"); self.echo = None
-                try:
-                    self.q.put_nowait(f)
-                except queue.Full:                  # fallen behind: drop the oldest, stay live
-                    try: self.q.get_nowait()
-                    except queue.Empty: pass
-            if self.proc.poll() is None:
+            if self.echo and self._ears(name):
+                continue
+            self._plain(name)
+
+    def _ears(self, name) -> bool:
+        """The two-channel stream, mic + what's playing. False if it couldn't get going (then: the plain mic)."""
+        self.linked = set()
+        self.proc = subprocess.Popen(["pw-record", "--raw", "--target", "0", "--rate", str(RATE), "--channels", "2",
+                                      "--format", "f32", "--latency", "40ms", "-P",
+                                      f'{{ node.name = "{EARS}" application.name = "Room assistant" }}', "-"],
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        wired = False
+        for _ in range(30):                 # its ports appear a moment after it starts
+            time.sleep(0.1)
+            if self._wire(name):
+                wired = True; break
+        got = threading.Event()
+
+        def watchdog():                     # no sound within 3 s: give up on this way, use the plain mic
+            if not got.wait(3) and self.proc.poll() is None:
                 self.proc.terminate()
-            if not self.stopping:
-                log("the mic stopped — starting it again"); time.sleep(1)
+        threading.Thread(target=watchdog, daemon=True).start()
+        if not wired:
+            log("echo: couldn't link the mic into the echo canceller — using the plain mic")
+            self.proc.terminate(); self.echo = None; return False
+        log(f"listening on {name} at {round(self.level * 100)} %, with echo cancelling")
+        next_wire = time.time() + 10
+        while not self.stopping:
+            b = self.proc.stdout.read(FRAME * 8)
+            if len(b) < FRAME * 8:
+                break
+            got.set()
+            x = np.frombuffer(b, dtype="<f4").reshape(-1, 2)
+            mic, ref = x[:, 0].copy(), x[:, 1].copy()
+            try:
+                f = self.echo.process(mic, ref)
+            except Exception as e:
+                log(f"echo cancelling failed — {e!r}"); f = (np.clip(mic, -1, 1) * 32767).astype(np.int16)
+            if self.tee:
+                self.tee(mic, ref, f)
+            self._put(f)
+            if time.time() > next_wire:
+                next_wire = time.time() + 10
+                threading.Thread(target=self._wire, args=(name,), daemon=True).start()
+        if self.proc.poll() is None:
+            self.proc.terminate()
+        if not got.is_set():
+            log("echo: no sound came through the echo canceller — using the plain mic")
+            self.echo = None; return False
+        if not self.stopping:
+            log("the mic stopped — starting it again"); time.sleep(1)
+        return True
+
+    def _plain(self, name):
+        self.proc = subprocess.Popen(["pw-record", "--raw", "--target", name, "--rate", str(RATE), "--channels", "1",
+                                      "--format", "s16", "--latency", "40ms", "-P",
+                                      '{ application.name = "Room assistant" }', "-"],
+                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        log(f"listening on {name} at {round(self.level * 100)} %")
+        while not self.stopping:
+            b = self.proc.stdout.read(FRAME * 2)
+            if len(b) < FRAME * 2:
+                break
+            self._put(np.frombuffer(b, dtype="<i2"))
+        if self.proc.poll() is None:
+            self.proc.terminate()
+        if not self.stopping:
+            log("the mic stopped — starting it again"); time.sleep(1)
+
+    def _put(self, f):
+        try:
+            self.q.put_nowait(f)
+        except queue.Full:                  # fallen behind: drop the oldest, stay live
+            try: self.q.get_nowait()
+            except queue.Empty: pass
 
     def stop(self):
         self.stopping = True

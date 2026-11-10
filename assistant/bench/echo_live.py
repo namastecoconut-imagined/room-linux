@@ -16,7 +16,6 @@ import wave
 
 import numpy as np
 
-from ..echo import EchoCanceller
 from ..listen import FRAME, RATE, Mic, Wake
 from .record_wake import beep_file
 
@@ -34,17 +33,15 @@ def main():
     was = subprocess.run(["systemctl", "--user", "is-active", "room-assistant"], capture_output=True, text=True).stdout.strip()
     if was == "active":
         subprocess.run(["systemctl", "--user", "stop", "room-assistant"]); print("(the assistant is paused while this runs)")
+        time.sleep(1)
     raw, clean, refd = [], [], []
-    ec = EchoCanceller()
-    orig = ec.process
+    mic = Mic(0.65, echo=True)
+    ec = mic.echo
 
-    def process(f):                       # the same as the assistant, keeping a copy of each side
-        out = orig(f)
-        raw.append(f.copy()); clean.append(out.copy())
-        refd.append((np.clip(ec.hist[-len(f):], -1, 1) * 32767).astype(np.int16))
-        return out
-    ec.process = process
-    mic = Mic(0.65, echo=False); mic.echo = ec
+    def tee(m, r, out):                   # the assistant's own path, keeping a copy of each side
+        raw.append((np.clip(m, -1, 1) * 32767).astype(np.int16)); clean.append(out.copy())
+        refd.append((np.clip(r, -1, 1) * 32767).astype(np.int16))
+    mic.tee = tee
     beeps = []
     try:
         mic.start()
@@ -64,18 +61,20 @@ def main():
             beeps.append((len(raw) - n0) * FRAME / RATE)
             subprocess.run(["pw-play", "--volume", "0.5", beep_file()], stderr=subprocess.DEVNULL)
             print(f"  {i + 1:2d}/10  say \"Alexa\"", flush=True); time.sleep(4)
-        time.sleep(1); stop.set(); mic.stop(); ec.close()
+        time.sleep(1); stop.set(); mic.stop()
     finally:
         if was == "active":
             subprocess.run(["systemctl", "--user", "start", "room-assistant"]); print("(the assistant is back on)")
+    if len(raw) <= n0 or mic.echo is None:
+        print("\nThe echo canceller didn't run (see the [assistant] lines above) — nothing to compare."); return
     r = np.concatenate(raw[n0:]); c = np.concatenate(clean[n0:]); f = np.concatenate(refd[n0:])
     save(os.path.join(folder, "mic.wav"), r); save(os.path.join(folder, "cleaned.wav"), c); save(os.path.join(folder, "playing.wav"), f)
-    json.dump({"beeps": beeps, "shift_ms": ec.shift * 1000 // RATE, "taps": list(ec.taps)}, open(os.path.join(folder, "info.json"), "w"))
+    json.dump({"beeps": beeps, "shift_ms": ec.shift * 1000 // RATE, "outputs": sorted(mic.linked)}, open(os.path.join(folder, "info.json"), "w"))
     db = lambda x: 10 * np.log10(float(np.mean((x.astype(np.float32) / 32768) ** 2)) + 1e-12)
     music = np.concatenate([np.arange(0, int(19 * RATE))] + [np.arange(int((b - 1.2) * RATE), int((b - 0.1) * RATE)) for b in beeps[1:]])
     music = music[music < len(r)]
     print(f"\nplaying {db(f[music]):.1f} dB · music in the mic {db(r[music]):.1f} dB → cleaned {db(c[music]):.1f} dB "
-          f"· delay followed: {ec.shift * 1000 // RATE + 30} ms · outputs: {', '.join(ec.taps)}")
+          f"· delay followed: {ec.shift * 1000 // RATE + 30 if ec.shift else 'none yet'} ms · outputs: {', '.join(sorted(mic.linked)) or 'none linked!'}")
     w = Wake()
     for i, b in enumerate(beeps):
         s, e = int((b + 0.1) * RATE), min(len(r), int((b + 3.9) * RATE))

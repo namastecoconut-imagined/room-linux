@@ -61,7 +61,9 @@ RATE = 16000
 
 
 def outputs() -> list:
-    """The real outputs (node names): the Surface's speakers and any Bluetooth speaker."""
+    """The outputs to cancel (node names): the Surface's own speakers only. A Bluetooth speaker is left alone: linking
+    its monitor into the mic's stream ties the speaker's timing to the mic's, and the speaker kept dropping — and on
+    the Xiaomi cancelling gained nothing anyway (10/10 "Alexa" with or without; its delay keeps sliding)."""
     try:
         nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or "[]")
     except Exception:
@@ -71,7 +73,7 @@ def outputs() -> list:
         p = (n.get("info") or {}).get("props") or {}
         name = p.get("node.name", "")
         if n.get("type") == "PipeWire:Interface:Node" and p.get("media.class") == "Audio/Sink" and (
-                name.startswith("bluez_output") or (name.startswith("alsa_output") and "hdmi" not in name)):
+                name.startswith("alsa_output") and "hdmi" not in name):
             out.append(name)
     return out
 

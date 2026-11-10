@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 
 // The voice assistant on screen (design B + D): the window of light in the middle, its orb swelling with your voice
 // and sending out a ripple on each syllable, while the whole edge of the screen glows with it. Live words aren't
@@ -101,23 +102,25 @@ Item {
                                                  height * 0.55 + Math.sin(t * 0.41 + 1) * height * 0.2, 300 * (1 + vo.cur * 0.35))
             fragmentShader: shaderDir + "window.frag.qsb"
         }
-        // ripples from the orb, one per syllable
-        Item {
-            anchors.fill: parent; clip: true
-            Repeater {
-                id: ripples
-                property int next: 0
-                model: 5
+        // a soft bloom from the orb on each syllable — blurred light, not lines
+        Repeater {
+            id: ripples
+            property int next: 0
+            model: 4
+            Item {
+                property real k: 1
+                property real size0: 140
+                function go(strength) { size0 = 120 + strength * 120; anim.restart() }
+                readonly property real d: size0 * (1 + k * 1.6)
+                x: win.orb.x - d / 2; y: win.orb.y - d / 2; width: d; height: d
+                opacity: 0.55 * (1 - k) * (1 - k)
                 Rectangle {
-                    property real k: 1
-                    function go(strength) { k = 0; anim.restart(); radius0 = 60 + strength * 90 }
-                    property real radius0: 80
-                    readonly property real rr: radius0 + k * 260
-                    x: win.orb.x - rr; y: win.orb.y - rr; width: rr * 2; height: rr * 2; radius: rr
-                    color: "transparent"
-                    border.width: 3; border.color: Qt.rgba(1, 0.97, 0.9, 0.55 * (1 - k))
-                    NumberAnimation on k { id: anim; running: false; from: 0; to: 1; duration: 1100; easing.type: Easing.OutCubic }
+                    anchors.fill: parent; radius: width / 2
+                    color: Qt.rgba(1, 0.96, 0.88, 0.35)
+                    layer.enabled: true
+                    layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 48; autoPaddingEnabled: true }
                 }
+                NumberAnimation on k { id: anim; running: false; from: 0; to: 1; duration: 1300; easing.type: Easing.OutCubic }
             }
         }
     }

@@ -461,9 +461,14 @@ class Spotify(QObject):
         songs, a playlist or album plays from the start. done(name or None, why)."""
         from urllib.parse import quote
         kind = kind if kind in ("track", "artist", "album", "playlist") else "track"
+        tries = [f"/search?q={quote(query)}&type={kind}&limit=5&market=from_token", f"/search?q={quote(query)}&type={kind}&limit=5"]
+
         def got(status, data):
             if status != 200:
-                done(None, "spotify search failed"); return
+                print(f"[room] spotify search {status}: {bytes(data or b'')[:200]!r}", flush=True)
+                if tries:                     # (once more without the market — some apps' searches refuse it)
+                    self._api("GET", tries.pop(), got); return
+                done(None, f"spotify search failed ({status})"); return
             try:
                 items = (json.loads(data).get(kind + "s") or {}).get("items") or []
                 it = next((i for i in items if i), None)
@@ -474,7 +479,7 @@ class Spotify(QObject):
             uri, name = it.get("uri", ""), it.get("name", "")
             self.play_uri(uri, speaker=speaker)
             done(name, None)
-        self._api("GET", f"/search?q={quote(query)}&type={kind}&limit=3&market=from_token", got)
+        self._api("GET", tries.pop(0), got)
 
     def set_volume(self, pct: int):
         pct = max(0, min(100, int(pct)))

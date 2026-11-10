@@ -196,7 +196,10 @@ Window {
         Alert {}
         VoiceOverlay {
             active: win.voiceUp
-            visible: active || opacity > 0
+            // the whole overlay fades out together (its words stayed on Home once it closed)
+            opacity: active ? 1 : 0
+            visible: opacity > 0
+            Behavior on opacity { NumberAnimation { duration: active ? 180 : 450; easing.type: Easing.OutCubic } }
             onClose: { win.voiceUp = false }
         }
         // (checks) where the touch screen doesn't respond

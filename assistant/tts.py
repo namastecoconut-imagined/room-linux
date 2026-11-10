@@ -80,9 +80,11 @@ class Voice:
         return a, sr
 
     def _prepare(self):
+        # at start nothing's playing: everyday lines are made with every core (and that warms the fast session — its
+        # first use was slow, 3–5 s before the first words of the first answer)
         for t in COMMON:
             try:
-                self._make(t)
+                self._make(t, fast=True)
             except Exception as e:
                 print("[assistant] voice:", repr(e), flush=True); return
 
@@ -103,7 +105,8 @@ class Voice:
                     if g != self.gen:
                         break
                     if i == 0:
-                        print(f"[assistant] voice: first sound {time.time() - t0:.2f} s after the answer", flush=True)
+                        print(f"[assistant] voice: first sound {time.time() - t0:.2f} s after the answer "
+                              f"({len(p.split())} words, {len(a) / sr:.1f} s of speech)", flush=True)
                     self.player.feed(a, sr)
             except Exception as e:
                 print("[assistant] voice:", repr(e), flush=True)

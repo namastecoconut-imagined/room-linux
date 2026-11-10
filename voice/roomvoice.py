@@ -119,30 +119,6 @@ def voice_out():
     return ["--volume", f"{min(1.0, float(CFG.get('voiceVolume', 1.0))):.2f}", *props]
 
 
-def stream_cmd(out):
-    """The player for Room's streamed voice. pw-play reads the pipe in step with the speakers and has nothing in hand,
-    so any moment it isn't given its turn is a gap — on the Surface it dropped hundreds of pieces per answer (pw-top
-    ERR), the voice "breaking up". pacat (PipeWire's Pulse side) keeps ~0.3 s buffered for the stream itself, so
-    the same hiccups pass unheard. pw-play if pacat isn't there. Takes voice_out()'s pw-play options."""
-    if not shutil.which("pacat"):
-        return ["pw-play", *out, "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"]
-    cmd = ["pacat", "--playback", "--raw", "--format=s16le", "--rate=24000", "--channels=1",
-           f"--latency-msec={int(CFG.get('voiceLatencyMs', 300))}", "--client-name=Room voice",
-           "--stream-name=Room voice", "--property=application.name=Room voice",
-           "--property=state.restore-props=false", "--property=state.restore-target=false"]
-    i = 0
-    while i < len(out):
-        if out[i] == "--target":
-            cmd.append(f"--device={out[i + 1]}"); i += 2
-        elif out[i] == "--volume":
-            cmd.append(f"--volume={int(float(out[i + 1]) * 65536)}"); i += 2
-        elif out[i] == "-P":
-            i += 2
-        else:
-            i += 1
-    return cmd
-
-
 def surface_target():
     """The Surface's own speakers (for chimes), or [] for the system's output."""
     try:
@@ -332,16 +308,19 @@ class Speaker:
                 log(f"aura: dropped — something new started {time.time() - t0:.1f} s in")
                 r.close()
                 return True
-            self.proc = subprocess.Popen(stream_cmd(voice_out()),
+            self.proc = subprocess.Popen(["pw-play", *voice_out(), "--raw", "--rate", "24000", "--channels", "1", "--format", "s16", "-"],
                                          stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         first = True
         odd = b""
         shape = Voicer(24000)
-        # Deepgram streams the voice as it makes it; over a busy Wi-Fi the pieces can arrive slower than they play,
-        # and every gap was a break in the middle of a word. So it starts once AHEAD seconds (0.3 — pacat holds more) are in hand and keeps
-        # that much in hand; the log says if it still ran dry.
-        AHEAD = float(CFG.get("voiceBuffer", 0.3))
+        # Deepgram streams the voice as it makes it, and on this Wi-Fi it can come in no faster than it plays: started
+        # at once, any slow moment is a gap mid-word (pw-play's ERR count climbed through every answer). So Room
+        # watches how fast it's arriving and holds back enough that the rest arrives before it's needed — about
+        # nothing when it comes fast, more when it's slow (how long the answer will be is known from its words).
+        AHEAD = float(CFG.get("voiceBuffer", 0.35))
+        est = max(1.0, len(text) / 14.5)                     # Aura speaks ~14–15 characters a second
         held, started, played_from, sent_s, dry = b"", False, 0.0, 0.0, 0
+        got_s, t_first, lead = 0.0, 0.0, 0.0
         def write(out):
             nonlocal sent_s, dry, played_from
             now = time.time()
@@ -356,15 +335,22 @@ class Speaker:
                 if g != self.gen:
                     break
                 if chunk:
+                    now = time.time()
+                    t_first = t_first or now
                     chunk = odd + chunk
                     cut = len(chunk) // 2 * 2
                     chunk, odd = chunk[:cut], chunk[cut:]
+                    got_s += len(chunk) / 48000
                     x = np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768
                     held += (shape(x) * 32767).astype("<i2").tobytes()
-                    if not started and len(held) < AHEAD * 48000:
-                        continue
                     if not started:
-                        started, played_from = True, time.time()
+                        if got_s < AHEAD:
+                            continue
+                        rate = got_s / max(0.05, now - t_first)          # seconds of voice per second
+                        need = min(est, AHEAD + max(0.0, est - got_s) * max(0.0, 1 - rate / 1.15))
+                        if got_s < need:
+                            continue
+                        started, played_from, lead = True, time.time(), got_s
                         emit(ev="speaking"); first = False
                         log(f"aura: first sound in {time.time() - t0:.2f} s")
                     write(held); held = b""
@@ -372,10 +358,11 @@ class Speaker:
                 if first:
                     emit(ev="speaking"); first = False
                     log(f"aura: first sound in {time.time() - t0:.2f} s")
-                    played_from = time.time()
+                    played_from, lead = time.time(), got_s
                 write(held)
-            if dry:
-                log(f"aura: the voice ran dry {dry}× (arriving slower than it plays — the Wi-Fi?)")
+            took = time.time() - (t_first or time.time())
+            log(f"aura: {got_s:.1f} s of voice came in {took:.1f} s (×{got_s / max(0.05, took):.1f}), "
+                f"{lead:.1f} s held before it spoke" + (f", ran dry {dry}×" if dry else ""))
         except Exception as e:
             if g == self.gen:
                 log("aura play:", repr(e))

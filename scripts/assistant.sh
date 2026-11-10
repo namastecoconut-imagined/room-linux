@@ -25,4 +25,5 @@ M="$HOME/.local/share/room/assistant/models"; mkdir -p "$M"
 get() { if [ ! -s "$2" ]; then curl -fsSL --retry 3 -o "$2.part" "$1" && mv "$2.part" "$2"; fi; }
 OWW=https://github.com/dscripka/openWakeWord/releases/download/v0.5.1
 for f in alexa_v0.1.onnx melspectrogram.onnx embedding_model.onnx; do get "$OWW/$f" "$M/$f"; done
+get https://raw.githubusercontent.com/snakers4/silero-vad/master/src/silero_vad/data/silero_vad.onnx "$M/silero_vad.onnx"
 echo "✓ Assistant set up."

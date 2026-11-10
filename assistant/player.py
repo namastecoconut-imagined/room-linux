@@ -40,6 +40,8 @@ class Player:
 
     # ---------------------------------------------------------------- the stream
     def start(self):
+        import os
+        os.environ.setdefault("PIPEWIRE_PROPS", '{ application.name = "Room assistant" media.role = "Assistant" }')
         import sounddevice as sd
         self.stream = sd.OutputStream(samplerate=self.rate, blocksize=self.block, channels=1, dtype="float32",
                                       latency="high", device=self.device, callback=self._callback)

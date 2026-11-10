@@ -6,3 +6,6 @@ tqdm
 requests
 scipy
 scikit-learn
+onnx-asr>=0.12
+faster-whisper>=1.2
+websockets>=13

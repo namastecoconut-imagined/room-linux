@@ -5,7 +5,8 @@
 For each recording it reports, per engine and threshold: how many of your "Alexa"s were caught (a detection within
 3.8 s after the beep), and false alarms (detections anywhere else — the music-only part is all false alarms).
 Also each "Alexa"'s best score, so near-misses show. Engines: openWakeWord's stock "alexa", and any LiveKit
-WakeWord model (*.onnx with a `chunk` input) in ~/.local/share/room/assistant/models.
+WakeWord model (*.onnx with a `chunk` input) in ~/.local/share/room/assistant/models (what the assistant uses) or in
+assistant/models (trained, not switched on yet: copy it to the first folder to use it).
 """
 import glob
 import json
@@ -37,7 +38,8 @@ def engines():
                       embedding_model_path=os.path.join(MODELS, "embedding_model.onnx"))
             return [max(m.predict(audio[i:i + FRAME]).values()) for i in range(0, len(audio) - FRAME + 1, FRAME)]
         out["openWakeWord alexa"] = run_oww
-    for f in sorted(glob.glob(os.path.join(MODELS, "*.onnx"))):
+    here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")   # assistant/models
+    for f in sorted(glob.glob(os.path.join(MODELS, "*.onnx")) + glob.glob(os.path.join(here, "*.onnx"))):
         base = os.path.basename(f)
         if base in ("alexa_v0.1.onnx", "melspectrogram.onnx", "embedding_model.onnx", "silero_vad.onnx") \
                 or "alexa" not in base.lower():
@@ -46,7 +48,8 @@ def engines():
             from livekit.wakeword import WakeWordModel
             m = WakeWordModel(models=[f])
             return [max(m.predict(audio[i:i + FRAME]).values()) for i in range(0, len(audio) - FRAME + 1, FRAME)]
-        out["LiveKit " + os.path.splitext(os.path.basename(f))[0]] = run_lk
+        where = "in the repo" if f.startswith(here) else "installed"
+        out[f"LiveKit {os.path.splitext(base)[0]} ({where})"] = run_lk
     return out
 
 

@@ -76,7 +76,7 @@ Quick app (PySide6) with its own voice assistant. This covers 8–10 November 20
   - The voice is Kokoro "Heart" (fp16), made on the Surface itself.
   - Playback is one stream kept open and fed from a buffer.
   - Music dips to 15% while you talk and goes back exactly to where it was.
-  - Room's voice is never quieter than 40% (the speaker is lifted for the conversation, then put back).
+  - Room's voice is never quieter than 70% (the speaker is lifted for the conversation, then put back exactly; the music stays ducked under it).
 - **Follow-ups**: if Room asks a question, it listens again without "Alexa".
 - **Screen: "Horizon fog"** (designed in Figma: *Room — Assistant & Orb*). A band of glowing cloud with soft rays.
   - Listening: cool blue and mint, with light flowing *up* into the cloud.

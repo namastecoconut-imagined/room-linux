@@ -5,7 +5,7 @@
   If the answer is a question, it listens again for a few seconds without the wake word.
 
 Everything it does is logged ([assistant] lines: journalctl --user -u room-assistant). Settings in config.json:
-"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.4}.
+"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.7}.
 """
 import json
 import os
@@ -45,7 +45,7 @@ class Assistant:
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         self.voice = Voice(voice=a.get("voice", "af_heart"))
         self.mic.hold = lambda: self.voice.busy
-        self.duck = Duck(float(a.get("voiceFloor", 0.40)))
+        self.duck = Duck(float(a.get("voiceFloor", 0.70)))
         self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False
         if not self.sarvam_key:

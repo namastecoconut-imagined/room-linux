@@ -136,12 +136,33 @@ class VAD:
 
 
 # ---------------------------------------------------------------- the words
+_HTTP = None
+
+
+def _http():
+    global _HTTP
+    if _HTTP is None:
+        import requests
+        _HTTP = requests.Session()
+    return _HTTP
+
+
+def warm():
+    """Open (or refresh) the connection to Sarvam while you're still talking — a cold one added ~2 s to the words
+    (2.4 and 2.5 s instead of 0.45 on the Surface)."""
+    def go():
+        try:
+            _http().head("https://api.sarvam.ai/", timeout=5)
+        except Exception:
+            pass
+    threading.Thread(target=go, daemon=True).start()
+
+
 def sarvam(pcm: np.ndarray, key: str, model="saarika:v2.5") -> str:
-    import requests
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE); w.writeframes(pcm.astype("<i2").tobytes())
-    r = requests.post("https://api.sarvam.ai/speech-to-text", headers={"api-subscription-key": key},
+    r = _http().post("https://api.sarvam.ai/speech-to-text", headers={"api-subscription-key": key},
                       files={"file": ("request.wav", buf.getvalue(), "audio/wav")},
                       data={"model": model, "language_code": "en-IN"}, timeout=15)
     if r.status_code != 200:

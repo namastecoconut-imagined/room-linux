@@ -13,7 +13,7 @@ import time
 import wave
 
 from assistant.duck import Duck
-from assistant.listen import RATE, VAD, Listener, Mic, Wake, sarvam
+from assistant.listen import RATE, VAD, Listener, Mic, Wake, sarvam, warm
 from assistant.bench.record_wake import beep_file
 
 OUT = os.path.expanduser("~/room-listen-test")
@@ -35,6 +35,7 @@ def main():
             score = ears.wait_wake()
             t_wake = time.time()
             duck.down()
+            warm()
             subprocess.Popen(["pw-play", "--volume", "0.5", beep_file()], stderr=subprocess.DEVNULL)
             n += 1
             print(f"#{n} Alexa ({score:.2f}) — listening…", flush=True)
@@ -51,7 +52,7 @@ def main():
             except Exception as e:
                 words = f"[{e}]"
             print(f"   “{words}”\n   you started {info['onset']} s after Alexa, spoke {info['spoke']} s · "
-                  f"words {time.time() - t:.2f} s after the end · {time.time() - t_wake:.1f} s from Alexa\n", flush=True)
+                  f"words {time.time() - t:.2f} s after the end · {time.time() - t_wake:.1f} s from Alexa to words\n", flush=True)
             duck.up()
     except KeyboardInterrupt:
         duck.up(); time.sleep(0.5)

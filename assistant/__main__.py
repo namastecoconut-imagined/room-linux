@@ -44,6 +44,7 @@ class Assistant:
         self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", True) is not False)
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         self.voice = Voice(voice=a.get("voice", "af_heart"))
+        self.mic.hold = lambda: self.voice.busy
         self.duck = Duck(float(a.get("voiceFloor", 0.40)))
         self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False

@@ -101,6 +101,10 @@ class Voice:
                 if g == self.gen:
                     self.player.end()
                     self.player.wait_done()
+                    s1 = self.player.stats()
+                    if s1["starved"] or s1["xruns"]:
+                        print(f"[assistant] voice: broke up — ran dry {s1['starved']}× (made slower than it played), "
+                              f"sound system missed {s1['xruns']} blocks (so far, all told)", flush=True)
                     if done and g == self.gen:
                         done()
         threading.Thread(target=go, daemon=True).start()

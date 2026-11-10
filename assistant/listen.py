@@ -59,6 +59,7 @@ class Mic:
         self.proc = None
         self.stopping = False
         self.tee = None                     # tests: called with (mic, playing, cleaned) for every frame
+        self.hold = None                    # () -> True while Room is speaking: echo cancelling rests then (below)
         self.linked = set()
 
     @staticmethod
@@ -131,7 +132,12 @@ class Mic:
             x = np.frombuffer(b, dtype="<f4").reshape(-1, 2)
             mic, ref = x[:, 0].copy(), x[:, 1].copy()
             try:
-                f = self.echo.process(mic, ref)
+                # while Room speaks, nothing is listening for you yet, and the canceller's Python work competed with
+                # the voice for the interpreter (its sound callback runs in Python too) — the voice broke up
+                if self.hold and self.hold():
+                    f = (np.clip(mic, -1, 1) * 32767).astype(np.int16)
+                else:
+                    f = self.echo.process(mic, ref)
             except Exception as e:
                 log(f"echo cancelling failed — {e!r}"); f = (np.clip(mic, -1, 1) * 32767).astype(np.int16)
             if self.tee:

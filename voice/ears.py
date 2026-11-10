@@ -237,13 +237,7 @@ class Ears:
 
     # ---------------------------------------------------------------- the mic
     def mic(self):
-        """Room's echo-cancelled mic (voice/aec.py) when it's running, else what config.json names, else the default."""
-        if self.cfg.get("echoCancel") is not False:
-            import aec
-            for _ in range(20):
-                if aec.exists(aec.SOURCE):
-                    return aec.SOURCE
-                time.sleep(0.3)
+        """What config.json names, else the system's default mic (on the Surface, its noise-suppressed one)."""
         return self.cfg.get("mic") or ""
 
     def run(self):
@@ -263,8 +257,7 @@ class Ears:
                         q.put(None); return
                     q.put(np.frombuffer(b, "<i2").copy())
             threading.Thread(target=reader, daemon=True).start()
-            print("[voice] listening to", "the Surface mic, with what's playing taken out" if mic == "room_aec_source"
-                  else mic or "the default mic", flush=True)
+            print("[voice] listening to", mic or "the default mic", flush=True)
             while True:
                 pcm = q.get()
                 if pcm is None:

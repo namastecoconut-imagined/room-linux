@@ -58,9 +58,8 @@ Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
 
 Set up once with `bash scripts/voice.sh` (install.sh runs it too).
 
-- **Listening** (`voice/ears.py`) — the Surface mic (raw, at 70 %) through Room's echo canceller (`voice/aec.py`:
-  what's playing on the music speaker taken back out, then a gentle noise filter and level control). "Alexa" is
-  spotted on the Surface (openWakeWord, plus a model of your own voice once `train-alexa.sh` has run); what follows
+- **Listening** (`voice/ears.py`) — the system's default mic (on the Surface: the noise-suppressed "Surface Mic",
+  its raw level held at 70 %). "Alexa" is spotted on the Surface (openWakeWord, plus a model of your own voice once `train-alexa.sh` has run); what follows
   streams to Sarvam (saaras:v4, en-IN — `sarvamKey`). You've finished after ~0.7 s without speech (Silero VAD).
   Keep the Bluetooth speaker a metre or more from the panel, facing away — that's most of hearing "Alexa" over music.
 - **Understanding** — Claude (`room/brain.py`, the iPhone panel's prompt and tool) with a snapshot of the home;
@@ -69,7 +68,7 @@ Set up once with `bash scripts/voice.sh` (install.sh runs it too).
 
 The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on.
 Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"listen": true, "wakeThreshold": 0.4,
-"echoCancel": true, "micLevel": 0.70, "wakeVerifier": true, "bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
+"micLevel": 0.70, "wakeVerifier": true, "bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
 Room's voice never plays quieter than voiceMinLevel of the speakers (the output is lifted while it talks, then put back).
 
 ## Burn-in care

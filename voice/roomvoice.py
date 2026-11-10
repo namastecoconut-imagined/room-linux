@@ -392,6 +392,22 @@ def chime(name):
         subprocess.Popen(["pw-play", *surface_target(), "--volume", "0.9", f], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def mic_level():
+    """The Surface mic's own level, held where it tested best: 70 % — strong, never distorting (100 % distorted,
+    40 % was too quiet). "micLevel" in voiceSettings to change it."""
+    lvl = float(CFG.get("micLevel", 0.70))
+    try:
+        nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or "[]")
+        for n in nodes:
+            p = (n.get("info") or {}).get("props") or {}
+            if p.get("media.class") == "Audio/Source" and p.get("node.name", "").startswith("alsa_input"):
+                subprocess.run(["wpctl", "set-volume", str(n["id"]), f"{lvl:.2f}"], timeout=3)
+                log(f"mic level {round(lvl * 100)} %")
+                return
+    except Exception as e:
+        log("mic level:", repr(e))
+
+
 def main():
     if not shutil.which("pw-play"):
         emit(ev="error", msg="pw-play is missing (pipewire-utils)")
@@ -404,12 +420,7 @@ def main():
         pass
     ears = None
     if CFG.get("listen") is not False:
-        try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-            from aec import EchoCancel
-            EchoCancel(CFG, DATA, log).start()
-        except Exception as e:
-            log("echo cancelling couldn't start:", repr(e))
+        mic_level()
         try:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from ears import Ears

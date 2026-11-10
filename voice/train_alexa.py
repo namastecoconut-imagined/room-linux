@@ -5,7 +5,7 @@ detector still listens as before; whenever it's even slightly reminded of "Alexa
 usual 0.4), the verifier — which knows how you say it — makes the call. Your near-misses get through; other
 voices and words that only sound a bit like it don't.
 
-Records through the same mic Room listens to (the echo-cancelled one when that's on), so it learns what Room hears.
+Records through the same mic Room listens to, so it learns what Room hears.
 Saved as ~/.local/share/room/voice/alexa_verifier.pkl; Room uses it from its next start. Delete that file (or set
 "wakeVerifier": false in voiceSettings) to go back.
 """
@@ -28,13 +28,7 @@ RATE = 16000
 
 
 def mic():
-    try:
-        out = subprocess.run(["pw-cli", "ls", "Node"], capture_output=True, text=True, timeout=5).stdout
-        if "room_aec_source" in out:
-            return "room_aec_source"
-    except Exception:
-        pass
-    return None
+    return None          # the default mic — the one Room listens to
 
 
 def record(path, seconds, target):
@@ -78,8 +72,7 @@ def main():
         os.makedirs(d, exist_ok=True)
         for f in glob.glob(os.path.join(d, "*.wav")):
             os.remove(f)
-    print(f"Recording through {'the echo-cancelled mic' if target else 'the default mic'}. "
-          "Room won't answer \"Alexa\" until this finishes.")
+    print("Recording through the mic Room listens to. Room won't answer \"Alexa\" until this finishes.")
     try:
         # ---- your "Alexa"s
         plan = [(8, "Stand where you usually talk to it. After each beep, say \"Alexa\" once, normally."),

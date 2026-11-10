@@ -20,7 +20,6 @@ DEFAULTS = {
     "dayBrightness": 0.55,
     "nightBrightness": 0.3,
     "idleReturnSec": 60,
-    "standbySec": 15,
 }
 
 

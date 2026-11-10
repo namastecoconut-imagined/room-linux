@@ -246,10 +246,6 @@ class Room(QObject):
     def clock24(self):
         return bool(self.cfg.get("clock24"))
 
-    @Property(int, constant=True)
-    def standbySec(self):
-        return int(self.cfg.get("standbySec", 15))
-
     @Property(str, constant=True)
     def here(self):
         return self.cfg.get("here", "")
@@ -262,8 +258,8 @@ class Room(QObject):
     def timing(self):
         """The standby rules' settings (seconds and hours), straight from config.json."""
         c = self.cfg
-        day = int(c.get("standbySec", 15))
-        return {"standbySec": day, "nightStandbySec": int(c.get("nightStandbySec", day)),
+        return {"homePlayingSec": int(c.get("homePlayingSec", 30)), "homeIdleSec": int(c.get("homeIdleSec", 300)),
+                "musicSec": int(c.get("musicSec", 300)),
                 "idleReturnSec": int(c.get("idleReturnSec", 60)),
                 "menuStandbySec": int(c.get("menuStandbySec", 180)),
                 "refreshAt": c.get("refreshAt", "04:00") or "",

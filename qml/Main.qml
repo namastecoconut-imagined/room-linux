@@ -4,10 +4,12 @@ import QtQuick.Window
 // Room on the Surface. Everything is drawn on a 1368 × 912 stage (the Surface Pro 6 at 200%), scaled to whatever
 // the window is, so it stays sharp and proportioned on any 3:2 screen.
 //
-// Standby follows the iPhone panel exactly (NativePanel.tick, once a second):
-//  • the music player (and any open sheet) keeps the panel awake — it never drops into standby there
-//  • on home, standbySec (15 s) untouched → standby fades in; night hours use nightStandbySec if config sets one
-//  • in a menu (room, clock, weather, reminders) it waits menuStandbySec (3 min) before standby (then home)
+// Standby (checked once a second), how long untouched before it fades in:
+//  • home, music playing: homePlayingSec (30 s) — straight to the music standby
+//  • home, nothing playing: homeIdleSec (5 min)
+//  • the music player (or a sheet over it): musicSec (5 min)
+//  • a menu (room, clock, weather, reminders, settings): menuStandbySec (3 min), then home underneath
+//  • an alarm or timer going off keeps it awake
 //  • any touch, click, scroll or mouse movement counts as being used
 //  • a touch only counts while awake; on standby only a real tap wakes it (held ≥ 40 ms, moved < 30 phone pt) —
 //    a brush or a ghost touch doesn't. On music standby, tapping the cover opens the player.
@@ -75,12 +77,13 @@ Window {
         interval: 1000; running: true; repeat: true
         onTriggered: {
             var t = Date.now() / 1000
-            if (win.screen === "music" || win.sheetOpen || win.alerting) win.lastTouch = t   // the player (and an alert) keeps it awake
+            if (win.alerting) win.lastTouch = t   // an alarm or timer going off keeps it awake
             // scrolling, mouse moves and keys count as use too (seen by the app itself, so a list that takes the
             // scroll still counts); on standby only a real tap wakes it
             if (!win.standbyOn) win.lastTouch = Math.max(win.lastTouch, room.lastInput())
-            var wait = win.screen !== "home" ? win.timing.menuStandbySec
-                     : (win.lateNight ? win.timing.nightStandbySec : win.timing.standbySec)
+            var wait = win.screen === "music" || win.sheetOpen ? win.timing.musicSec
+                     : win.screen !== "home" ? win.timing.menuStandbySec
+                     : win.playing ? win.timing.homePlayingSec : win.timing.homeIdleSec
             var want = t - win.lastTouch > wait
             if (want && !win.standbyOn) win.enterStandby()
             else if (!want && win.standbyOn) win.standbyOn = false

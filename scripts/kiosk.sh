@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
-# Room without the GNOME desktop: the Surface signs in straight to "Room (panel only)", a session that runs just
-# cage (a tiny full-screen window host) and Room — no GNOME shell, panels, search, notifications or animations.
-# GNOME stays installed; nothing is uninstalled.
+# Room without the GNOME desktop: the Surface starts straight into Room — cage (a tiny full-screen window host) and
+# Room, no GNOME shell, panels, search, notifications or animations. GNOME stays installed; nothing is uninstalled.
+#
+# It starts as a system service on the first screen (room-panel.service), not through GDM's automatic sign-in: GDM
+# brought up its own login screen a few seconds after signing in by itself, over Room — asking for the password, and
+# going back to Room once given. With the service, GDM isn't started at all in kiosk mode (room-kiosk off brings it
+# back), and if Room ever stops for good, GDM's login screen comes up so you can pick GNOME.
 #   room-kiosk on    from the next start, the Surface boots straight into Room
 #   room-kiosk off   back to the normal GNOME desktop from the next start
 #   room-kiosk       which one is set
@@ -26,9 +30,6 @@ set_session() {
 
 case "$1" in
 on)
-  sudo systemctl disable -q room-panel.service 2>/dev/null || true
-  sudo rm -f /etc/systemd/system/room-panel.service /etc/pam.d/room-panel
-  sudo systemctl enable -q gdm.service
   echo "▸ cage (the full-screen host)"
   rpm -q cage >/dev/null 2>&1 || sudo dnf install -y -q cage
 
@@ -77,7 +78,52 @@ DesktopNames=Room
 EOF
   chmod +x "$HERE/scripts/kiosk-run.sh"
 
-  echo "▸ Sign in by itself, into Room"
+  echo "▸ Start straight into Room (a service on the first screen — no login screen)"
+  sudo tee /etc/pam.d/room-panel >/dev/null <<'PAM'
+# Room's kiosk session (scripts/kiosk.sh): a logind session on seat0 for cage — no password, no keyring
+account  required pam_unix.so
+session  required pam_loginuid.so
+session  optional pam_keyinit.so force revoke
+session  required pam_unix.so
+session  required pam_systemd.so
+PAM
+  sudo tee /etc/systemd/system/room-panel.service >/dev/null <<UNIT
+[Unit]
+Description=Room panel (kiosk: cage on the first screen, no desktop)
+After=systemd-user-sessions.service plymouth-quit-wait.service dbus.socket systemd-logind.service getty@tty1.service
+Wants=dbus.socket systemd-logind.service
+Conflicts=getty@tty1.service gdm.service
+ConditionPathExists=/dev/tty0
+
+[Service]
+Type=simple
+User=$U
+WorkingDirectory=$HOME
+PAMName=room-panel
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+StandardInput=tty-fail
+StandardOutput=journal
+StandardError=journal
+UtmpIdentifier=tty1
+UtmpMode=user
+Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_SEAT=seat0 XDG_VTNR=1
+ExecStart=/usr/local/bin/room-panel-session
+# Room stopped and the panel session ended: the normal login screen, to pick GNOME (or Room) there
+ExecStopPost=-/usr/bin/systemctl start --no-block gdm.service
+Restart=no
+
+[Install]
+WantedBy=graphical.target
+UNIT
+  sudo systemctl daemon-reload
+  sudo systemctl disable -q gdm.service
+  sudo systemctl enable -q room-panel.service
+  sudo systemctl set-default -q graphical.target
+
+  echo "▸ (and GDM's own automatic sign-in into Room, for when GDM is started by hand)"
   if ! grep -q "^AutomaticLogin=$U" /etc/gdm/custom.conf 2>/dev/null; then
     sudo cp -n /etc/gdm/custom.conf /etc/gdm/custom.conf.before-room 2>/dev/null || true
     sudo python3 - "$U" <<'P'
@@ -97,17 +143,16 @@ P
   fi
   set_session room-panel
   echo "✓ Set. Restart the Surface and it comes up as just the panel (room-kiosk off to go back)."
+  echo "  If it ever comes up to a black screen: Ctrl+Alt+F3, sign in, room-kiosk off, restart."
   ;;
 off)
-  # (a kiosk service from an earlier try at starting without GDM: off, GDM back on)
   sudo systemctl disable -q room-panel.service 2>/dev/null || true
-  sudo rm -f /etc/systemd/system/room-panel.service /etc/pam.d/room-panel; sudo systemctl daemon-reload
   sudo systemctl enable -q gdm.service
   set_session gnome
   echo "✓ Back to GNOME from the next start (signing in by itself stays on). Restart the Surface when you like."
   ;;
 *)
-  s=$(session)
-  [ "$s" = "room-panel" ] && echo "Starts into: Room only (room-kiosk off for GNOME)" || echo "Starts into: ${s:-GNOME} (room-kiosk on for Room only)"
+  if systemctl is-enabled -q room-panel.service 2>/dev/null; then echo "Starts into: Room only (room-kiosk off for GNOME)"
+  else s=$(session); echo "Starts into: ${s:-GNOME} (room-kiosk on for Room only)"; fi
   ;;
 esac

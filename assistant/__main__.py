@@ -5,8 +5,7 @@
   If the answer is a question, it listens again for a few seconds without the wake word.
 
 Everything it does is logged ([assistant] lines: journalctl --user -u room-assistant). Settings in config.json:
-"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.7, "bargeIn": true,
-"bargeThreshold": 0.6}.
+"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.7}.
 """
 import json
 import os
@@ -42,21 +41,13 @@ class Assistant:
         self.brain = Brain(key, cfg.get("anthropicModel"), room="living room") if key else None
         self.computer = Computer(cfg.get("computer"))
         self.link = Link(on_command=self.command)
-        # echo cancelling is off unless asked for ("echoCancel": true): its two-channel stream ties the mic and the
-        # Surface's speakers (two separately clocked devices) into one, and PipeWire was then killed every few
-        # seconds (status 9, its real-time thread over its limit) — no sound at all, Bluetooth dropping, the mic gone
-        self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", False) is True)
+        self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", False) is True)   # off: it crashed PipeWire
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         self.voice = Voice(voice=a.get("voice", "af_heart"))
         self.mic.hold = lambda: self.voice.busy
         self.duck = Duck(float(a.get("voiceFloor", 0.70)))
         self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False
-        # talking over Room: "Alexa" while it speaks stops it and listens to you ("bargeIn": false turns it off).
-        # Room's own voice doesn't wake the model — Kokoro saying ten typical answers scored 0.00–0.01, and saying
-        # "Alexa, turn off the lights" itself only 0.02 (it was trained on people) — so it listens to the raw mic then.
-        self.barge = a.get("bargeIn", True) is not False
-        self.barge_threshold = float(a.get("bargeThreshold", 0.6))
         if not self.sarvam_key:
             log("no sarvamKey in config.json — it can't understand speech")
         if not self.brain:
@@ -97,10 +88,7 @@ class Assistant:
         while True:
             more = self.turn(follow)
             turns += 1
-            if more == "barge" and not self.cancelled and turns < 8:
-                follow = False                   # you said "Alexa" over Room: a new request, with the chime
-                continue
-            if not more or more == "barge" or self.cancelled or turns >= 4:
+            if not more or self.cancelled or turns >= 4:
                 break
             follow = True
         self.duck.up()
@@ -190,60 +178,27 @@ class Assistant:
         self.brain.remember(text, spoken, did=did)
         card = out.get("card") if out.get("card") not in (None, "none") else ""
         if spoken and spoken.strip() != early["said"].strip():
-            if self.speak_wait():                               # let the first line finish (or you cut in)
-                return "barge"
+            while self.voice.busy and not self.cancelled:       # let the first line finish
+                time.sleep(0.05)
             self.voice.say(spoken)
         self.state(state="speaking" if spoken else "idle", stage="done", heard=text, reply=spoken or line,
                    line=line.lower() if line else "", card=card)
         time.sleep(0.2)
-        if self.speak_wait():
-            return "barge"
+        while self.voice.busy and not self.cancelled:
+            time.sleep(0.05)
         asked = spoken.strip().endswith("?")
         again = bool(out.get("follow_up", True)) and asked and not self.cancelled
         if not again:
             self.state(state="idle", stage="done", heard=text, reply=spoken or line, line=line.lower() if line else "", card=card)
         return again
 
-    def speak_wait(self) -> bool:
-        """Wait while Room speaks. With barge-in on, "Alexa" stops it: True if you cut in."""
-        import queue
-        w = self.ears.wake
-        w.reset()
-        last, moved = -1, time.time()
-        while self.voice.busy and not self.cancelled:
-            # the speaker stopped taking sound (the sound system restarted under it): don't wait for good — the
-            # screen stayed up on the answer for ever
-            p = self.voice.player.played
-            if p != last:
-                last, moved = p, time.time()
-            elif not self.voice.making and time.time() - moved > 4:
-                log("the speaker stopped playing — ending this answer, opening the speaker again")
-                self.voice.stop()
-                try:                            # a stream the sound system dropped stays silent: open a new one
-                    self.voice.player.close(); self.voice.player.start()
-                except Exception as e:
-                    log(f"couldn't open the speaker again — {e!r}")
-                return False
-            if not self.barge:
-                time.sleep(0.05); continue
-            try:
-                f = self.mic.q.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            sc = w.score(f)
-            if sc >= self.barge_threshold:
-                log(f"Alexa over Room's voice ({sc:.2f}) — stopping it, listening")
-                self.voice.stop()
-                w.reset(); self.ears.last_wake = time.time()
-                return True
-        return False
-
     def answer(self, words: str):
         """Something went wrong (no internet, no brain): said, and shown in the error colours (stage "error")."""
         self.state(state="speaking", stage="error", reply=words)
         self.voice.say(words)
         time.sleep(0.2)
-        self.speak_wait()
+        while self.voice.busy:
+            time.sleep(0.05)
         self.state(state="idle", stage="error", reply=words)
 
 

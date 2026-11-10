@@ -204,6 +204,7 @@ Window {
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
+        VolumeHud {}
         // (checks) where the touch screen doesn't respond
         Repeater {
             model: showDead ? [[Theme.deadA0, Theme.deadB1]] : []

@@ -29,6 +29,7 @@ class Room(QObject):
     voiceChanged = Signal()
     settingsChanged = Signal()
     asleepChanged = Signal()
+    volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -492,13 +493,29 @@ class Room(QObject):
 
     def volume_step(self, delta: int):
         """The Surface's volume buttons: the music's volume while something's playing, else the speaker's."""
+        import subprocess, time as _t
         m = self.music
+        recent = _t.monotonic() - getattr(self, "_vol_at", 0) < 2.5     # pressed again quickly: carry on from there
+        self._vol_at = _t.monotonic()
         if m.get("exists") and m.get("playing"):
-            self.setVolume(max(0, min(100, int(m.get("volume") or 50) + delta)))
+            base = self._vol_last if recent and getattr(self, "_vol_what", "") == "music" else int(m.get("volume") or 50)
+            v = max(0, min(100, base + delta))
+            self.setVolume(v)
+            what = "music"
         else:
-            import subprocess
-            subprocess.Popen(["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@",
-                              f"{abs(delta)}%{'+' if delta > 0 else '-'}"])
+            if recent and getattr(self, "_vol_what", "") == "speaker":
+                base = self._vol_last
+            else:
+                try:
+                    out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2).stdout
+                    base = round(float(out.split()[1]) * 100)
+                except Exception:
+                    base = 50
+            v = max(0, min(100, base + delta))
+            subprocess.Popen(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{v / 100:.2f}"])
+            what = "speaker"
+        self._vol_last, self._vol_what = v, what
+        self.volumeShown.emit(v, what)
 
     @Slot()
     def shutDown(self):

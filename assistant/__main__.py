@@ -41,7 +41,10 @@ class Assistant:
         self.brain = Brain(key, cfg.get("anthropicModel"), room="living room") if key else None
         self.computer = Computer(cfg.get("computer"))
         self.link = Link(on_command=self.command)
-        self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", True) is not False)
+        # echo cancelling is off unless asked for ("echoCancel": true): its two-channel stream ties the mic and the
+        # Surface's speakers (two separately clocked devices) into one, and on the Surface PipeWire was then killed
+        # every ~8 s (status 9, its real-time thread over its limit) — every sound dropped, Bluetooth too
+        self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", False) is True)
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         self.voice = Voice(voice=a.get("voice", "af_heart"))
         self.mic.hold = lambda: self.voice.busy

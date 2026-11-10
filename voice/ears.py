@@ -204,9 +204,19 @@ class Ears:
         from openwakeword.vad import VAD
         self.cfg, self.speaker, self.emit, self.chime = cfg, speaker, emit, chime
         d = os.path.join(os.path.expanduser(os.environ.get("ROOM_VOICE_DATA", "~/.local/share/room/voice")), "oww")
+        # your own "Alexa" (scripts/train-alexa.sh): a small model trained on how you say it gets the final word
+        # whenever the stock detector is even slightly reminded of "Alexa"
+        ver = os.path.join(os.path.dirname(d), "alexa_verifier.pkl")
+        extra = {}
+        if os.path.exists(ver) and cfg.get("wakeVerifier") is not False:
+            extra = {"custom_verifier_models": {"alexa_v0.1": ver},
+                     "custom_verifier_threshold": float(cfg.get("verifierThreshold", 0.15))}
+            print("[voice] \"Alexa\" tuned to your voice", flush=True)
         self.wake = Model(wakeword_models=[os.path.join(d, "alexa_v0.1.onnx")], inference_framework="onnx",
                           melspec_model_path=os.path.join(d, "melspectrogram.onnx"),
-                          embedding_model_path=os.path.join(d, "embedding_model.onnx"))
+                          embedding_model_path=os.path.join(d, "embedding_model.onnx"), **extra)
+        self.hush = os.path.expanduser("~/.local/state/room/wake-paused")     # training: don't answer "Alexa"
+        self.hush_seen, self.hushed = 0.0, False
         self.vad = VAD(model_path=os.path.join(d, "silero_vad.onnx"))
         self.threshold = float(cfg.get("wakeThreshold", 0.4))
         self.words: list[str] = []
@@ -303,6 +313,12 @@ class Ears:
                 print(f"[voice] best 'Alexa' score in the last minute: {self.best:.2f}", flush=True)
             self.best, self.best_at = 0.0, now
         need = max(self.threshold, 0.6) if self.speaker.busy else self.threshold
+        if now - self.hush_seen > 1:          # (looked at once a second)
+            self.hush_seen, self.hushed = now, os.path.exists(self.hush)
+        if score >= need and self.hushed:
+            print(f"[voice] heard \"Alexa\" ({score:.2f}) — not answering while it's being trained", flush=True)
+            self.wake.reset()
+            score = 0
         if score >= need and now - self.last_wake > 1.5 and not (self.speaker.busy and self.cfg.get("bargeIn") is False):
             self.last_wake = now
             talking = self.speaker.busy

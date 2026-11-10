@@ -20,9 +20,8 @@ if [ -f ~/.config/systemd/user/room-airplay.service ] && [ ! -f "$D/buffers.conf
 fi
 # the helper command
 mkdir -p ~/.local/bin && ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
-# leftovers from the removed extras (echo canceller, kept lines, helper commands)
-pkill -f "echo-cancel.conf" 2>/dev/null || true
-rm -rf ~/.local/share/room/voice/echo-cancel.conf ~/.local/share/room/voice/lines ~/.local/share/room/bench \
+# leftovers from the removed extras (kept lines, helper commands)
+rm -rf ~/.local/share/room/voice/lines ~/.local/share/room/bench \
        ~/.local/bin/room-heard ~/.local/bin/room-mic-compare ~/.local/bin/room-stt-bench \
        ~/room-heard ~/room-mic-compare ~/room-check-*.wav
 # the video experiments (YouTube cast, AirPlay video): gone — their services, files and downloads

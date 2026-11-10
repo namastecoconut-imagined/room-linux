@@ -406,6 +406,12 @@ def main():
     if CFG.get("listen") is not False:
         try:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from aec import EchoCancel
+            EchoCancel(CFG, DATA, log).start()
+        except Exception as e:
+            log("echo cancelling couldn't start:", repr(e))
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from ears import Ears
             ears = Ears(CFG, speaker, emit, chime)
             ears.on_begin = warm_voice

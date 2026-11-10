@@ -91,15 +91,30 @@ class Room(QObject):
         from .output import Output
         self.output = Output(self.cfg); self.output.start()
         self.airplay.changed.connect(self.output.poke)
-        # the Surface's own Spotify speaker starting to play: route it now, not at the next 20 s look
+        # One thing plays at a time, as on any speaker: AirPlay starting pauses the Surface's own Spotify, and the
+        # Surface's Spotify starting pauses AirPlay (the phone pauses too). Both used to play over each other, with
+        # the screen showing only the newer one.
         self._spot_here = False
-        def spot():
+        self._ap_playing = False
+        def spot_here():
             p = self.spotify.player or {}
-            here = bool(p.get("is_playing")) and (p.get("device") or {}).get("name", "").lower() == self.spotify.home
+            return bool(p.get("is_playing")) and (p.get("device") or {}).get("name", "").lower() == self.spotify.home
+        def spot():
+            here = spot_here()
             if here and not self._spot_here:
-                self.output.poke()
+                self.output.poke()          # route it now, not at the next 20 s look
+                if self.airplay.playing:
+                    print("[room] Spotify started here — pausing AirPlay", flush=True)
+                    self.airplay.pause()
             self._spot_here = here
+        def airplay():
+            if self.airplay.playing and not self._ap_playing and spot_here():
+                print("[room] AirPlay started — pausing the Surface's Spotify", flush=True)
+                self.spotify.pause()
+                self._spot_here = False
+            self._ap_playing = self.airplay.playing
         self.spotify.changed.connect(spot)
+        self.airplay.changed.connect(airplay)
         self.bt.connectedChanged.connect(self.output.poke)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)

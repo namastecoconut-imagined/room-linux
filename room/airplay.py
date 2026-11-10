@@ -210,6 +210,13 @@ class AirPlay(QObject):
         self.playing = not self.playing; self.at = time.time(); self.changed.emit()
         self._call("PlayPause")
 
+    def pause(self):
+        """Pause the sender (the phone stops too — shairport-sync passes it on)."""
+        if self.playing:
+            if self.at: self.position += time.time() - self.at
+            self.playing = False; self.at = time.time(); self.changed.emit()
+        self._call("Pause")
+
     def next(self):
         self._call("Next")
 

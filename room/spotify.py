@@ -340,6 +340,12 @@ class Spotify(QObject):
             self.changed.emit()
         self._api("PUT", "/me/player/pause" if playing else "/me/player/play", self._soon)
 
+    def pause(self):
+        if self.player:
+            self.player["is_playing"] = False
+            self.changed.emit()
+        self._api("PUT", "/me/player/pause", self._soon)
+
     def next(self):
         self._api("POST", "/me/player/next", self._soon)
 

@@ -20,6 +20,7 @@ What it runs on (each chosen by a test on this Surface):
 | | | why |
 |---|---|---|
 | mic | the raw Surface mic, held at 65 % | 100 % clipped; the noise-suppressed mic was worse for every speech-to-text option |
+| echo | Room's own linear canceller (`echo.py`): what every speaker is sent, taken back out of the mic | over music, "Alexa" 4/10 → 10/10 (Surface speakers), 9/10 → 10/10 (Xiaomi); Sarvam 2/10 → 8/10 lines right. WebRTC's AEC3 removed more music but ate the voice (0/10) |
 | wake word | Room's own "Alexa" (LiveKit WakeWord, `models/alexa.onnx`) | 10/10 quiet, 18/20 over music, 0 false (stock: 7/10, 3/20) |
 | finished talking | Silero VAD: 1 s of quiet once you've started; up to 5 s to start | |
 | words | Sarvam (saarika), the whole request at once | 7.1 % word errors, all the Hinglish right, 0.4 s — Whisper turbo 18.6 % in 12 s on the Surface |
@@ -27,5 +28,5 @@ What it runs on (each chosen by a test on this Surface):
 | voice | Kokoro "Heart" (fp16) on the Surface, played by `player.py` | your pick; fp16 the fastest build on this CPU |
 
 Files: `__main__.py` the loop · `listen.py` mic, wake word, end of speech, Sarvam · `brain.py` Claude · `tts.py` +
-`player.py` the voice · `duck.py` music down/up · `link.py` the line to Room (`room/voice.py` on the other end).
-Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "enabled": true}`.
+`player.py` the voice · `echo.py` echo cancelling · `duck.py` music down/up · `link.py` the line to Room (`room/voice.py` on the other end).
+Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "echoCancel": true, "enabled": true}`.

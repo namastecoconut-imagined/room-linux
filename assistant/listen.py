@@ -33,10 +33,19 @@ def log(*a):
 
 # ---------------------------------------------------------------- the mic
 class Mic:
-    """The raw Surface mic at a fixed level, 80 ms frames (int16) on a queue."""
+    """The raw Surface mic at a fixed level, 80 ms frames (int16) on a queue — with what Room is playing (music, its
+    own voice) taken back out first (assistant/echo.py; "assistant": {"echoCancel": false} in config.json turns it
+    off)."""
 
-    def __init__(self, level=0.65):
+    def __init__(self, level=0.65, echo=True):
         self.level = level
+        self.echo = None
+        if echo:                            # take what Room is playing back out of the mic (assistant/echo.py)
+            try:
+                from .echo import EchoCanceller
+                self.echo = EchoCanceller()
+            except Exception as e:
+                log(f"echo cancelling is off — {e!r}")
         self.q: queue.Queue = queue.Queue(maxsize=200)
         self.proc = None
         self.stopping = False
@@ -68,8 +77,14 @@ class Mic:
                 b = self.proc.stdout.read(FRAME * 2)
                 if len(b) < FRAME * 2:
                     break
+                f = np.frombuffer(b, dtype="<i2")
+                if self.echo:
+                    try:
+                        f = self.echo.process(f)
+                    except Exception as e:
+                        log(f"echo cancelling failed, off from here — {e!r}"); self.echo = None
                 try:
-                    self.q.put_nowait(np.frombuffer(b, dtype="<i2"))
+                    self.q.put_nowait(f)
                 except queue.Full:                  # fallen behind: drop the oldest, stay live
                     try: self.q.get_nowait()
                     except queue.Empty: pass

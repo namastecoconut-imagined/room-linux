@@ -41,7 +41,7 @@ class Assistant:
         self.brain = Brain(key, cfg.get("anthropicModel"), room="living room") if key else None
         self.computer = Computer(cfg.get("computer"))
         self.link = Link(on_command=self.command)
-        self.mic = Mic(float(a.get("micLevel", 0.65)))
+        self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", True) is not False)
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         self.voice = Voice(voice=a.get("voice", "af_heart"))
         self.duck = Duck(float(a.get("voiceFloor", 0.40)))

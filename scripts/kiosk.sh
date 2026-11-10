@@ -38,6 +38,8 @@ on)
     | sudo tee /etc/systemd/logind.conf.d/room-panel.conf >/dev/null
   sudo systemctl kill -s HUP systemd-logind 2>/dev/null || true
 
+  bash "$(dirname "$(readlink -f "$0")")/no-suspend.sh"
+
   echo "▸ Wi-Fi passwords where the system can reach them without the desktop"
   # Saved from GNOME's settings, a Wi-Fi password usually lives in your desktop keyring, which won't be running
   # without GNOME — the Surface would come up with no Wi-Fi. Each saved network's password is copied to the system.

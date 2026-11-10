@@ -1,8 +1,9 @@
 import QtQuick
 
-// The voice assistant on screen: light moving behind fluted glass (shaders/fluted.frag), in the panel's colours,
-// brighter and wider with your voice. Live words aren't shown (the recogniser's guesses are rough); your words come in once it's sure of them,
-// then the answer below them. Tap anywhere to stop.
+// The voice assistant on screen (design: "Horizon fog" — Figma "Room — Assistant & Orb"): a band of glowing cloud
+// across the upper middle with light falling from it in soft rays (shaders/fog.frag), in the panel's colours, changing
+// with each state — blue and amber listening, mint for a follow-up, blue and mint thinking, amber and coral answering.
+// The cloud follows your voice. Your words come in once it's sure of them, then the answer below them. Tap to stop.
 Item {
     id: vo
     width: Theme.stageW; height: Theme.stageH
@@ -16,13 +17,6 @@ Item {
                                   : st === "speaking" ? "speak" : stage === "miss" ? "miss" : (v.reply || v.line) ? "done" : "gone"
     readonly property string heard: v.heard || ""
     readonly property string answer: v.reply || v.line || ""
-
-    // the phone's "day" colours
-    readonly property var c0: [255, 200, 90]
-    readonly property var c1: [90, 190, 255]
-    readonly property var c2: [120, 230, 180]
-    readonly property var c3: [255, 140, 120]
-    function col(a, f) { return Qt.rgba(a[0] / 255 * f, a[1] / 255 * f, a[2] / 255 * f, 1) }
 
     // ---------------------------------------------------------------- motion: the voice, smoothed
     property real phase: 0
@@ -52,19 +46,38 @@ Item {
     // (both a little past the screen's edges, so the burn-in drift never shows an edge)
     Rectangle { anchors.fill: parent; anchors.margins: -60; color: "#050608"; opacity: vo.mode === "gone" ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 350 } } }
-    // ---------------------------------------------------------------- light behind fluted glass (shaders/fluted.frag)
+    // ---------------------------------------------------------------- the fog (shaders/fog.frag)
+    readonly property color warm: Qt.rgba(1.0, 0.76, 0.38, 1)
+    readonly property color blue: Qt.rgba(0.33, 0.72, 1.0, 1)
+    readonly property color mint: Qt.rgba(0.45, 0.88, 0.70, 1)
+    readonly property color coral: Qt.rgba(1.0, 0.56, 0.48, 1)
+    // each state's colours (the three the cloud drifts between) and how much fog it has
+    readonly property var look: mode === "listen" && stage === "follow" ? [mint, blue, warm, 0.7]
+                              : mode === "listen" ? [blue, warm, coral, 0.7]
+                              : mode === "think" ? [blue, mint, blue, 0.6]
+                              : mode === "speak" && stage === "error" ? [coral, warm, blue, 0.4]
+                              : mode === "speak" ? [warm, coral, blue, 0.75]
+                              : mode === "done" && stage === "error" ? [coral, warm, blue, 0.32]
+                              : mode === "done" ? [warm, coral, blue, 0.42]
+                              : mode === "miss" ? [blue, blue, mint, 0.28] : [blue, warm, coral, 0.0]
     ShaderEffect {
         anchors.fill: parent; anchors.margins: -60
-        opacity: vo.mode === "gone" ? 0 : vo.mode === "miss" ? 0.4 : vo.mode === "done" ? 0.7 : 1
+        opacity: vo.mode === "gone" ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.OutCubic } }
         visible: opacity > 0
         property size res: Qt.size(width, height)
         property real t: vo.phase
-        property real level: vo.mode === "listen" ? Math.min(1, vo.cur * 0.7 + vo.beat * 0.5) : vo.mode === "speak" ? 0.25 + vo.beat * 0.3 : 0.15
-        property real think: vo.thinkMix
-        fragmentShader: shaderDir + "fluted.frag.qsb"
+        property real level: vo.mode === "listen" ? Math.min(1, vo.cur * 0.7 + vo.beat * 0.5) : vo.mode === "speak" ? 0.15 + vo.beat * 0.25 : 0
+        property real amount: vo.look[3]
+        Behavior on amount { NumberAnimation { duration: 900; easing.type: Easing.InOutSine } }
+        property color c1: vo.look[0]
+        property color c2: vo.look[1]
+        property color c3: vo.look[2]
+        Behavior on c1 { ColorAnimation { duration: 1200 } }
+        Behavior on c2 { ColorAnimation { duration: 1200 } }
+        Behavior on c3 { ColorAnimation { duration: 1200 } }
+        fragmentShader: shaderDir + "fog.frag.qsb"
     }
-
 
     // ---------------------------------------------------------------- the label: LISTENING / GO ON / THINKING
     Text {

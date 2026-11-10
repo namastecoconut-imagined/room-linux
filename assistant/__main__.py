@@ -192,12 +192,13 @@ class Assistant:
         return again
 
     def answer(self, words: str):
-        self.state(state="speaking", stage="done", reply=words)
+        """Something went wrong (no internet, no brain): said, and shown in the error colours (stage "error")."""
+        self.state(state="speaking", stage="error", reply=words)
         self.voice.say(words)
         time.sleep(0.2)
         while self.voice.busy:
             time.sleep(0.05)
-        self.state(state="idle", stage="done", reply=words)
+        self.state(state="idle", stage="error", reply=words)
 
 
 def main():

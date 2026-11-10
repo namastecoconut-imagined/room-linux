@@ -161,28 +161,33 @@ Item {
                 onTapped: index === 0 ? room.allOff() : index === 1 ? room.dimAll() : room.night()
             }
         }
-        // the assistant without the wake word: Room starts listening (the assistant's screen comes up when it does).
-        // While the assistant is running and ready, a small breathing light (shaders/orb.frag) in place of the mic
-        // icon: you can see it's there to hear you.
+        // the assistant without the wake word: tap and Room starts listening (its screen comes up when it does).
+        // Design "Horizon fog" orb: while the assistant is running, the fog's light falls into the button from the top
+        // (shaders/fogorb.frag) under the mic — Ready (breathing), Pressed (brighter), Heard you (rolls further down,
+        // the moment it wakes). Not running: the plain mic.
         RoundBtn {
             id: micBtn
             size: 68; iconSize: 26; fill: Qt.rgba(1, 1, 1, 0.09)
-            icon: ready ? "" : "mic"
+            icon: ""
             readonly property bool ready: room.voice.state !== undefined && room.voice.state !== "off"
-            visible: room.voice.state !== "off"; onTapped: room.listen()
+            onTapped: room.listen()
             ShaderEffect {
                 id: orb
                 anchors.fill: parent
                 visible: micBtn.ready
                 property real t: 0
-                property real level: 0.1
-                fragmentShader: shaderDir + "orb.frag.qsb"
+                property real breath: 0
+                readonly property real want: room.voice.state === "listening" ? 1.25 : micBtn.pressed ? 1.0 : 0.8 + 0.06 * breath
+                property real amount: want
+                Behavior on amount { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                fragmentShader: shaderDir + "fogorb.frag.qsb"
                 Timer {
                     interval: 33; repeat: true; running: orb.visible && home.visible
                     property real s: 0
-                    onTriggered: { s += 0.033; orb.t = s * 0.7; orb.level = 0.1 + 0.05 * Math.sin(s * 1.4) }
+                    onTriggered: { s += 0.033; orb.t = s; orb.breath = Math.sin(s * 1.5) }
                 }
             }
+            Icon { anchors.centerIn: parent; name: "mic"; size: 26; color: Theme.tx; opacity: micBtn.ready ? 1 : 0.85 }
         }
         RoundBtn { size: 68; icon: "settings"; iconSize: 24; fill: Qt.rgba(1, 1, 1, 0.09); onTapped: home.openSettings() }
     }

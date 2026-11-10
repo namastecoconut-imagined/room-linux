@@ -84,13 +84,15 @@ def main():
         # ---- your "Alexa"s
         plan = [(8, "Stand where you usually talk to it. After each beep, say \"Alexa\" once, normally."),
                 (6, "Now from across the room (or wherever it struggles). After each beep, \"Alexa\"."),
-                (6, "Now a bit quieter or more casual — the way you'd say it half-asleep. After each beep, \"Alexa\".")]
+                (6, "Now a bit quieter or more casual — the way you'd say it half-asleep. After each beep, \"Alexa\"."),
+                (8, "Now put music on at your usual volume (on the speaker you normally use), stand where you usually "
+                    "talk, and say \"Alexa\" after each beep — over the music.")]
         n = 0
         for count, msg in plan:
             ask(msg)
             for _ in range(count):
                 n += 1
-                print(f"  {n:2d}/20  say it after the beep…", flush=True)
+                print(f"  {n:2d}/28  say it after the beep…", flush=True)
                 beep()
                 record(os.path.join(pos, f"alexa-{n:02d}.wav"), 2.2, target)
                 time.sleep(0.4)
@@ -98,7 +100,7 @@ def main():
         ask("Now 30 seconds of ordinary talk — read something aloud, chat, say words like \"Alexander\", \"Alexis\", "
             "\"election\", \"a lexicon\" — anything except \"Alexa\". Starts after the beep.")
         beep(); record(os.path.join(WORK, "talk.wav"), 30, target); split(os.path.join(WORK, "talk.wav"), neg)
-        ask("Now 20 seconds of the room as it usually sounds — music on if you usually have it, TV, fan. Don't speak.")
+        ask("Keep the music on: 20 seconds of just the room and the music. Don't speak.")
         beep(); record(os.path.join(WORK, "room.wav"), 20, target); split(os.path.join(WORK, "room.wav"), neg)
         print("\nRecorded. Learning your voice (a minute)…", flush=True)
 
@@ -118,7 +120,7 @@ def main():
                 used += 1
                 p_feats.append(x)
         if used < 5:
-            print(f"\n✗ Only {used} of 20 recordings sounded like \"Alexa\" to the detector at all — too few to learn "
+            print(f"\n✗ Only {used} of 28 recordings sounded like \"Alexa\" to the detector at all — too few to learn "
                   "from. Check the mic level, move closer, and run this again.")
             return 1
         n_feats = []
@@ -130,7 +132,7 @@ def main():
         P, N = np.vstack(p_feats), np.vstack(n_feats)
         model = train_verifier_model(np.vstack((P, N)), np.array([1] * len(P) + [0] * len(N)))
         pickle.dump(model, open(OUT, "wb"))
-        print(f"\n✓ Learnt from {used} of your 20 \"Alexa\"s and {len(glob.glob(os.path.join(neg, '*.wav')))} clips of "
+        print(f"\n✓ Learnt from {used} of your 28 \"Alexa\"s and {len(glob.glob(os.path.join(neg, '*.wav')))} clips of "
               f"other sound. Saved — Room uses it from its next start (restarting it now).")
         return 0
     finally:

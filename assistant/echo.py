@@ -21,7 +21,9 @@ class LinearAEC:
         self.X = np.zeros((self.P, block + 1), np.complex64)        # the last P blocks of what was played
         self.prev = np.zeros(block, np.float32)
         self.Px = np.full(block + 1, 1e-6, np.float32)              # smoothed power of what's played, per bin
-        self.pyy = self.pee = 1e-9
+        self.pyy = self.pee = self.pmm = 1e-9
+        self.bad = 0
+        self.resets = 0
 
     def process(self, mic: np.ndarray, ref: np.ndarray) -> np.ndarray:
         """One block (B samples each, float): the mic with the echo of `ref` taken out."""
@@ -35,14 +37,20 @@ class LinearAEC:
         # learn only when it's mostly music: while you talk, the error is much bigger than the echo estimate
         self.pyy = 0.9 * self.pyy + 0.1 * float(np.mean(y * y))
         self.pee = 0.9 * self.pee + 0.1 * float(np.mean(e * e))
+        self.pmm = 0.9 * self.pmm + 0.1 * float(np.mean(mic * mic))
+        # never make it worse: if what's left is louder than the mic itself for a quarter of a second, the filter has
+        # gone wrong (it used to run away — a wrong guess made a bigger step, which made a worse guess) — start again
+        self.bad = self.bad + 1 if self.pee > 1.3 * self.pmm + 1e-9 else 0
+        if self.bad > 30:
+            self.W[:] = 0; self.bad = 0; self.resets += 1
         ratio = self.pyy / (self.pee + 1e-9)
-        step = self.mu * min(1.0, max(0.03, ratio))
+        step = self.mu * min(1.0, max(0.03, ratio)) * (0.2 if self.pee > self.pmm else 1.0)
         self.Px = 0.9 * self.Px + 0.1 * np.abs(Xk) ** 2
         E = np.fft.rfft(np.concatenate([np.zeros(B, np.float32), e]))
         G = np.conj(self.X) * E / (self.P * self.Px + 1e-6)
         g = np.fft.irfft(G, axis=1); g[:, B:] = 0                     # keep the filter causal (overlap-save)
         self.W += step * np.fft.rfft(g, axis=1)
-        return e
+        return e if float(np.mean(e * e)) <= float(np.mean(mic * mic)) * 1.05 else mic.astype(np.float32)
 
 
 # ---------------------------------------------------------------- what Room is playing, live

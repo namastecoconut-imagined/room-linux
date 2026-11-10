@@ -1,13 +1,12 @@
+# Room's voice assistant (its own venv: scripts/assistant.sh). Exact versions: requirements.lock
 numpy>=2
 sounddevice>=0.5
 soxr>=0.5
 onnxruntime>=1.17
-tqdm
 requests
+kokoro-onnx>=0.4
+# openWakeWord (the stock "alexa", only if Room's own model is missing) needs these; it and livekit-wakeword are
+# installed without their dependency lists (scripts/assistant.sh)
 scipy
 scikit-learn
-onnx-asr>=0.12
-faster-whisper>=1.2
-websockets>=13
-kokoro-onnx>=0.4
-livekit>=1.0
+tqdm

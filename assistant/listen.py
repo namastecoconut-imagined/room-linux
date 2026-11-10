@@ -23,7 +23,7 @@ import wave
 
 import numpy as np
 
-MODELS = os.path.expanduser("~/.local/share/room/assistant/models")
+MODELS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models")     # ship with Room (assistant/models)
 RATE, FRAME = 16000, 1280                          # 80 ms frames
 
 
@@ -183,8 +183,8 @@ class Wake:
     """Room's own "Alexa" (assistant/models/alexa.onnx, LiveKit WakeWord, trained for Room: 10/10 in a quiet room and
     18/20 over music on this Surface's raw mic, no false alarms — the stock model caught 7/10 and 3/20). It ships with
     the repo, so every install and update has it. If it's missing or won't load, the stock openWakeWord "alexa"
-    (downloaded by scripts/assistant.sh) takes over, so the assistant always has a wake word."""
-    OWN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "alexa.onnx")
+    (also in assistant/models) takes over, so the assistant always has a wake word."""
+    OWN = os.path.join(MODELS, "alexa.onnx")
 
     def __init__(self, threshold=None):
         self.threshold = float(threshold or 0.5)

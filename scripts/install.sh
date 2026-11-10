@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Room — one-time setup on Fedora (Surface Pro 6). Safe to run again.
-#   bash scripts/install.sh
+# Room — the whole setup on a fresh Fedora (Surface Pro 6), in one go. Safe to run again.
+#   git clone https://github.com/namastecoconut-imagined/room-linux ~/room && bash ~/room/scripts/install.sh
+# Sets up: the panel (room.service), AirPlay, Spotify Connect, the voice assistant, never-suspend, the sound fixes,
+# and the room-update / room-kiosk commands. Kiosk mode (just the panel, no desktop) is one more command at the end.
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 echo "▸ Room → $HERE"
@@ -12,7 +14,9 @@ sudo dnf install -y -q python3 python3-pip git xcb-util-cursor mesa-dri-drivers 
 echo "▸ Python environment"
 python3 -m venv "$HERE/.venv"
 "$HERE/.venv/bin/pip" install -q --upgrade pip
-"$HERE/.venv/bin/pip" install -q -r "$HERE/requirements.txt"
+# the exact versions Room is tested with (requirements.lock)
+if [ -f "$HERE/requirements.lock" ]; then "$HERE/.venv/bin/pip" install -q -r "$HERE/requirements.lock"
+else "$HERE/.venv/bin/pip" install -q -r "$HERE/requirements.txt"; fi
 
 echo "▸ Config"
 mkdir -p ~/.config/room
@@ -53,6 +57,17 @@ fi
 
 bash "$HERE/scripts/airplay.sh"
 bash "$HERE/scripts/spotify-connect.sh"
+bash "$HERE/scripts/assistant.sh"
+bash "$HERE/scripts/no-suspend.sh"
+
+echo "▸ Sound"
+# a Bluetooth speaker stays a speaker: never switched to its low-quality "headset" mode when something listens
+mkdir -p ~/.config/wireplumber/wireplumber.conf.d
+printf 'wireplumber.settings = { bluetooth.autoswitch-to-headset-profile = false }\n' \
+  > ~/.config/wireplumber/wireplumber.conf.d/90-room-no-headset.conf
+# the speaker tuning's end limiter (only if the Dolby tuning is installed), then every level where it belongs
+[ -f ~/.config/pipewire/pipewire.conf.d/Dolby_Balanced.conf ] && bash "$HERE/scripts/speaker-guard.sh" || true
+bash "$HERE/scripts/sound-fix.sh" >/dev/null || true
 
 echo "▸ Room in the app grid"
 mkdir -p ~/.local/share/applications ~/.local/share/icons/hicolor/scalable/apps
@@ -75,6 +90,10 @@ cat > ~/.local/bin/room-update <<UPD
 exec bash "$HERE/scripts/update.sh" "\$@"
 UPD
 chmod +x ~/.local/bin/room-update
+ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
+# the rest of what room-update keeps in place (sound buffers for AirPlay and Spotify, …), without pulling
+ROOM_NO_PULL=1 bash "$HERE/scripts/update.sh" >/dev/null || true
 
 systemctl --user restart room.service
 echo "✓ Room is running. Update any time with:  room-update"
+echo "  Just the panel, no desktop (from the next start):  room-kiosk on   ·   back to GNOME:  room-kiosk off"

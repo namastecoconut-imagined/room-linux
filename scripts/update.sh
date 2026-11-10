@@ -3,8 +3,9 @@
 set -e
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 cd "$HERE"
-git pull --ff-only
-"$HERE/.venv/bin/pip" install -q -r requirements.txt
+[ -n "${ROOM_NO_PULL:-}" ] || git pull --ff-only
+# the exact versions Room is tested with (requirements.lock); nothing newer sneaks in on an update
+if [ -f requirements.lock ]; then "$HERE/.venv/bin/pip" install -q -r requirements.lock; else "$HERE/.venv/bin/pip" install -q -r requirements.txt; fi
 # the old voice assistant is gone: its Python, models and state go too
 if [ -d "$HERE/voice" ] && [ -z "$(git ls-files voice)" ]; then rm -rf "$HERE/voice"; fi
 rm -rf "$HOME/.local/share/room/voice" "$HOME/.local/state/room/wake-paused"
@@ -24,12 +25,23 @@ if [ -f "$C" ] && ! grep -q ignore_volume_control "$C"; then
   sed -i 's/^\(\s*\)volume_range_db = 50;/&\n\1ignore_volume_control = "yes";/' "$C"
   grep -q ignore_volume_control "$C" && systemctl --user try-restart room-airplay.service 2>/dev/null || true
 fi
-# Room's own wake word is used straight from the repo now (assistant/models): drop the hand-copied one
-rm -f "$HOME/.local/share/room/assistant/models/alexa.onnx"
+# the assistant's models ship with Room now (assistant/models): the old downloaded copies go
+rm -rf "$HOME/.local/share/room/assistant/models"
+# a Bluetooth speaker stays a speaker (never its low-quality "headset" mode) — kept in place
+W=~/.config/wireplumber/wireplumber.conf.d/90-room-no-headset.conf
+if [ ! -f "$W" ]; then
+  mkdir -p "$(dirname "$W")"
+  printf 'wireplumber.settings = { bluetooth.autoswitch-to-headset-profile = false }\n' > "$W"
+fi
 # the assistant (its own Python and service), if it's set up
 if [ -x "$HERE/assistant/.venv/bin/python" ]; then
   export PATH="$HOME/.local/bin:$PATH"
-  command -v uv >/dev/null && uv pip install -q --python "$HERE/assistant/.venv/bin/python" -r assistant/requirements.txt || true
+  # exactly the locked set: anything else (old test tools) is removed
+  if [ -f assistant/requirements.lock ]; then
+    command -v uv >/dev/null && uv pip sync -q --python "$HERE/assistant/.venv/bin/python" assistant/requirements.lock || true
+  else
+    command -v uv >/dev/null && uv pip install -q --python "$HERE/assistant/.venv/bin/python" -r assistant/requirements.txt || true
+  fi
   systemctl --user try-restart room-assistant.service 2>/dev/null || true
 fi
 # the Surface's own Spotify (Soloist): the same bigger sound buffers as AirPlay — it crackled on the Surface's

@@ -22,10 +22,6 @@ Item {
     // ---------------------------------------------------------------- motion: the voice, smoothed
     property real phase: 0
     property real cur: 0            // 0…1: how loud the voice is right now (quick up, slow down)
-    property real thinkMix: 0
-    // the beat of your voice, the way the music screen follows the music: loudness over its own recent floor
-    property real beatFloor: -1
-    property real beat: 0
     property real calm: 0           // the voice for the fog: heavily smoothed
     property real calm1: 0
     property real quick: 0          // the voice, quick (cores, rays, flow)
@@ -39,12 +35,6 @@ Item {
                      : vo.mode === "speak" ? 0.25 + Math.min(0.5, room.level * 0.6)
                      : vo.mode === "think" ? 0.18 + 0.08 * Math.sin(vo.phase * 3) : 0.1
             vo.cur += (want - vo.cur) * (want > vo.cur ? 0.35 : 0.08)
-            vo.thinkMix += ((vo.mode === "think" ? 1 : 0) - vo.thinkMix) * 0.06
-            var l = vo.mode === "listen" ? room.voiceLevel : room.level
-            if (vo.beatFloor < 0) vo.beatFloor = l
-            else vo.beatFloor += (l - vo.beatFloor) * (l < vo.beatFloor ? 0.2 : 0.02)
-            var b = vo.mode === "listen" || vo.mode === "speak" ? Math.max(0, Math.min(1, (l - vo.beatFloor) * 4)) : 0
-            vo.beat += (b - vo.beat) * (b > vo.beat ? 0.5 : 0.12)
             // the fog follows the voice slowly but deeply — a swell, not a pulse (following every syllable made it pump like a
             // speaker cone): rises over about half a second, settles over a second and a half
             var f = vo.mode === "listen" ? Math.min(1, vo.cur * 0.85) : vo.mode === "speak" ? 0.12 + 0.12 * Math.min(1, room.level) : 0

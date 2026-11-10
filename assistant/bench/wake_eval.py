@@ -5,8 +5,7 @@
 For each recording it reports, per engine and threshold: how many of your "Alexa"s were caught (a detection within
 3.8 s after the beep), and false alarms (detections anywhere else — the music-only part is all false alarms).
 Also each "Alexa"'s best score, so near-misses show. Engines: openWakeWord's stock "alexa", and any LiveKit
-WakeWord model (*.onnx with a `chunk` input) in ~/.local/share/room/assistant/models (what the assistant uses) or in
-assistant/models (trained, not switched on yet: copy it to the first folder to use it).
+WakeWord model (*.onnx with a `chunk` input) in assistant/models.
 """
 import glob
 import json
@@ -16,7 +15,7 @@ import wave
 
 import numpy as np
 
-MODELS = os.path.expanduser("~/.local/share/room/assistant/models")
+MODELS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")   # assistant/models
 FRAME = 1280                       # 80 ms at 16 kHz
 THRESHOLDS = (0.3, 0.5, 0.7)
 
@@ -38,8 +37,7 @@ def engines():
                       embedding_model_path=os.path.join(MODELS, "embedding_model.onnx"))
             return [max(m.predict(audio[i:i + FRAME]).values()) for i in range(0, len(audio) - FRAME + 1, FRAME)]
         out["openWakeWord alexa"] = run_oww
-    here = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models")   # assistant/models
-    for f in sorted(glob.glob(os.path.join(MODELS, "*.onnx")) + glob.glob(os.path.join(here, "*.onnx"))):
+    for f in sorted(glob.glob(os.path.join(MODELS, "*.onnx"))):
         base = os.path.basename(f)
         if base in ("alexa_v0.1.onnx", "melspectrogram.onnx", "embedding_model.onnx", "silero_vad.onnx") \
                 or "alexa" not in base.lower():
@@ -48,8 +46,7 @@ def engines():
             from livekit.wakeword import WakeWordModel
             m = WakeWordModel(models=[f])
             return [max(m.predict(audio[i:i + FRAME]).values()) for i in range(0, len(audio) - FRAME + 1, FRAME)]
-        where = "in the repo" if f.startswith(here) else "installed"
-        out[f"LiveKit {os.path.splitext(base)[0]} ({where})"] = run_lk
+        out[f"LiveKit {os.path.splitext(base)[0]}"] = run_lk
     return out
 
 
@@ -67,7 +64,7 @@ def main():
     plan = json.load(open(os.path.join(folder, "prompts.json")))
     eng = engines()
     if not eng:
-        sys.exit(f"No wake-word models in {MODELS} — run scripts/assistant.sh")
+        sys.exit(f"No wake-word models in {MODELS}")
     print(f"Recordings: {folder}\n")
     summary = []
     for part in ("quiet", "music", "musiconly"):

@@ -1,4 +1,10 @@
-# Wake-word model
+# Models (shipped with Room — nothing to download)
+
+- `alexa.onnx` — Room's wake word (below)
+- `silero_vad.onnx` — when you've finished talking (Silero VAD)
+- `alexa_v0.1.onnx`, `melspectrogram.onnx`, `embedding_model.onnx` — openWakeWord's stock "alexa", only a fallback
+
+## The wake word
 
 `alexa.onnx` — Room's own "Alexa", trained with LiveKit WakeWord (`livekit-wakeword`, 5000 steps on the M1, 10 Nov 2026).
 The assistant uses it straight from here (assistant/listen.py `Wake`); the stock openWakeWord "alexa" is only a

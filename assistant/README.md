@@ -4,7 +4,7 @@ Its own program, separate from the panel: it owns the mic and its voice, and tal
 If it stops, Room carries on. Built one step at a time, each with a test that has to pass before the next:
 
 1. Bluetooth stays in music mode while the mic's in use — 10/10
-2. **The speaker** (`player.py`) — one stream, kept open, fed from a buffer: no gaps — `bench/play_test.py`
+2. **The speaker** (`player.py`) — one stream, kept open, fed from a buffer: no gaps — (tested with a play test, since removed)
 3. Wake word on the raw mic vs the noise-suppressed one; a custom "Alexa"; music ducked at once — 18/20 over music
 4. Speech-to-text: on the Surface (Parakeet, Whisper) vs AssemblyAI, on 30 of your commands
 5. Knowing when you've finished — ≤1 cut-off in 30 with pauses

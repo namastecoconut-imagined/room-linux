@@ -313,21 +313,45 @@ class Speaker:
         first = True
         odd = b""
         shape = Voicer(24000)
+        # Deepgram streams the voice as it makes it; over a busy Wi-Fi the pieces can arrive slower than they play,
+        # and every gap was a break in the middle of a word. So it starts once AHEAD seconds are in hand and keeps
+        # that much in hand; the log says if it still ran dry.
+        AHEAD = float(CFG.get("voiceBuffer", 0.8))
+        held, started, played_from, sent_s, dry = b"", False, 0.0, 0.0, 0
+        def write(out):
+            nonlocal sent_s, dry, played_from
+            now = time.time()
+            if sent_s and now - played_from > sent_s + 0.05:
+                dry += 1
+                played_from = now - sent_s          # it ran dry: what's sent now plays from now
+            self.proc.stdin.write(out)
+            sent_s += len(out) / 48000
         try:
             import itertools
             for chunk in itertools.chain([head], chunks):
                 if g != self.gen:
                     break
                 if chunk:
-                    if first:
-                        emit(ev="speaking"); first = False
-                        log(f"aura: first sound in {time.time() - t0:.2f} s")
                     chunk = odd + chunk
                     cut = len(chunk) // 2 * 2
                     chunk, odd = chunk[:cut], chunk[cut:]
                     x = np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768
-                    out = (shape(x) * 32767).astype("<i2").tobytes()
-                    self.proc.stdin.write(out)
+                    held += (shape(x) * 32767).astype("<i2").tobytes()
+                    if not started and len(held) < AHEAD * 48000:
+                        continue
+                    if not started:
+                        started, played_from = True, time.time()
+                        emit(ev="speaking"); first = False
+                        log(f"aura: first sound in {time.time() - t0:.2f} s")
+                    write(held); held = b""
+            if held and g == self.gen:
+                if first:
+                    emit(ev="speaking"); first = False
+                    log(f"aura: first sound in {time.time() - t0:.2f} s")
+                    played_from = time.time()
+                write(held)
+            if dry:
+                log(f"aura: the voice ran dry {dry}× (arriving slower than it plays — the Wi-Fi?)")
         except Exception as e:
             if g == self.gen:
                 log("aura play:", repr(e))

@@ -186,6 +186,7 @@ class Listener:
         self.tap = threading.Event()        # a tap on the panel: listen now, no wake word needed
         self.abort = threading.Event()      # stop listening to this request (a tap to cancel)
         self.on_level = None                # called ~12 times a second with your voice's level (0…1) while recording
+        self.floor = -50.0                  # the room's own hum (dB), followed as it goes: the level is your voice above it
 
     verbose = False         # print the mic level and the best "Alexa" score every 2 s (tests)
 
@@ -213,6 +214,16 @@ class Listener:
                 self.wake.reset()
                 return s
 
+    def voice_level(self, f, p) -> float:
+        """How loud *your voice* is, 0…1, for the screen. Only speech counts (Silero's probability gates it), and only
+        what's above the room's own hum: a silent room used to read as a fair level — the raw mic at 65 % hears the
+        fan and the room at about −50 dB — so the light on the listening screen kept swelling with nobody talking."""
+        rms = float(np.sqrt(np.mean((f.astype(np.float32) / 32768) ** 2)))
+        db = 20 * np.log10(max(rms, 1e-5))
+        self.floor += (db - self.floor) * (0.3 if db < self.floor else 0.01)
+        loud = max(0.0, min(1.0, (db - self.floor - 6) / 30))
+        return loud * max(0.0, min(1.0, (p - 0.2) / 0.5))
+
     def record(self, onset=None, fresh=False):
         """fresh: drop what the mic queued before now (after Room has spoken: that's its own voice). Not after
         "Alexa" — whatever you started saying straight after it is already queued, and is wanted."""
@@ -222,6 +233,8 @@ class Listener:
             try: self.mic.q.get_nowait()
             except queue.Empty: break
         self.vad.reset()
+        if self.on_level:
+            self.on_level(0.0)
         frames, started, quiet, t0 = [], None, 0.0, time.time()
         while True:
             if self.abort.is_set():
@@ -231,11 +244,10 @@ class Listener:
             except queue.Empty:
                 continue
             frames.append(f)
-            if self.on_level:
-                rms = float(np.sqrt(np.mean((f.astype(np.float32) / 32768) ** 2)))
-                self.on_level(max(0.0, min(1.0, (20 * np.log10(max(rms, 1e-5)) + 60) / 45)))
             t = len(frames) * FRAME / RATE
             p = self.vad.prob(f)
+            if self.on_level:
+                self.on_level(self.voice_level(f, p))
             if p >= 0.5 and t > self.TAIL:
                 if started is None:
                     started = max(0.0, t - FRAME / RATE - self.PRE)
@@ -243,7 +255,11 @@ class Listener:
             elif started is not None:
                 quiet += FRAME / RATE
             if started is None and t > onset:
+                if self.on_level:
+                    self.on_level(0.0)
                 return None, {"onset": None, "took": time.time() - t0}
             if started is not None and (quiet >= self.END_QUIET or t > self.MAX):
+                if self.on_level:
+                    self.on_level(0.0)
                 a = np.concatenate(frames)[int(started * RATE):]
                 return a, {"onset": round(started, 2), "spoke": round(t - quiet - started, 2), "took": round(time.time() - t0, 2)}

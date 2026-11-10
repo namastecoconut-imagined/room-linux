@@ -10,7 +10,7 @@ changes (Room is told by the AirPlay reader), and every 20 s otherwise — the P
 run every few seconds on a battery.
 
 At start (and every few minutes) the levels underneath are put right: the Surface's own speakers at full — PipeWire's
-level for the raw speakers and the chip's Master/Speaker controls; the volume slider works on the output in front of
+level for the raw speakers and the chip's Speaker control (Master a few dB under full — see levels()); the volume slider works on the output in front of
 them (the Dolby tuning, or a Bluetooth speaker), and a lowered level underneath (it sat around 20 %) only made
 everything quiet — and any music stream left turned down is put back to full (PipeWire remembers a stream's level per
 app, so one left low stays low for good; how loud music is belongs to the phone, Spotify and the speaker).
@@ -28,6 +28,7 @@ class Output:
         self.airplay_bt = cfg.get("airplayToBluetooth") is not False
         self.moved: dict = {}          # AirPlay stream id → where it was sent
         self.poked = threading.Event()
+        self.headroom = abs(float(cfg.get("speakerHeadroomDb", 4)))
 
     def poke(self):
         """Something changed (AirPlay started, a speaker came or went): look now, and again over the next few seconds
@@ -135,9 +136,13 @@ class Output:
                 if min(v) < 0.99:
                     subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=3)
                     print(f"[room] output: {who.split()[0] if who.split() else n['id']} was turned down — back to full", flush=True)
-        for c in ("Master", "Speaker"):
-            subprocess.run(["amixer", "-q", "-c", "0", "sset", c, "100%", "unmute"], timeout=3,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # the chip itself: Speaker at full, Master a few dB under — at the very top, both the music and Room's voice
+        # crackled (the speakers themselves, not the tuning: it crackled with the tuning bypassed too).
+        # "speakerHeadroomDb" in config.json (0 = full, as before)
+        subprocess.run(["amixer", "-q", "-c", "0", "sset", "Speaker", "100%", "unmute"], timeout=3,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["amixer", "-q", "-c", "0", "sset", "Master", f"-{self.headroom:g}dB" if self.headroom else "100%", "unmute"],
+                       timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def check(self, nodes):
         sinks, default = {}, None

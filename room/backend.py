@@ -552,7 +552,7 @@ class Room(QObject):
     @Property("QVariantMap", notify=voiceChanged)
     def voice(self):
         """For the screen: state (off · idle · listening · thinking · speaking), stage, heard, reply, line, card."""
-        if self.demo and os.environ.get("ROOM_DEMO_VOICE"):          # screens to check: listen · think · speak · miss
+        if self.demo and os.environ.get("ROOM_DEMO_VOICE"):          # screens to check: listen · think · speak · miss · ready
             st = os.environ["ROOM_DEMO_VOICE"]
             q = "What's the weather going to be in Bali tomorrow?"
             return {"listen": {"state": "listening", "stage": "wake", "heard": ""},
@@ -560,7 +560,8 @@ class Room(QObject):
                     "speak": {"state": "speaking", "stage": "done", "heard": q,
                               "reply": "Bali's looking warm tomorrow, around thirty one degrees, with a good chance of a "
                                        "thunderstorm in the afternoon.", "line": "31° · storms after 2"},
-                    "miss": {"state": "idle", "stage": "miss", "heard": ""}}.get(st, {})
+                    "miss": {"state": "idle", "stage": "miss", "heard": ""},
+                    "ready": {"state": "idle", "stage": "idle"}}.get(st, {})
         return dict(self.voicelink.st)
 
     @Slot()

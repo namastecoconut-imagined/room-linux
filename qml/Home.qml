@@ -161,8 +161,29 @@ Item {
                 onTapped: index === 0 ? room.allOff() : index === 1 ? room.dimAll() : room.night()
             }
         }
-        // the assistant without the wake word: Room starts listening (the assistant's screen comes up when it does)
-        RoundBtn { size: 68; icon: "mic"; iconSize: 26; fill: Qt.rgba(1, 1, 1, 0.09); visible: room.voice.state !== "off"; onTapped: room.listen() }
+        // the assistant without the wake word: Room starts listening (the assistant's screen comes up when it does).
+        // While the assistant is running and ready, a small breathing light (shaders/orb.frag) in place of the mic
+        // icon: you can see it's there to hear you.
+        RoundBtn {
+            id: micBtn
+            size: 68; iconSize: 26; fill: Qt.rgba(1, 1, 1, 0.09)
+            icon: ready ? "" : "mic"
+            readonly property bool ready: room.voice.state !== undefined && room.voice.state !== "off"
+            visible: room.voice.state !== "off"; onTapped: room.listen()
+            ShaderEffect {
+                id: orb
+                anchors.fill: parent
+                visible: micBtn.ready
+                property real t: 0
+                property real level: 0.1
+                fragmentShader: shaderDir + "orb.frag.qsb"
+                Timer {
+                    interval: 33; repeat: true; running: orb.visible && home.visible
+                    property real s: 0
+                    onTriggered: { s += 0.033; orb.t = s * 0.7; orb.level = 0.1 + 0.05 * Math.sin(s * 1.4) }
+                }
+            }
+        }
         RoundBtn { size: 68; icon: "settings"; iconSize: 24; fill: Qt.rgba(1, 1, 1, 0.09); onTapped: home.openSettings() }
     }
 

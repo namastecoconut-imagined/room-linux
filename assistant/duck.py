@@ -58,8 +58,8 @@ class Duck:
         out = []
         for n in nodes:
             p = (n.get("info") or {}).get("props") or {}
-            if p.get("media.class") != "Stream/Output/Audio":
-                continue
+            if n.get("type") != "PipeWire:Interface:Node" or p.get("media.class") != "Stream/Output/Audio":
+                continue                    # (the apps themselves are listed too, with the same class — not volumes)
             if str(p.get("application.process.id")) == str(os.getpid()):
                 continue                    # the assistant's own voice
             name = (p.get("node.name") or "").lower()

@@ -80,7 +80,7 @@ class Output:
                 links.setdefault(i.get("output-node-id"), set()).add(i.get("input-node-id"))
         for n in nodes:
             p = (n.get("info") or {}).get("props") or {}
-            if p.get("media.class") != "Stream/Output/Audio":
+            if n.get("type") != "PipeWire:Interface:Node" or p.get("media.class") != "Stream/Output/Audio":
                 continue
             who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
             spot = "soloist" in who or "spotify" in who
@@ -126,7 +126,7 @@ class Output:
                     subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=3)
                     subprocess.run(["wpctl", "set-mute", str(n["id"]), "0"], timeout=3)
                     print(f"[room] output: the Surface's speakers were at {out.strip()} — set to full", flush=True)
-            if heal and p.get("media.class") == "Stream/Output/Audio":
+            if heal and n.get("type") == "PipeWire:Interface:Node" and p.get("media.class") == "Stream/Output/Audio":
                 who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
                 if "soloist" in who or "spotify" in who or name.startswith(("effect_", "output.", "input.")) \
                         or p.get("node.virtual") or p.get("factory.name") == "filter-chain" or "filter" in name or "loopback" in name:

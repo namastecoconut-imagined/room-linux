@@ -439,7 +439,6 @@ class Room(QObject):
         (self.airplay if self.airplay.showing else self.spotify).previous()
 
     @Slot(int)
-    @Slot(int)
     def setVolumeLive(self, v):
         """While the volume slider is being dragged: the Surface's own Spotify (Soloist) gets the new level straight on
         its sound stream — instant and smooth; asking Spotify's servers every half second made the music cut in and
@@ -464,12 +463,14 @@ class Room(QObject):
             for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
                 p = (n.get("info") or {}).get("props") or {}
                 who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
-                if p.get("media.class") == "Stream/Output/Audio" and ("soloist" in who or "spotify" in who):
+                if n.get("type") == "PipeWire:Interface:Node" and p.get("media.class") == "Stream/Output/Audio" \
+                        and ("soloist" in who or "spotify" in who):
                     self._solo_id = n["id"]; break
         except Exception:
             pass
         return self._solo_id
 
+    @Slot(int)
     def setVolume(self, v):
         if self.airplay.showing:
             import subprocess

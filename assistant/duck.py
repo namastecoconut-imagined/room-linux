@@ -34,7 +34,8 @@ class Duck:
                 if want == "down" and not self.saved:
                     for sid, v in self._streams():
                         self.saved[sid] = v
-                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * LEVEL:.3f}"], timeout=2)
+                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v * LEVEL:.3f}"], timeout=2,
+                                       stderr=subprocess.DEVNULL)
                 elif want == "up":
                     for sid, v in self.saved.items():
                         subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.3f}"], timeout=2,

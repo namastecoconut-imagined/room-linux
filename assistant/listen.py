@@ -59,7 +59,7 @@ class Mic:
             if not name:
                 log("no mic found — trying again in 5 s"); time.sleep(5); continue
             subprocess.run(["wpctl", "set-volume", str(nid), f"{self.level:.2f}"], timeout=3)
-            self.proc = subprocess.Popen(["pw-record", "--target", name, "--rate", str(RATE), "--channels", "1",
+            self.proc = subprocess.Popen(["pw-record", "--raw", "--target", name, "--rate", str(RATE), "--channels", "1",
                                           "--format", "s16", "--latency", "40ms", "-P",
                                           '{ application.name = "Room assistant" }', "-"],
                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)

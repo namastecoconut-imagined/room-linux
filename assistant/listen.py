@@ -41,10 +41,12 @@ class Mic:
     off).
 
     With echo cancelling it records one two-channel stream that nothing links by itself: Room links the mic into the
-    left channel and every output's monitor (the Surface's speakers, a Bluetooth speaker) into the right, so the two
-    arrive in step, sample for sample. The monitor links are passive — they never wake a sleeping speaker or keep it
-    on. Outputs are checked again every 10 s (a Bluetooth speaker connecting). If that ever doesn't deliver sound, it
-    falls back to the plain mic without echo cancelling, so the assistant always hears."""
+    left channel and the Surface's own speakers' monitor into the right, so the two arrive in step, sample for sample.
+    The monitor link is passive — it never wakes a sleeping speaker or keeps it on. A Bluetooth speaker is never linked:
+    with one in the stream PipeWire got killed every 8 s (no sound, the speaker dropped), and on the Xiaomi "Alexa" is
+    10/10 without cancelling anyway. If PipeWire still restarts twice in 3 min with this on, echo cancelling turns itself
+    off until the assistant restarts. If it ever doesn't deliver sound, it falls back to the plain mic without echo
+    cancelling, so the assistant always hears."""
 
     def __init__(self, level=0.65, echo=True):
         self.level = level
@@ -61,6 +63,7 @@ class Mic:
         self.tee = None                     # tests: called with (mic, playing, cleaned) for every frame
         self.hold = None                    # () -> True while Room is speaking: echo cancelling rests then (below)
         self.linked = set()
+        self._pw_pid, self._pw_deaths = None, []
 
     @staticmethod
     def raw_source():
@@ -85,6 +88,8 @@ class Mic:
         ok = self._link(f"{mic}:capture_FL", f"{EARS}:input_FL")
         from .echo import outputs
         for o in outputs():
+            if not o.startswith("alsa_output"):
+                continue                    # the Surface's own speakers only (see the class note)
             for ch in ("FL", "FR"):
                 if self._link(f"{o}:monitor_{ch}", f"{EARS}:input_FR", passive=True) and o not in self.linked:
                     self.linked.add(o)
@@ -97,9 +102,31 @@ class Mic:
             if not name:
                 log("no mic found — trying again in 5 s"); time.sleep(5); continue
             subprocess.run(["wpctl", "set-volume", str(nid), f"{self.level:.2f}"], timeout=3)
+            if self.echo and self._sound_system_keeps_dying():
+                log("echo: the sound system restarted twice in 3 min with echo cancelling on — turned it off until "
+                    "the assistant restarts")
+                self.echo = None
             if self.echo and self._ears(name):
                 continue
             self._plain(name)
+
+    def _sound_system_keeps_dying(self) -> bool:
+        """True once PipeWire has been restarted twice within 3 minutes while echo cancelling was on. Its stream
+        (mic + speaker in one) once got PipeWire killed every 8 s, which dropped the Bluetooth speaker and all
+        sound each time; this guard makes sure that can never run for more than a couple of restarts."""
+        try:
+            pid = subprocess.run(["systemctl", "--user", "show", "-p", "MainPID", "--value", "pipewire"],
+                                 capture_output=True, text=True, timeout=3).stdout.strip()
+        except Exception:
+            return False
+        if pid == "0":                      # mid-restart: not running yet — wait for its new PID
+            pid = ""
+        now = time.time()
+        if self._pw_pid and pid and pid != self._pw_pid:
+            self._pw_deaths = [t for t in self._pw_deaths if now - t < 180] + [now]
+        if pid:
+            self._pw_pid = pid
+        return len(self._pw_deaths) >= 2
 
     def _ears(self, name) -> bool:
         """The two-channel stream, mic + what's playing. False if it couldn't get going (then: the plain mic)."""

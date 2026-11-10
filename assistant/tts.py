@@ -50,21 +50,14 @@ class Voice:
         # Kokoro leaves a core free: with every core busy making the next sentence, the speaker's callback (Python,
         # every 50 ms) was served late — the voice broke up ("sound system missed 46 blocks" an answer) while there
         # was plenty made ("ran dry 0×")
-        cores = max(2, (os.cpu_count() or 4) // 2)           # physical cores
-
-        def session(threads):
-            o = ort.SessionOptions()
-            o.intra_op_num_threads = threads
-            o.inter_op_num_threads = 1
-            # its worker threads sleep when they've nothing to do, instead of spinning on every core waiting for the
-            # next piece of work — spinning took the CPU from the speaker and from Room
-            o.add_session_config_entry("session.intra_op.allow_spinning", "0")
-            sess = ort.InferenceSession(os.path.join(KDIR, model), sess_options=o, providers=["CPUExecutionProvider"])
-            return Kokoro.from_session(sess, os.path.join(KDIR, "voices-v1.0.bin"))
-        self.k = session(max(1, cores - 1))
+        o = ort.SessionOptions()
+        o.intra_op_num_threads = max(1, (os.cpu_count() or 4) // 2 - 1)
+        o.inter_op_num_threads = 1
+        sess = ort.InferenceSession(os.path.join(KDIR, model), sess_options=o, providers=["CPUExecutionProvider"])
+        self.k = Kokoro.from_session(sess, os.path.join(KDIR, "voices-v1.0.bin"))
         # …but the first words of an answer, made while nothing is playing yet, use every core: nothing can break up
-        # then, and they're what you wait for
-        self.k_fast = session(cores)
+        # then, and they're what you wait for (2–3 s with a core left free)
+        self.k_fast = Kokoro(os.path.join(KDIR, model), os.path.join(KDIR, "voices-v1.0.bin"))
         self.voice, self.speed = voice, speed
         self.player = Player()
         self.player.start()
@@ -108,12 +101,7 @@ class Voice:
                 for i, p in enumerate(pieces(text)):
                     if g != self.gen:
                         break
-                    tm = time.time()
                     a, sr = self._make(p, fast=(i == 0 and not self.player.busy))
-                    took = time.time() - tm
-                    if took > 0.05:
-                        print(f"[assistant] voice: made {len(a) / sr:.1f} s of speech in {took:.1f} s "
-                              f"({'every core' if i == 0 else 'a core left free'})", flush=True)
                     if g != self.gen:
                         break
                     if i == 0:

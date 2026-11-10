@@ -2,7 +2,8 @@ import QtQuick
 
 // The voice assistant on screen (design: "Horizon fog" — Figma "Room — Assistant & Orb"): a band of glowing cloud
 // across the upper middle with light falling from it in soft rays (shaders/fog.frag), in the panel's colours, changing
-// with each state — blue and amber listening, mint for a follow-up, blue and mint thinking, amber and coral answering.
+// with each state — cool blue and mint while it listens (light flowing up into the cloud), warm amber and coral while
+// Room speaks (flowing down out of it), blue with a touch of coral thinking.
 // The cloud follows your voice. Your words come in once it's sure of them, then the answer below them. Tap to stop.
 Item {
     id: vo
@@ -27,6 +28,9 @@ Item {
     property real beat: 0
     property real calm: 0           // the voice for the fog: heavily smoothed
     property real calm1: 0
+    property real quick: 0          // the voice, quick (cores, rays, flow)
+    property real flowDir: 1
+    property real flowT: 0
     Timer {
         interval: 33; repeat: true; running: vo.active && vo.visible
         onTriggered: {
@@ -47,6 +51,15 @@ Item {
             // two stages of smoothing: it eases in and out of each swell instead of jerking (deep but smooth)
             vo.calm1 += (f - vo.calm1) * (f > vo.calm1 ? 0.07 : 0.03)
             vo.calm += (vo.calm1 - vo.calm) * 0.06
+            // …and a quick layer that follows every word without moving the cloud: the bright cores, the rays and the
+            // light flowing through them (so it's plainly hearing you, without the pumping)
+            var qk = vo.mode === "listen" ? Math.min(1, room.voiceLevel * 1.8) : vo.mode === "speak" ? 0.6 * Math.min(1, room.level * 1.2) : 0
+            vo.quick += (qk - vo.quick) * (qk > vo.quick ? 0.3 : 0.1)
+            // the flow in the rays: up into the cloud while it listens (taking your voice in), down out of it while Room
+            // speaks, barely moving while it thinks; faster as you talk
+            var dir = vo.mode === "listen" ? -1 : vo.mode === "think" ? 0.25 : 1
+            vo.flowDir += (dir - vo.flowDir) * 0.05
+            vo.flowT += 0.033 * vo.flowDir * (1 + 1.6 * vo.quick)
         }
     }
 
@@ -60,14 +73,14 @@ Item {
     readonly property color mint: Qt.rgba(0.45, 0.88, 0.70, 1)
     readonly property color coral: Qt.rgba(1.0, 0.56, 0.48, 1)
     // each state's colours (the three the cloud drifts between) and how much fog it has
-    readonly property var look: mode === "listen" && stage === "follow" ? [mint, blue, warm, 0.7]
-                              : mode === "listen" ? [blue, warm, coral, 0.7]
-                              : mode === "think" ? [blue, mint, blue, 0.6]
-                              : mode === "speak" && stage === "error" ? [coral, warm, blue, 0.4]
-                              : mode === "speak" ? [warm, coral, blue, 0.75]
-                              : mode === "done" && stage === "error" ? [coral, warm, blue, 0.32]
-                              : mode === "done" ? [warm, coral, blue, 0.42]
-                              : mode === "miss" ? [blue, blue, mint, 0.28] : [blue, warm, coral, 0.0]
+    readonly property var look: mode === "listen" && stage === "follow" ? [mint, blue, mint, 0.7]
+                              : mode === "listen" ? [blue, mint, blue, 0.7]
+                              : mode === "think" ? [blue, coral, mint, 0.55]
+                              : mode === "speak" && stage === "error" ? [coral, coral, blue, 0.4]
+                              : mode === "speak" ? [warm, coral, warm, 0.75]
+                              : mode === "done" && stage === "error" ? [coral, coral, blue, 0.32]
+                              : mode === "done" ? [warm, coral, warm, 0.42]
+                              : mode === "miss" ? [blue, blue, mint, 0.28] : [blue, mint, blue, 0.0]
     ShaderEffect {
         anchors.fill: parent; anchors.margins: -60
         opacity: vo.mode === "gone" ? 0 : 1
@@ -76,6 +89,8 @@ Item {
         property size res: Qt.size(width, height)
         property real t: vo.phase
         property real level: vo.calm
+        property real voice: vo.quick
+        property real flow: vo.flowT
         property real amount: vo.look[3]
         Behavior on amount { NumberAnimation { duration: 900; easing.type: Easing.InOutSine } }
         property color c1: vo.look[0]

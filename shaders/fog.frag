@@ -12,6 +12,8 @@ layout(std140, binding = 0) uniform buf {
     float t;
     float level;     // 0…1, your voice (or Room's while it speaks)
     float amount;    // 0…1, how much fog the state has (listening 0.7, thinking 0.6, missed 0.28 …)
+    float voice;     // 0…1, the voice, quick: brightens the cores and the rays, speeds the flow (doesn't move the cloud)
+    float flow;      // where the light flowing through the rays has got to (up while listening, down while speaking)
     vec4 c1;
     vec4 c2;
     vec4 c3;
@@ -49,8 +51,8 @@ void main() {
     float dy = q.y - y0 - 0.07 * (n - 0.5);
     float band = exp(-pow(dy / (0.08 + 0.04 * k + 0.07 * level), 2.0)) * (0.45 + 0.75 * n) * (0.8 + 0.4 * m);
     vec3 col = tint(q);
-    vec3 c = col * band * 0.85 * k;
-    c += vec3(1.0, 0.97, 0.92) * pow(band, 3.0) * 0.38 * k;          // brighter cores in the cloud
+    vec3 c = col * band * (0.85 + 0.35 * voice) * k;
+    c += vec3(1.0, 0.97, 0.92) * pow(band, 3.0) * (0.3 + 0.7 * voice) * k;          // brighter cores in the cloud
 
     // the rays: fanning down from a point above the band, soft, flickering slowly
     float below = q.y - (y0 + 0.02);
@@ -63,8 +65,8 @@ void main() {
         // light flowing down each ray: soft pulses travelling away from the cloud, each ray at its own pace and phase
         float id = floor(a * 15.0 / 6.2832 + 0.5);
         float ph = hash(vec2(id, 3.7)), sp = 0.7 + 0.6 * hash(vec2(id, 9.1));
-        float flow = pow(0.5 + 0.5 * sin(below * 11.0 - t * 1.3 * sp + ph * 6.2832), 4.0);
-        c += tint(vec2(0.5 + a * 0.3, y0 + 0.1)) * r * reach * smoothstep(0.0, 0.05, below) * (0.16 + 0.32 * flow) * k;
+        float fl = pow(0.5 + 0.5 * sin(below * 11.0 - flow * 1.3 * sp + ph * 6.2832), 4.0);
+        c += tint(vec2(0.5 + a * 0.3, y0 + 0.1)) * r * reach * smoothstep(0.0, 0.05, below) * (0.16 + (0.32 + 0.4 * voice) * fl) * k;
     }
     float g = hash(q * res + t) - 0.5;                                  // a whisper of grain (no banding)
     vec3 bg = vec3(0.020, 0.024, 0.031);

@@ -221,8 +221,8 @@ class Listener:
         rms = float(np.sqrt(np.mean((f.astype(np.float32) / 32768) ** 2)))
         db = 20 * np.log10(max(rms, 1e-5))
         self.floor += (db - self.floor) * (0.3 if db < self.floor else 0.01)
-        loud = max(0.0, min(1.0, (db - self.floor - 6) / 30))
-        return loud * max(0.0, min(1.0, (p - 0.2) / 0.5))
+        loud = max(0.0, min(1.0, (db - self.floor - 4) / 22))
+        return loud * max(0.0, min(1.0, (p - 0.15) / 0.35))
 
     def record(self, onset=None, fresh=False):
         """fresh: drop what the mic queued before now (after Room has spoken: that's its own voice). Not after

@@ -25,6 +25,8 @@ Item {
     // the beat of your voice, the way the music screen follows the music: loudness over its own recent floor
     property real beatFloor: -1
     property real beat: 0
+    property real calm: 0           // the voice for the fog: heavily smoothed
+    property real calm1: 0
     Timer {
         interval: 33; repeat: true; running: vo.active && vo.visible
         onTriggered: {
@@ -39,6 +41,12 @@ Item {
             else vo.beatFloor += (l - vo.beatFloor) * (l < vo.beatFloor ? 0.2 : 0.02)
             var b = vo.mode === "listen" || vo.mode === "speak" ? Math.max(0, Math.min(1, (l - vo.beatFloor) * 4)) : 0
             vo.beat += (b - vo.beat) * (b > vo.beat ? 0.5 : 0.12)
+            // the fog follows the voice slowly but deeply — a swell, not a pulse (following every syllable made it pump like a
+            // speaker cone): rises over about half a second, settles over a second and a half
+            var f = vo.mode === "listen" ? Math.min(1, vo.cur * 0.85) : vo.mode === "speak" ? 0.12 + 0.12 * Math.min(1, room.level) : 0
+            // two stages of smoothing: it eases in and out of each swell instead of jerking (deep but smooth)
+            vo.calm1 += (f - vo.calm1) * (f > vo.calm1 ? 0.07 : 0.03)
+            vo.calm += (vo.calm1 - vo.calm) * 0.06
         }
     }
 
@@ -67,7 +75,7 @@ Item {
         visible: opacity > 0
         property size res: Qt.size(width, height)
         property real t: vo.phase
-        property real level: vo.mode === "listen" ? Math.min(1, vo.cur * 0.7 + vo.beat * 0.5) : vo.mode === "speak" ? 0.15 + vo.beat * 0.25 : 0
+        property real level: vo.calm
         property real amount: vo.look[3]
         Behavior on amount { NumberAnimation { duration: 900; easing.type: Easing.InOutSine } }
         property color c1: vo.look[0]

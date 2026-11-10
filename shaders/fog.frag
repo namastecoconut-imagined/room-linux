@@ -1,7 +1,7 @@
 #version 440
 // The assistant's screen (design: "Horizon fog", Figma "Room — Assistant & Orb"): a band of glowing cloud across
 // the upper middle, in three of the panel's colours (warm, blue, mint, coral — c1…c3, set per state by the screen),
-// with soft rays of light falling from it. Your voice makes the cloud billow, brighten and drop a little; the rays
+// with soft rays of light falling from it, light flowing down them. Your voice makes the cloud billow, brighten and drop a little; the rays
 // reach further. Everything below fades to the near-black the words sit on. Sizes in pixels.
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -40,14 +40,14 @@ vec3 tint(vec2 q) {
 void main() {
     vec2 q = qt_TexCoord0;                       // 0…1, y down
     float aspect = res.x / res.y;
-    float k = amount + 0.35 * level;             // the voice adds to the state's fog
-    float y0 = 0.27 + 0.045 * level;             // the band's middle (drops a little as you speak)
+    float k = amount + 0.45 * level;             // the voice adds to the state's fog
+    float y0 = 0.26 + 0.08 * level;             // the band's middle (drops a little as you speak)
 
     // the cloud: a soft band, its edge and density broken up by slowly moving noise
     float n = fbm(vec2(q.x * 3.2 * aspect / 1.5 + t * 0.05, q.y * 5.0 - t * 0.03));
     float m = fbm(vec2(q.x * 7.0 - t * 0.04, q.y * 9.0 + t * 0.02));
     float dy = q.y - y0 - 0.07 * (n - 0.5);
-    float band = exp(-pow(dy / (0.085 + 0.05 * k), 2.0)) * (0.45 + 0.75 * n) * (0.8 + 0.4 * m);
+    float band = exp(-pow(dy / (0.08 + 0.04 * k + 0.07 * level), 2.0)) * (0.45 + 0.75 * n) * (0.8 + 0.4 * m);
     vec3 col = tint(q);
     vec3 c = col * band * 0.85 * k;
     c += vec3(1.0, 0.97, 0.92) * pow(band, 3.0) * 0.38 * k;          // brighter cores in the cloud
@@ -60,7 +60,11 @@ void main() {
         float r = pow(0.5 + 0.5 * sin(a * 15.0 + 2.0 * fbm(vec2(a * 2.0, t * 0.06))), 3.0);
         r += 0.4 * pow(0.5 + 0.5 * sin(a * 23.0 - t * 0.04 + 2.0), 4.0);
         float reach = exp(-below * (3.4 - 1.2 * level));
-        c += tint(vec2(0.5 + a * 0.3, y0 + 0.1)) * r * reach * smoothstep(0.0, 0.05, below) * 0.26 * k;
+        // light flowing down each ray: soft pulses travelling away from the cloud, each ray at its own pace and phase
+        float id = floor(a * 15.0 / 6.2832 + 0.5);
+        float ph = hash(vec2(id, 3.7)), sp = 0.7 + 0.6 * hash(vec2(id, 9.1));
+        float flow = pow(0.5 + 0.5 * sin(below * 11.0 - t * 1.3 * sp + ph * 6.2832), 4.0);
+        c += tint(vec2(0.5 + a * 0.3, y0 + 0.1)) * r * reach * smoothstep(0.0, 0.05, below) * (0.16 + 0.32 * flow) * k;
     }
     float g = hash(q * res + t) - 0.5;                                  // a whisper of grain (no banding)
     vec3 bg = vec3(0.020, 0.024, 0.031);

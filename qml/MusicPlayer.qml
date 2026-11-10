@@ -437,7 +437,7 @@ Item {
     Item {
         id: vol
         x: mp.col; y: 664; width: mp.colR - mp.col; height: 56
-        visible: music.exists
+        visible: music.exists && music.canVolume !== false      // hidden while Spotify plays on another device
         readonly property real v: mp.sliding ? mp.volDrag : (music.volume || 0) / 100
         Icon { anchors.verticalCenter: parent.verticalCenter; name: "speaker"; size: 22; color: Qt.rgba(0.96, 0.95, 0.94, 0.65) }
         Item {

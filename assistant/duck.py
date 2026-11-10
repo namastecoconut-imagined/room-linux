@@ -10,14 +10,18 @@ import subprocess
 import threading
 
 LEVEL = 0.15            # music at 15 % of where it was while you talk and Room answers
+FLOOR = 0.40            # Room's voice is never quieter than the speaker at 40 % (turned right down for music, it was
+                        # too quiet to hear): the speaker is lifted to this for the conversation, then put back
 
 
 class Duck:
     """down() / up() go to one worker in order (two threads could run up before down and leave music low)."""
 
-    def __init__(self):
+    def __init__(self, floor=FLOOR):
         import queue
         self.saved: dict = {}
+        self.floor = floor
+        self.sink_was = None        # the speaker's level before it was lifted to the floor
         self.q = queue.Queue()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -31,6 +35,19 @@ class Duck:
         while True:
             want = self.q.get()
             try:
+                if want == "down" and self.sink_was is None:
+                    v = self._sink()
+                    if v is not None and v < self.floor - 0.005:
+                        self.sink_was = v
+                        subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{self.floor:.2f}"], timeout=2,
+                                       stderr=subprocess.DEVNULL)
+                        print(f"[assistant] speaker {v:.2f} → {self.floor:.2f} for the conversation", flush=True)
+                if want == "up" and self.sink_was is not None:
+                    v = self._sink()
+                    if v is not None and abs(v - self.floor) < 0.015:        # not changed meanwhile ("volume 20")
+                        subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{self.sink_was:.2f}"], timeout=2,
+                                       stderr=subprocess.DEVNULL)
+                    self.sink_was = None
                 if want == "down" and not self.saved:
                     for sid, app, v in self._streams():
                         self.saved[sid] = (app, v)
@@ -51,6 +68,15 @@ class Duck:
                     self.saved = {}
             except Exception as e:
                 print("[assistant] duck:", repr(e), flush=True)
+
+    @staticmethod
+    def _sink():
+        try:
+            out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True,
+                                 timeout=2).stdout
+            return float(out.split()[1])
+        except Exception:
+            return None
 
     @staticmethod
     def _streams():

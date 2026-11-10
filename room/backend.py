@@ -2,7 +2,7 @@
 import os
 import time
 
-from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import Property, QObject, Qt, QTimer, Signal, Slot
 
 from .airplay import AirPlay
 from .bluetooth import Bluetooth
@@ -30,6 +30,7 @@ class Room(QObject):
     settingsChanged = Signal()
     asleepChanged = Signal()
     voiceChanged = Signal()
+    _sinkFound = Signal()                # (from the speaker lookup's thread)
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
     def __init__(self, cfg: dict):
@@ -48,7 +49,8 @@ class Room(QObject):
         self._settle = QTimer(self); self._settle.setSingleShot(True); self._settle.setInterval(1500)
         self._settle.timeout.connect(self._settled)
         self.musicChanged.connect(self._note_track)
-        self._out_volume = None   # the Surface's own output volume (used for AirPlay)
+        self._out_volume = None   # the volume of the speaker the music plays on (the slider, while it plays on Room)
+        self._sink = "@DEFAULT_AUDIO_SINK@"   # that speaker: a Bluetooth one (its PipeWire id) or the Surface (the default)
         self.wx.changed.connect(self.weatherChanged)
         self.calendar.changed.connect(self.eventsChanged)
         self.lights.changed.connect(self.roomsChanged)
@@ -109,6 +111,7 @@ class Room(QObject):
             here = spot_here()
             if here and not self._spot_here:
                 self.output.poke()          # route it now, not at the next 20 s look
+                self._spotify_full()
                 if self.airplay.playing:
                     print("[room] Spotify started here — pausing AirPlay", flush=True)
                     self.airplay.pause()
@@ -122,6 +125,13 @@ class Room(QObject):
         self.spotify.changed.connect(spot)
         self.airplay.changed.connect(airplay)
         self.bt.connectedChanged.connect(self.output.poke)
+        # the volume slider works on the speaker the music is on: a Bluetooth speaker when one's connected, otherwise
+        # the Surface's own (the Dolby tuning). Looked up off the screen's thread (pw-dump is slow), at start, when a
+        # speaker connects or goes (its sink appears a moment after), and every minute in case.
+        self._sinkFound.connect(self._read_out_volume, Qt.ConnectionType.QueuedConnection)
+        self._find_sink()
+        self.bt.connectedChanged.connect(lambda *_: [QTimer.singleShot(ms, self._find_sink) for ms in (1500, 5000)])
+        self._sink_timer = QTimer(self); self._sink_timer.timeout.connect(self._find_sink); self._sink_timer.start(60000)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
         if self.mic:
@@ -187,12 +197,21 @@ class Room(QObject):
         m.setdefault("nextUp", [])
         m.setdefault("canSeek", m.get("source") != "airplay")
         if m.get("source") == "airplay":
-            # AirPlay plays through the Surface itself, so the slider is the Surface's volume
-            # the phone's own AirPlay volume (it reports every change); the panel's slider sets the Surface's output
-            m["canVolume"] = True
-            m["volume"] = self.airplay.volume
             m["playlists"] = self.spotify.playlists
+        if self._plays_here():
+            # playing on Room (AirPlay, or Room's own Spotify): the slider is the speaker it's coming out of
+            m["canVolume"] = self._out_volume is not None
+            m["volume"] = self._out_volume if self._out_volume is not None else 0
+        else:
+            # Spotify on another device: its volume is that device's, set from the Spotify app
+            m["canVolume"] = False
         return m
+
+    def _plays_here(self) -> bool:
+        if self.airplay.showing:
+            return True
+        p = self.spotify.player or {}
+        return (p.get("device") or {}).get("name", "").lower() == self.spotify.home
 
     @staticmethod
     def _same_song(a: dict, sp: dict) -> bool:
@@ -215,11 +234,29 @@ class Room(QObject):
         aa, sa = set(words(a.get("artist"))), set(words(sp.get("artist")))
         return not aa or not sa or bool(aa & sa)
 
-    # ---- the Surface's own output volume (PipeWire), for AirPlay
+    # ---- the volume of the speaker the music comes out of (PipeWire)
+    def _find_sink(self):
+        import json, subprocess, threading
+        def go():
+            sink = "@DEFAULT_AUDIO_SINK@"
+            try:
+                for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or "[]"):
+                    p = (n.get("info") or {}).get("props") or {}
+                    if n.get("type") == "PipeWire:Interface:Node" and p.get("media.class") == "Audio/Sink" \
+                            and p.get("node.name", "").startswith("bluez_output"):
+                        sink = str(n["id"]); break
+            except Exception:
+                return
+            if sink != self._sink:
+                print(f"[room] volume: the slider is now {'the Bluetooth speaker (' + sink + ')' if sink[0] != '@' else 'the Surface'}", flush=True)
+                self._sink = sink
+                self._sinkFound.emit()
+        threading.Thread(target=go, daemon=True).start()
+
     def _read_out_volume(self):
         import subprocess
         try:
-            out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2).stdout
+            out = subprocess.run(["wpctl", "get-volume", self._sink], capture_output=True, text=True, timeout=2).stdout
             v = int(round(float(out.split()[1]) * 100))   # "Volume: 0.45"
             if v != self._out_volume:
                 self._out_volume = v
@@ -440,47 +477,57 @@ class Room(QObject):
 
     @Slot(int)
     def setVolumeLive(self, v):
-        """While the volume slider is being dragged: the Surface's own Spotify (Soloist) gets the new level straight on
-        its sound stream — instant and smooth; asking Spotify's servers every half second made the music cut in and
-        out. The final value still goes to Spotify on release (setVolume). Anything else: as before."""
-        p = self.spotify.player or {}
-        if self.airplay.showing or (p.get("device") or {}).get("name", "").lower() != self.spotify.home:
-            return self.setVolume(v)
+        """While the slider is being dragged: the speaker's level, straight away (a local change, no servers)."""
+        if self._plays_here():
+            self._set_sink(v)
+
+    @Slot(int)
+    def setVolume(self, v):
+        """Music playing on Room (AirPlay or Room's own Spotify): the speaker it's coming out of — the Bluetooth
+        speaker or the Surface's. Room's Spotify itself stays at full. Spotify on another device: that device's volume
+        (the voice assistant's "turn it down"; the slider is hidden then)."""
+        v = max(0, min(100, int(v)))
+        if self._plays_here():
+            self._set_sink(v)
+        else:
+            self.spotify.set_volume(v)
+
+    def _set_sink(self, v):
         import subprocess
+        v = max(0, min(100, int(v)))
+        subprocess.Popen(["wpctl", "set-volume", self._sink, f"{v / 100:.2f}"], stderr=subprocess.DEVNULL)
+        if v != self._out_volume:
+            self._out_volume = v
+            self.musicChanged.emit()
+        if time.time() - getattr(self, "_vol_said", 0) > 3:
+            self._vol_said = time.time()
+            print(f"[room] volume: {v} on {'the Bluetooth speaker' if self._sink[0] != '@' else 'the Surface'}", flush=True)
+
+    def _spotify_full(self):
+        """Room's own Spotify plays at full — the speaker's volume is the one that changes. Once, when it starts
+        playing here (turned down from the phone afterwards, it's left alone). Its sound stream too: the old slider
+        turned that down, and Soloist keeps it."""
+        import subprocess
+        dev = (self.spotify.player or {}).get("device") or {}
+        if (dev.get("volume_percent") or 0) < 100:
+            print(f"[room] Spotify here was at {dev.get('volume_percent')} % — to full", flush=True)
+            self.spotify.set_volume(100)
         sid = self._soloist_stream()
         if sid:
-            subprocess.Popen(["wpctl", "set-volume", str(sid), f"{max(0, min(100, int(v))) / 100:.2f}"])
-        if not getattr(self, "_live_said", 0) or time.time() - self._live_said > 3:
-            self._live_said = time.time()
-            print(f"[room] volume slider: Spotify here → its stream {sid or '(not found)'} at {v}", flush=True)
+            subprocess.Popen(["wpctl", "set-volume", str(sid), "1.0"], stderr=subprocess.DEVNULL)
 
     def _soloist_stream(self):
         import json, subprocess
-        if time.time() - getattr(self, "_solo_at", 0) < 10:
-            return self._solo_id
-        self._solo_at, self._solo_id = time.time(), None
         try:
             for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
                 p = (n.get("info") or {}).get("props") or {}
                 who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
                 if n.get("type") == "PipeWire:Interface:Node" and p.get("media.class") == "Stream/Output/Audio" \
                         and ("soloist" in who or "spotify" in who):
-                    self._solo_id = n["id"]; break
+                    return n["id"]
         except Exception:
             pass
-        return self._solo_id
-
-    @Slot(int)
-    def setVolume(self, v):
-        if self.airplay.showing:
-            import subprocess
-            v = max(0, min(100, int(v)))
-            self._out_volume = v
-            self.airplay.volume = v
-            subprocess.Popen(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{v / 100:.2f}"])
-            self.musicChanged.emit()
-        else:
-            self.spotify.set_volume(v)
+        return None
 
     # ---------------------------------------------------------------- screen off / on, the Surface's buttons
     def _needs_screen(self):
@@ -543,12 +590,12 @@ class Room(QObject):
                 base = self._vol_last
             else:
                 try:
-                    out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True, timeout=2).stdout
+                    out = subprocess.run(["wpctl", "get-volume", self._sink], capture_output=True, text=True, timeout=2).stdout
                     base = round(float(out.split()[1]) * 100)
                 except Exception:
                     base = 50
             v = max(0, min(100, base + delta))
-            subprocess.Popen(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{v / 100:.2f}"])
+            self._set_sink(v)
             what = "speaker"
         self._vol_last, self._vol_what = v, what
         self.volumeShown.emit(v, what)

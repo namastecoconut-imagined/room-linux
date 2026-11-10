@@ -6,17 +6,29 @@ The Room panel as a native Qt Quick app. The screens are drawn on the GPU, and t
 
 1. **Touch.** Install the linux-surface kernel and `iptsd`, which fix jumpy touch and ghost touches. Follow the Fedora steps at https://github.com/linux-surface/linux-surface/wiki/Installation-and-Setup, then reboot.
 2. **Battery.** In the Surface UEFI (hold volume-up while powering on), turn on **Battery Limit**. This caps the charge at 50% so the battery doesn't swell while the Surface is always plugged in.
-3. **Room:**
+3. **Config.** Copy `config.json` from the Mac (`Downloads/RoomPanel/config.json`) to `~/.config/room/config.json`
+   (with `"anthropicKey"` and `"sarvamKey"` for the assistant). Keys live only there, never in this repo.
+4. **Room — everything, in one go:**
    ```bash
-   git clone <this repo> ~/room && cd ~/room && bash scripts/install.sh
+   git clone https://github.com/namastecoconut-imagined/room-linux ~/room && bash ~/room/scripts/install.sh
    ```
-4. **Config.** Copy `config.json` from the Mac (`Downloads/RoomPanel/config.json`) to `~/.config/room/config.json`. Then set `"here": "Living room"` and add the living-room lights under `"rooms"`.
+   The panel, AirPlay ("Room"), Spotify Connect ("Room", asks for the Soloist key once), the voice assistant,
+   never-suspend, the sound fixes, and the `room-update` / `room-kiosk` commands.
+5. **Kiosk** (just the panel, no desktop; signs in by itself): `room-kiosk on`, restart. Back to GNOME: `room-kiosk off`.
 
-Room starts with the session. It doesn't restart itself.
+What runs (all user services, the same under GNOME and in kiosk mode):
 
-- Just the panel, no desktop (cage, signs in by itself): `room-kiosk on` · back to GNOME: `room-kiosk off`
-- AirPlay music ("Room"): `bash scripts/airplay.sh`
-- Spotify on the Surface itself (Spotify Connect speaker "Room", via Spotify Soloist): `bash scripts/spotify-connect.sh`
+| service | what | log |
+|---|---|---|
+| `room` | the panel | `journalctl --user -u room -f` |
+| `room-assistant` | "Alexa" (`assistant/`) | `journalctl --user -u room-assistant -f` |
+| `room-airplay` | AirPlay receiver (shairport-sync) | `journalctl --user -u room-airplay -f` |
+| `room-spotify` | Spotify Connect speaker (Soloist) | `journalctl --user -u room-spotify -f` |
+
+Room itself doesn't restart on its own (a crash stays visible); the others do.
+Versions are locked: `requirements.lock` (the panel) and `assistant/requirements.lock` (the assistant) — installs
+and updates use exactly those. To change one, edit `requirements.txt`, test, and re-lock.
+
 - Stop it: `systemctl --user stop room` · run it in a terminal: `cd ~/room && .venv/bin/python -m room`
 - From the Mac: `ssh namastecoconut@room.local`
 
@@ -25,6 +37,8 @@ Room starts with the session. It doesn't restart itself.
 ```bash
 room-update
 ```
+
+Pulls, installs the locked versions, keeps the fixes in place, restarts Room and the assistant.
 
 ## Work on it
 

@@ -14,7 +14,7 @@ Item {
     Timer { interval: 50; repeat: true; running: al.visible; onTriggered: al.t += 0.05 }
 
     MouseArea { anchors.fill: parent }          // nothing underneath is pressed while it shows
-    Rectangle { anchors.fill: parent; color: "#060505" }
+    Rectangle { anchors.fill: parent; anchors.margins: -60; color: "#060505" }
     Glow { anchors.centerIn: parent; width: 1300; height: 1300; color: Theme.warm; strength: 0.16 + 0.1 * (0.5 + 0.5 * Math.sin(al.t * 2.4)) }
     Icon {
         anchors.horizontalCenter: parent.horizontalCenter; y: 170

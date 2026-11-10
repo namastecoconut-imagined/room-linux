@@ -49,11 +49,12 @@ Item {
     }
 
     // ---------------------------------------------------------------- the backdrop
-    Rectangle { anchors.fill: parent; color: "#050608"; opacity: vo.mode === "gone" ? 0 : 1
+    // (both a little past the screen's edges, so the burn-in drift never shows an edge)
+    Rectangle { anchors.fill: parent; anchors.margins: -60; color: "#050608"; opacity: vo.mode === "gone" ? 0 : 1
                 Behavior on opacity { NumberAnimation { duration: 350 } } }
     // ---------------------------------------------------------------- light behind fluted glass (shaders/fluted.frag)
     ShaderEffect {
-        anchors.fill: parent
+        anchors.fill: parent; anchors.margins: -60
         opacity: vo.mode === "gone" ? 0 : vo.mode === "miss" ? 0.4 : vo.mode === "done" ? 0.7 : 1
         Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.OutCubic } }
         visible: opacity > 0

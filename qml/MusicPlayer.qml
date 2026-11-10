@@ -81,7 +81,7 @@ Item {
     // the phone's wash: the cover shrunk to 6 × 4 pixels (saturated, darkened) and stretched smoothly over the
     // screen, so it's the cover's colours as soft light; crossfades when the song changes
     Rectangle {
-        anchors.fill: parent
+        anchors.fill: parent; anchors.margins: -60   // past the screen's edges: the burn-in drift never shows an edge
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop { position: 0; color: Theme.rgb(music.rgb2 || [30, 28, 26]) }
@@ -93,7 +93,7 @@ Item {
         id: washRep
         model: 2   // two layers so a new wash fades in over the old one
         Image {
-            anchors.fill: parent
+            anchors.fill: parent; anchors.margins: -60   // past the screen's edges: the burn-in drift never shows an edge
             property string url: ""
             source: url
             smooth: true; mipmap: false
@@ -118,7 +118,7 @@ Item {
     Component.onCompleted: { showWash(); if (startScreen === "musicspk") picking = true }
     // the phone's dim: darker to the right, where the controls are
     Rectangle {
-        anchors.fill: parent
+        anchors.fill: parent; anchors.margins: -60   // past the screen's edges: the burn-in drift never shows an edge
         gradient: Gradient {
             orientation: Gradient.Horizontal
             GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.38) }

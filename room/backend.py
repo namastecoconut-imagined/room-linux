@@ -12,7 +12,7 @@ from .lights import Lights
 from .screen import Screen
 from .spotify import Spotify
 from .things import Things
-from .assistant import Assistant
+from .mic import RoomMic
 from .weather import Weather
 from . import demo
 
@@ -26,7 +26,6 @@ class Room(QObject):
     statusChanged = Signal()
     thingsChanged = Signal()
     alertChanged = Signal()
-    voiceChanged = Signal()
     settingsChanged = Signal()
     asleepChanged = Signal()
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
@@ -55,7 +54,6 @@ class Room(QObject):
         self.screen = Screen(cfg)
         self.screen.statusChanged.connect(self.statusChanged)
         self._level = 0.0
-        self._mic = None
         self._things = Things(cfg, self.lights)
         self._things.changed.connect(self.thingsChanged)
         self._things.alertChanged.connect(self.alertChanged)
@@ -71,9 +69,10 @@ class Room(QObject):
         self.bt.changed.connect(self.settingsChanged)
         self._kiosk = False
         self._desktop_note = ""
-        self.assistant = Assistant(self)
-        self.assistant.changed.connect(self.voiceChanged)
-        self.assistant.levelChanged.connect(self._voice_level)
+        self.mic = RoomMic(self) if cfg.get("roomMic") is not False else None
+        if self.mic:
+            self.mic.level.connect(self._sound_level)
+            self.mic.heard.connect(self.sleep.hear)
 
     def start(self):
         self._things.start()
@@ -89,7 +88,6 @@ class Room(QObject):
         self.lights.start()
         self.spotify.start()
         self.airplay.start()
-        self.assistant.start()
         from .output import Output
         self.output = Output(self.cfg); self.output.start()
         self.airplay.changed.connect(self.output.poke)
@@ -105,10 +103,8 @@ class Room(QObject):
         self.bt.connectedChanged.connect(self.output.poke)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
-        # the room-sound ripple on standby comes from the voice process's mic when voice is on; the Qt mic is only a
-        # fallback, off unless asked for (opening it crashed in testing)
-        if not self.assistant.available() and (os.environ.get("ROOM_MIC") == "1" or self.cfg.get("standbyMic") is True):
-            self._start_mic()
+        if self.mic:
+            self.mic.start()
 
     # ---------------------------------------------------------------- what the screens read
     @Property("QVariantMap", notify=weatherChanged)
@@ -272,53 +268,15 @@ class Room(QObject):
         self._display.set_dim(standby and dim)
         self.spotify.relaxed = standby
 
-    @Property(bool, notify=voiceChanged)
+    @Property(bool, constant=True)
     def micOn(self):
-        """Whether the room's sound is being listened to (it drives the standby ripple and the music beat)."""
-        return self.assistant.state != "off" or os.environ.get("ROOM_MIC") == "1"
+        """Whether the room's loudness is measured (it drives the standby ripple and the music beat)."""
+        return self.mic is not None and not self.demo
 
-    @Property("QVariantMap", notify=voiceChanged)
-    def voice(self):
-        """For the Alexa screen: state (off · idle · listening · thinking · speaking), what was heard, the answer."""
-        a = self.assistant
-        if self.demo and os.environ.get("ROOM_DEMO_VOICE"):
-            # stages to check the screen with: wake · heard · think · done · weather · timer · music · miss · off
-            st = os.environ["ROOM_DEMO_VOICE"]
-            q = {"weather": "What's the weather like this evening", "timer": "Set a timer for ten minutes",
-                 "music": "Play something mellow", "miss": ""}.get(st, "Turn the living room to forty percent")
-            d = {"state": "listening", "stage": st, "heard": q, "reply": "", "line": "", "card": "", "error": "",
-                 "on": st != "off", "following": False}
-            if st == "wake":
-                d["heard"] = ""
-            elif st == "heard":
-                d["heard"] = "Turn the living room"
-            elif st == "think":
-                d["state"] = "thinking"
-            elif st == "done":
-                d.update(state="idle", line="living room · 40%")
-            elif st == "weather":
-                d.update(state="speaking", stage="done", card="weather",
-                         reply="It's 24 and clear now, cooling to about 19 by ten. No rain tonight.",
-                         line="24° and clear · 19° by ten")
-            elif st == "timer":
-                d.update(state="speaking", stage="done", card="timer", reply="Ten minutes, starting now.", line="timer · 10 min")
-            elif st == "music":
-                d.update(state="speaking", stage="done", card="music", reply="Here's something mellow.", line="playing late night jazz")
-            elif st == "miss":
-                d.update(state="idle", stage="miss")
-            elif st == "off":
-                d.update(state="off", stage="idle", heard="", error="Voice isn't set up yet")
-            return d
-        return {"state": a.state, "stage": a.stage, "heard": a.heard, "reply": a.reply, "line": a.line, "card": a.card,
-                "error": a.error, "on": a.state != "off", "following": a.following}
-
-    def _voice_level(self):
+    def _sound_level(self, rms: float):
         import math
-        self.sleep.hear(self.assistant.level)
-        if self.assistant.state in ("listening", "thinking", "speaking"):
-            self.sleep.wake("Alexa")
-        db = 20 * math.log10(max(self.assistant.level, 1e-5))
-        v = max(0.0, min(1.0, (db + 60) / 45))
+        db = 20 * math.log10(max(rms, 1e-5))
+        v = max(0.0, min(1.0, (db + 60) / 45))         # quiet room ≈ 0, talking ≈ 0.5, music ≈ 0.8
         self._level += (v - self._level) * (0.5 if v > self._level else 0.12)
         self.levelChanged.emit()
 
@@ -476,8 +434,6 @@ class Room(QObject):
             return "music playing"
         if self.alert and self.alert.get("kind"):
             return "an alarm or timer is showing"
-        if self.assistant.state in ("listening", "thinking", "speaking"):
-            return "Alexa is busy"
         return ""
 
     @Property(bool, notify=asleepChanged)
@@ -551,10 +507,6 @@ class Room(QObject):
             if self.airplay.showing:          # show the new place straight away; the phone confirms it shortly
                 self.airplay.position, self.airplay.at = float(s), time.time()
                 self.musicChanged.emit()
-
-    @Slot()
-    def listen(self):
-        self.assistant.listen()
 
     # ---------------------------------------------------------------- Settings: screen, Bluetooth, the desktop
     @Property("QVariantMap", notify=settingsChanged)
@@ -634,36 +586,3 @@ class Room(QObject):
             self.settingsChanged.emit()
             return
         subprocess.Popen(["systemctl", "reboot"])
-
-    @Slot()
-    def cancelVoice(self):
-        self.assistant.cancel()
-
-    # ---------------------------------------------------------------- room sound for the standby ripple
-    def _start_mic(self):
-        try:
-            from PySide6.QtMultimedia import QAudioFormat, QAudioSource, QMediaDevices
-        except Exception:
-            return
-        dev = QMediaDevices.defaultAudioInput()
-        if dev.isNull():
-            return
-        fmt = QAudioFormat()
-        fmt.setSampleRate(16000); fmt.setChannelCount(1); fmt.setSampleFormat(QAudioFormat.SampleFormat.Int16)
-        self._mic = QAudioSource(dev, fmt, self)
-        self._mic_io = self._mic.start()
-        if not self._mic_io:
-            return
-        self._mic_io.readyRead.connect(self._read_mic)
-
-    def _read_mic(self):
-        import array, math
-        raw = bytes(self._mic_io.readAll().data())
-        if len(raw) < 64:
-            return
-        a = array.array("h", raw[: len(raw) // 2 * 2])
-        rms = math.sqrt(sum(x * x for x in a[::4]) / max(1, len(a) // 4)) / 32768
-        db = 20 * math.log10(max(rms, 1e-5))          # −100 … 0
-        v = max(0.0, min(1.0, (db + 60) / 45))         # quiet room ≈ 0, talking ≈ 0.5, music ≈ 0.8
-        self._level += (v - self._level) * (0.5 if v > self._level else 0.12)
-        self.levelChanged.emit()

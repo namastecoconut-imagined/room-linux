@@ -31,7 +31,7 @@ on)
 
   echo "▸ The power button: screen off / on (Room handles it), not shutting down"
   # Without GNOME, a press of the power button shuts the Surface down (the system default). Now the system leaves a
-  # press to Room — screen off, Room keeps listening; press again (or a sound, a touch) and it's back. Holding the
+  # press to Room — screen off; press again (or a sound, a touch) and it's back. Holding the
   # button for a few seconds still turns the Surface off.
   sudo mkdir -p /etc/systemd/logind.conf.d
   printf '[Login]\nHandlePowerKey=ignore\nHandlePowerKeyLongPress=poweroff\nHandleSuspendKey=ignore\n' \

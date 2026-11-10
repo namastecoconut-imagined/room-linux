@@ -198,7 +198,7 @@ Item {
             T { x: 44; y: 44; text: confirm.kind === "off" ? "Shut down the Surface?" : "Switch to the desktop?"; font.pixelSize: 32 }
             T {
                 x: 44; y: 100; width: 512; wrapMode: Text.WordWrap; font.pixelSize: 20; color: Theme.sub; lineHeight: 1.3
-                text: confirm.kind === "off" ? "Room, AirPlay and “Alexa” stop until you press the power button to start it again."
+                text: confirm.kind === "off" ? "Room, AirPlay and Spotify stop until you press the power button to start it again."
                     : "The Surface restarts into GNOME. To come back to just the panel, run  room-kiosk on  and restart."
             }
             Row {

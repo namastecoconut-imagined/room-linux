@@ -76,7 +76,5 @@ exec bash "$HERE/scripts/update.sh" "\$@"
 UPD
 chmod +x ~/.local/bin/room-update
 
-bash "$HERE/scripts/voice.sh"
-
 systemctl --user restart room.service
 echo "✓ Room is running. Update any time with:  room-update"

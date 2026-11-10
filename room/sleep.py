@@ -1,13 +1,13 @@
 """The screen goes properly off when nobody's around, and comes back the moment the room hears something.
 
 On standby, once the room has been quiet for 5 minutes (no sound above the room's own background, no touch, nothing
-playing, no alarm, Room not talking), the backlight goes off and nothing is drawn. Any sound clearly above the
+playing, no alarm), the backlight goes off and nothing is drawn. Any sound clearly above the
 background (a voice, a door, footsteps — 12 dB over the room's usual hum) brings the standby screen back; so does a
-touch, "Alexa", an alarm or a timer. The power button does the same by hand: off now, on again.
+touch, an alarm or a timer. The power button does the same by hand: off now, on again.
 
 The background is learnt as it goes: it follows quiet stretches down quickly and rises only slowly, so a fan or the
-fridge becomes "silence" while a voice still stands out. Sound comes from the voice process's mic (already open for
-"Alexa"), so nothing extra listens.
+fridge becomes "silence" while a voice still stands out. The loudness comes from room/mic.py (loudness only —
+nothing is recognised or kept).
 """
 import math
 import time
@@ -28,7 +28,7 @@ class Sleep(QObject):
     def __init__(self, display, busy):
         super().__init__()
         self.display = display
-        self.busy = busy           # () → True while something needs the screen (music, an alarm, Room talking)
+        self.busy = busy           # () → True while something needs the screen (music, an alarm)
         self.asleep = False
         self.standby = False
         self.floor = None          # the room's background level, dB

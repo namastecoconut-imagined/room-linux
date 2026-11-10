@@ -44,8 +44,9 @@ journalctl --user -u room -f                                          # live log
 | `qml/ColourWash.qml` · `qml/Glass.qml` | the song's colours as a moving background · frosted cards |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `qml/DotText.qml` | the 5×7 dot numerals; dots glide to their new places each minute |
-| `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound, touch, "Alexa" |
-| `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected |
+| `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
+| `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
+| `room/mic.py` | how loud the room is (screen wake, standby ripple, music beat) |
 | `room/wiz.py` | WiZ bulbs (UDP 38899) |
 | `room/spotify.py` | Spotify Web API (shares the iPhone panel's login) |
 | `room/weather.py` · `room/calendar.py` | Open-Meteo, Google Calendar iCal |
@@ -53,21 +54,12 @@ journalctl --user -u room -f                                          # live log
 Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
 `pyside6-qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o shaders/standby.frag.qsb shaders/standby.frag`
 
-## Voice
+## Room's sound
 
-Set up once with `bash scripts/voice.sh` (install.sh runs it too).
-
-- **Listening** (`voice/ears.py`) — the system's default mic as it is (on the Surface: the noise-suppressed "Surface
-  Mic"), no processing of Room's own. "Alexa" is spotted on the Surface (openWakeWord); what follows
-  streams to Sarvam (saaras:v4, en-IN — `sarvamKey`). You've finished after ~0.7 s without speech (Silero VAD).
-- **Understanding** — Claude (`room/brain.py`, the iPhone panel's prompt and tool) with a snapshot of the home;
-  `room/intents.py`, plain rules, when there's no key or no internet. `room/assistant.py` carries out the actions.
-- **Answers** — Deepgram's Aura voice, streamed (`deepgramKey`); Kokoro (`af_heart`) offline. Chimes in `voice/cues`.
-
-The voice side is its own process (`voice/roomvoice.py`, own Python in `voice/.venv`) — if it fails, Room carries on.
-Settings in config.json: `"voice": false` turns it off; `"voiceSettings": {"listen": true, "wakeThreshold": 0.4,
-"bargeIn": true, "mic": "<pipewire node>", "voice": "bf_emma", "speed": 1.05, "voiceVolume": 1.0, "voiceMinLevel": 0.75}` —
-Room's voice never plays quieter than voiceMinLevel of the speakers (the output is lifted while it talks, then put back).
+`room/mic.py` measures how loud the room is (the default mic, through pw-record) — loudness only, nothing is recognised
+or kept. It brings the screen back at a sound, ripples the standby dots and gives the music screen its beat.
+`"roomMic": false` in config.json turns it off. `room/output.py` keeps the Surface's own speakers at full underneath
+the volume slider and puts music streams that were left turned down back to full when Room starts.
 
 ## Burn-in care
 
@@ -77,7 +69,7 @@ exercises every pixel. A tap stops it.
 
 ## Buttons and screen
 
-- Power button: screen off (Room keeps listening); a sound, a touch or "Alexa" brings it back. Hold it to power off.
+- Power button: screen off; a sound or a touch brings it back. Hold it to power off.
 - Volume buttons: the music's volume while something plays, else the speaker's.
 - On standby, after 5 quiet minutes the backlight goes fully off; any real sound brings it back.
 - Settings → This panel: switch to the desktop, or shut down.

@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# What room-update runs: pull the latest Room, refresh its packages (and voice's, if voice is set up), restart.
+# What room-update runs: pull the latest Room, refresh its packages, restart.
 set -e
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 cd "$HERE"
 git pull --ff-only
 "$HERE/.venv/bin/pip" install -q -r requirements.txt
-if [ -x "$HERE/voice/.venv/bin/python" ] && { command -v uv || [ -x "$HOME/.local/bin/uv" ]; } >/dev/null; then
-  export PATH="$HOME/.local/bin:$PATH"
-  uv pip install -q --python "$HERE/voice/.venv/bin/python" -r voice/requirements.txt
-fi
+# the old voice assistant is gone: its Python, models and state go too
+if [ -d "$HERE/voice" ] && [ -z "$(git ls-files voice)" ]; then rm -rf "$HERE/voice"; fi
+rm -rf "$HOME/.local/share/room/voice" "$HOME/.local/state/room/wake-paused"
 # AirPlay: bigger sound buffers (crackles came from the Surface not keeping up with small ones — the speaker tuning,
 # the screen and listening all share it). ~85 ms more delay, unnoticeable for music.
 D=~/.config/systemd/user/room-airplay.service.d

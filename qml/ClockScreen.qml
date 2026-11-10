@@ -62,7 +62,6 @@ Item {
             }
         }
         T { visible: cs.timers.length === 0; text: "No timers running"; font.pixelSize: 24; color: Theme.sub; topPadding: 8 }
-        T { text: "Or say “Alexa, set a timer for 20 minutes”"; font.pixelSize: 18; color: Theme.sub; topPadding: 10 }
     }
 
     // ---------------------------------------------------------------- right: the next alarm (to read), new, the list

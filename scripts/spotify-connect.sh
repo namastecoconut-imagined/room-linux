@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Spotify Connect for Room: the Surface becomes a Spotify speaker called "Room", so "Alexa, play …" plays on the
-# Surface itself — no phone, no AirPlay. Uses Spotify Soloist, Spotify's own headless Spotify Connect player
+# Spotify Connect for Room: the Surface becomes a Spotify speaker called "Room", so music plays on the Surface
+# itself — no phone, no AirPlay. Uses Spotify Soloist, Spotify's own headless Spotify Connect player
 # (developer.spotify.com/documentation/soloist), run by scripts/soloist-run.sh, which also keeps it up to date.
 # AirPlay is untouched. Needs Spotify Premium and a Soloist API key (free). Safe to run again.
 set -euo pipefail

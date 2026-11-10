@@ -1,9 +1,0 @@
-numpy
-requests
-soundfile
-onnxruntime
-kokoro-onnx>=0.4
-websockets
-scipy
-tqdm
-scikit-learn

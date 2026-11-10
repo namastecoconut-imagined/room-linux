@@ -31,7 +31,7 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: startScreen === "clockedit" ? "clock" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "assistant", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: startScreen === "clockedit" ? "clock" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
@@ -46,20 +46,6 @@ Window {
     readonly property bool dayTime: { var h = new Date(now * 1000).getHours(); return h >= 7 && h < 18 }
     property bool sheetOpen: false        // speaker picker / library over the player
 
-    // Alexa: the wake word (or a tap) brings up the assistant from anywhere, standby included; a few seconds after
-    // the answer it goes back to where you were
-    readonly property string voiceState: room.voice.state || "off"
-    readonly property bool talking: voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking"
-    property string beforeVoice: "home"
-    onVoiceStateChanged: {
-        if (voiceState === "listening" && screen !== "assistant") { beforeVoice = screen; screen = "assistant"; wake() }
-        if (voiceState === "idle" && screen === "assistant") voiceClose.restart()
-        else voiceClose.stop()
-    }
-    // like the phone: a quick close after a plain "done", longer with a card to read, a moment after a miss
-    readonly property string voiceStage: room.voice.stage || ""
-    onVoiceStageChanged: if (voiceState === "idle" && screen === "assistant") voiceClose.restart()
-    Timer { id: voiceClose; interval: room.voice.card ? 7000 : win.voiceStage === "miss" ? 3400 : 2600; onTriggered: if (win.screen === "assistant" && !win.talking) win.screen = win.beforeVoice === "assistant" ? "home" : win.beforeVoice }
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
@@ -76,7 +62,7 @@ Window {
     property string refreshedOn: ""
     onNowChanged: {
         var at = timing.refreshAt
-        if (!at || !standbyOn || alerting || talking || refreshRun.running) return
+        if (!at || !standbyOn || alerting || refreshRun.running) return
         var d = new Date(now * 1000), hm = Theme.two(d.getHours()) + ":" + Theme.two(d.getMinutes()), day = d.toDateString()
         if (hm === at && refreshedOn !== day) { refreshedOn = day; refreshRun.start() }
     }
@@ -89,11 +75,11 @@ Window {
         interval: 1000; running: true; repeat: true
         onTriggered: {
             var t = Date.now() / 1000
-            if (win.screen === "music" || win.sheetOpen || win.alerting || win.talking) win.lastTouch = t   // the player (and an alert) keeps it awake
+            if (win.screen === "music" || win.sheetOpen || win.alerting) win.lastTouch = t   // the player (and an alert) keeps it awake
             // scrolling, mouse moves and keys count as use too (seen by the app itself, so a list that takes the
             // scroll still counts); on standby only a real tap wakes it
             if (!win.standbyOn) win.lastTouch = Math.max(win.lastTouch, room.lastInput())
-            var wait = win.screen !== "home" && win.screen !== "assistant" ? win.timing.menuStandbySec
+            var wait = win.screen !== "home" ? win.timing.menuStandbySec
                      : (win.lateNight ? win.timing.nightStandbySec : win.timing.standbySec)
             var want = t - win.lastTouch > wait
             if (want && !win.standbyOn) win.enterStandby()
@@ -127,7 +113,6 @@ Window {
             onOpenWeather: win.screen = "weather"
             onOpenReminders: win.screen = "reminders"
             onOpenSettings: win.screen = "settings"
-            onOpenAssistant: { win.beforeVoice = "home"; win.screen = "assistant"; room.listen() }
         }
         RoomScreen {
             name: win.roomName
@@ -156,13 +141,6 @@ Window {
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }
-        Assistant {
-            active: win.screen === "assistant"
-            opacity: active ? 1 : 0; visible: opacity > 0 && !win.covered
-            // in fast (it should feel instant after "Alexa"), out gently
-            Behavior on opacity { NumberAnimation { duration: win.screen === "assistant" ? 150 : 300; easing.type: Easing.OutQuad } }
-            onClose: win.screen = "home"
-        }
         MusicPlayer {
             now: visible ? win.now : 0
             opacity: win.screen === "music" ? 1 : 0
@@ -179,8 +157,7 @@ Window {
             anchors.fill: parent
             opacity: win.standbyOn ? 1 : 0
             visible: opacity > 0
-            // "Alexa" from standby: out of the way at once
-            Behavior on opacity { NumberAnimation { duration: !win.standbyOn && win.screen === "assistant" ? 150 : 900; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: 900; easing.type: Easing.OutCubic } }
             Rectangle { anchors.fill: parent; color: "black" }
             Standby {
                 id: plainFace

@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls.Basic
 
 // Reminders, kept on this panel only. Tap one to tick it off (tap again to bring it back), hold to delete it. Due
-// today shows in amber. Add one with the button (type it and pick when), or by voice. The list sits low on the
+// today shows in amber. Add one with the button (type it and pick when). The list sits low on the
 // screen and the counts up top, clear of the strips the touch screen doesn't answer in.
 Item {
     id: rm
@@ -30,7 +30,7 @@ Item {
     }
     T {
         x: 744; y: Theme.deadA0 + 60; width: 528; wrapMode: Text.WordWrap; lineHeight: 1.3
-        text: "Kept on this panel only. When one's due, Room chimes and shows it on standby until you tick it off. Tap a reminder to tick it, hold to delete it — or say “Alexa, remind me to … at 6”."
+        text: "Kept on this panel only. When one's due, Room chimes and shows it on standby until you tick it off. Tap a reminder to tick it, hold to delete it."
         font.pixelSize: 19; color: Theme.sub
     }
 

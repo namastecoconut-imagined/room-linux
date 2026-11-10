@@ -38,7 +38,7 @@ def days_text(days: list[int]) -> str:
 
 def _chime_file() -> str:
     """The phone's alarm chime; a soft two-note one (written once) if it's missing."""
-    phone = Path(__file__).resolve().parent.parent / "voice" / "cues" / "alarm.wav"
+    phone = Path(__file__).resolve().parent.parent / "assets" / "sounds" / "alarm.wav"
     if phone.exists():
         return str(phone)
     p = STATE_DIR / "chime.wav"

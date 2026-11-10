@@ -31,7 +31,7 @@ Item {
     property real t0: Date.now() / 1000
     property real bt: 0
     property real gt: 0
-    // a voice swell and ripples (only when the mic is on)
+    // a swell and ripples with the room's sound (only when the room's loudness is measured)
     property real level: 0
     property real floorL: -1
     property real glowV: 0

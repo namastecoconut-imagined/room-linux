@@ -1,6 +1,6 @@
 """Keeps sound going through the speaker tuning. Your Dolby filter (the Windows tuning rebuilt for Linux) is a sink of
 its own; when a Bluetooth speaker disconnects, PipeWire falls back to the raw "Built-in Audio" sink instead, so
-everything — Room's voice included — plays untuned and much quieter. Every 10 s: if the default output is the
+everything plays untuned and much quieter. Every 10 s: if the default output is the
 Surface's raw speakers and a tuned sink exists (its name contains "preferSink" from config.json, "Dolby" by default),
 the tuned one becomes the default again. A Bluetooth speaker or anything else you pick is left alone.
 
@@ -8,6 +8,12 @@ AirPlay always goes to the Bluetooth speaker when one is connected (whatever the
 Surface's speakers when it isn't ("airplayToBluetooth": false turns that off). Checked the moment AirPlay starts or
 changes (Room is told by the AirPlay reader), and every 20 s otherwise — the PipeWire listing it reads is too heavy to
 run every few seconds on a battery.
+
+At start (and every few minutes) the levels underneath are put right: the Surface's own speakers at full — PipeWire's
+level for the raw speakers and the chip's Master/Speaker controls; the volume slider works on the output in front of
+them (the Dolby tuning, or a Bluetooth speaker), and a lowered level underneath (it sat around 20 %) only made
+everything quiet — and any music stream left turned down is put back to full (PipeWire remembers a stream's level per
+app, so one left low stays low for good; how loud music is belongs to the phone, Spotify and the speaker).
 """
 import json
 import subprocess
@@ -38,6 +44,8 @@ class Output:
         while True:
             try:
                 nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or "[]")
+                if n % 15 == 0:                 # at start, then every ~5 minutes
+                    self.levels(nodes, heal=(n == 0))
                 if self.airplay_bt:
                     self.airplay(nodes)
                 if not self.off:
@@ -105,6 +113,31 @@ class Output:
                 self.moved[sid] = ""
         live = {n["id"] for n in nodes}
         self.moved = {k: v for k, v in self.moved.items() if k in live}
+
+    def levels(self, nodes, heal=False):
+        """The Surface's raw speakers at full, and (at start) music streams that were left turned down back to full."""
+        for n in nodes:
+            p = (n.get("info") or {}).get("props") or {}
+            name = p.get("node.name", "")
+            if p.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.pci") and "hdmi" not in name:
+                out = subprocess.run(["wpctl", "get-volume", str(n["id"])], capture_output=True, text=True, timeout=3).stdout
+                if "1.00" not in out or "MUTED" in out:
+                    subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=3)
+                    subprocess.run(["wpctl", "set-mute", str(n["id"]), "0"], timeout=3)
+                    print(f"[room] output: the Surface's speakers were at {out.strip()} — set to full", flush=True)
+            if heal and p.get("media.class") == "Stream/Output/Audio":
+                who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
+                if "soloist" in who or "spotify" in who or name.startswith(("effect_", "output.", "input.")) \
+                        or p.get("node.virtual") or p.get("factory.name") == "filter-chain" or "filter" in name or "loopback" in name:
+                    continue        # Spotify's loudness is Spotify's own volume; filters aren't music
+                vol = ((n.get("info") or {}).get("params") or {}).get("Props") or [{}]
+                v = (vol[0] or {}).get("channelVolumes") or [1.0]
+                if min(v) < 0.99:
+                    subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=3)
+                    print(f"[room] output: {who.split()[0] if who.split() else n['id']} was turned down — back to full", flush=True)
+        for c in ("Master", "Speaker"):
+            subprocess.run(["amixer", "-q", "-c", "0", "sset", c, "100%", "unmute"], timeout=3,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def check(self, nodes):
         sinks, default = {}, None

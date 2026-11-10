@@ -81,7 +81,8 @@ context.modules = [
             webrtc.delay_agnostic = true
             webrtc.high_pass_filter = true
             webrtc.noise_suppression = true
-            webrtc.gain_control = false
+            webrtc.gain_control = true        # cancelling + noise filtering leave the voice quiet (≈ ⅓): this
+                                              # brings it back up to a steady level for "Alexa" and Sarvam
             webrtc.voice_detection = false
         }
         capture.props = { node.name = "room_aec_capture" node.description = "Room echo canceller (mic in)"

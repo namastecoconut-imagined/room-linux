@@ -338,9 +338,9 @@ class Speaker:
         odd = b""
         shape = Voicer(24000)
         # Deepgram streams the voice as it makes it; over a busy Wi-Fi the pieces can arrive slower than they play,
-        # and every gap was a break in the middle of a word. So it starts once AHEAD seconds are in hand and keeps
+        # and every gap was a break in the middle of a word. So it starts once AHEAD seconds (0.3 — pacat holds more) are in hand and keeps
         # that much in hand; the log says if it still ran dry.
-        AHEAD = float(CFG.get("voiceBuffer", 0.8))
+        AHEAD = float(CFG.get("voiceBuffer", 0.3))
         held, started, played_from, sent_s, dry = b"", False, 0.0, 0.0, 0
         def write(out):
             nonlocal sent_s, dry, played_from

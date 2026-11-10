@@ -68,11 +68,11 @@ class Player:
             if self.playing and n < frames:
                 if not self.ended:
                     # ran out mid-answer: pause, and hold more in hand before carrying on — more each time it
-                    # happens in the same answer (0.15 → 0.3 → 0.6 → 1.2 s), so a slow connection costs one or two
+                    # happens in the same answer (0.15 → 0.3 → 0.6 s, never longer: a 1.5 s silence mid-sentence sounded broken), so a slow connection costs a few
                     # pauses, not dozens
                     self.starved += 1
                     self.dry += 1
-                    self.need = min(int(1.2 * self.rate), self.reprime * 2 ** (self.dry - 1))
+                    self.need = min(int(0.6 * self.rate), self.reprime * 2 ** (self.dry - 1))
                 self.playing = False
             self.played += n
         if self.on_played and n:

@@ -131,10 +131,14 @@ class Room(QObject):
         # the volume slider works on the speaker the music is on: a Bluetooth speaker when one's connected, otherwise
         # the Surface's own (the Dolby tuning). Looked up off the screen's thread (pw-dump is slow), at start, when a
         # speaker connects or goes (its sink appears a moment after), and every minute in case.
-        self._sinkFound.connect(self._read_out_volume, Qt.ConnectionType.QueuedConnection)
+        self._sinkFound.connect(self._sink_changed, Qt.ConnectionType.QueuedConnection)
         self._find_sink()
-        self.bt.connectedChanged.connect(lambda *_: [QTimer.singleShot(ms, self._find_sink) for ms in (1500, 5000)])
-        self._sink_timer = QTimer(self); self._sink_timer.timeout.connect(self._find_sink); self._sink_timer.start(60000)
+        # (a Bluetooth speaker's sound output shows up a few seconds after it connects — sometimes many — so look a few
+        # times; and whenever AirPlay starts or changes, and every 15 s in case: it took up to a minute before, and
+        # the phone's volume went to the Surface meanwhile)
+        self.bt.connectedChanged.connect(lambda *_: [QTimer.singleShot(ms, self._find_sink) for ms in (1500, 5000, 10000, 20000)])
+        self.airplay.changed.connect(self._find_sink_soon)
+        self._sink_timer = QTimer(self); self._sink_timer.timeout.connect(self._find_sink); self._sink_timer.start(15000)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
         if self.mic:
@@ -255,6 +259,19 @@ class Room(QObject):
                 self._sink = sink
                 self._sinkFound.emit()
         threading.Thread(target=go, daemon=True).start()
+
+    def _find_sink_soon(self):
+        if time.time() - getattr(self, "_sink_looked", 0) > 3:
+            self._sink_looked = time.time()
+            self._find_sink()
+
+    def _sink_changed(self):
+        # the speaker changed: if the phone set a volume just before (it went to the old speaker), apply it here
+        pv = getattr(self, "_phone_vol", None)
+        if pv and time.time() - pv[1] < 20 and self.airplay.showing:
+            self._set_sink(pv[0])
+        else:
+            self._read_out_volume()
 
     def _read_out_volume(self):
         import subprocess
@@ -508,6 +525,8 @@ class Room(QObject):
 
     def _phone_volume(self, v):
         print(f"[room] AirPlay: the phone's volume is {v}", flush=True)
+        self._phone_vol = (v, time.time())
+        self._find_sink_soon()
         self._vol_said = 0
         self._set_sink(v)
 

@@ -48,6 +48,16 @@ Window {
     readonly property bool dayTime: { var h = new Date(now * 1000).getHours(); return h >= 7 && h < 18 }
     property bool sheetOpen: false        // speaker picker / library over the player
 
+    // the voice assistant (its own program, assistant/): up over everything the moment it listens, a few seconds
+    // after it's done it goes, back to where you were
+    readonly property string voiceState: room.voice.state || "off"
+    readonly property bool voiceBusy: voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking"
+    property bool voiceUp: startScreen === "voice"
+    onVoiceBusyChanged: {
+        if (voiceBusy) { voiceUp = true; voiceHide.stop(); wake() }
+        else if (voiceUp) voiceHide.restart()
+    }
+    Timer { id: voiceHide; interval: room.voice.stage === "miss" ? 2600 : 4500; onTriggered: if (!win.voiceBusy) win.voiceUp = false }
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
@@ -77,7 +87,7 @@ Window {
         interval: 1000; running: true; repeat: true
         onTriggered: {
             var t = Date.now() / 1000
-            if (win.alerting) win.lastTouch = t   // an alarm or timer going off keeps it awake
+            if (win.alerting || win.voiceUp) win.lastTouch = t   // an alarm or timer going off keeps it awake
             // scrolling, mouse moves and keys count as use too (seen by the app itself, so a list that takes the
             // scroll still counts); on standby only a real tap wakes it
             if (!win.standbyOn) win.lastTouch = Math.max(win.lastTouch, room.lastInput())
@@ -184,6 +194,11 @@ Window {
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
+        VoiceOverlay {
+            active: win.voiceUp
+            visible: active || opacity > 0
+            onClose: { win.voiceUp = false }
+        }
         // (checks) where the touch screen doesn't respond
         Repeater {
             model: showDead ? [[Theme.deadA0, Theme.deadB1]] : []

@@ -54,6 +54,11 @@ journalctl --user -u room -f                                          # live log
 Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
 `pyside6-qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o shaders/standby.frag.qsb shaders/standby.frag`
 
+## The voice assistant
+
+Its own program in `assistant/` (its own service, `room-assistant`; see `assistant/README.md`). Room shows it
+(`qml/VoiceOverlay.qml`) and carries out what it decides (`room/voice.py`); if it isn't running, Room is unchanged.
+
 ## Room's sound
 
 `room/mic.py` measures how loud the room is (the default mic, through pw-record) — loudness only, nothing is recognised

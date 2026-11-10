@@ -13,6 +13,7 @@ from .screen import Screen
 from .spotify import Spotify
 from .things import Things
 from .mic import RoomMic
+from .voice import VoiceLink
 from .weather import Weather
 from . import demo
 
@@ -28,6 +29,7 @@ class Room(QObject):
     alertChanged = Signal()
     settingsChanged = Signal()
     asleepChanged = Signal()
+    voiceChanged = Signal()
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
     def __init__(self, cfg: dict):
@@ -69,6 +71,10 @@ class Room(QObject):
         self.bt.changed.connect(self.settingsChanged)
         self._kiosk = False
         self._desktop_note = ""
+        self.voicelink = VoiceLink(self)
+        self.voicelink.changed.connect(self.voiceChanged)
+        self.voicelink.changed.connect(lambda: self.voice.get("state") in ("listening", "thinking", "speaking")
+                                       and self.sleep.wake("the assistant"))
         self.mic = RoomMic(self) if cfg.get("roomMic") is not False else None
         if self.mic:
             self.mic.level.connect(self._sound_level)
@@ -120,6 +126,7 @@ class Room(QObject):
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
         if self.mic:
             self.mic.start()
+        self.voicelink.start()
 
     # ---------------------------------------------------------------- what the screens read
     @Property("QVariantMap", notify=weatherChanged)
@@ -445,7 +452,32 @@ class Room(QObject):
             return "music playing"
         if self.alert and self.alert.get("kind"):
             return "an alarm or timer is showing"
+        if self.voice.get("state") in ("listening", "thinking", "speaking"):
+            return "the assistant is busy"
         return ""
+
+    # ---------------------------------------------------------------- the voice assistant (its own program)
+    @Property("QVariantMap", notify=voiceChanged)
+    def voice(self):
+        """For the screen: state (off · idle · listening · thinking · speaking), stage, heard, reply, line, card."""
+        if self.demo and os.environ.get("ROOM_DEMO_VOICE"):          # screens to check: listen · think · speak · miss
+            st = os.environ["ROOM_DEMO_VOICE"]
+            q = "What's the weather going to be in Bali tomorrow?"
+            return {"listen": {"state": "listening", "stage": "wake", "heard": ""},
+                    "think": {"state": "thinking", "stage": "think", "heard": q},
+                    "speak": {"state": "speaking", "stage": "done", "heard": q,
+                              "reply": "Bali's looking warm tomorrow, around thirty one degrees, with a good chance of a "
+                                       "thunderstorm in the afternoon.", "line": "31° · storms after 2"},
+                    "miss": {"state": "idle", "stage": "miss", "heard": ""}}.get(st, {})
+        return dict(self.voicelink.st)
+
+    @Slot()
+    def listen(self):
+        self.voicelink.listen()
+
+    @Slot()
+    def cancelVoice(self):
+        self.voicelink.cancel()
 
     @Property(bool, notify=asleepChanged)
     def asleep(self):

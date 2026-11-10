@@ -26,4 +26,32 @@ get() { if [ ! -s "$2" ]; then curl -fsSL --retry 3 -o "$2.part" "$1" && mv "$2.
 OWW=https://github.com/dscripka/openWakeWord/releases/download/v0.5.1
 for f in alexa_v0.1.onnx melspectrogram.onnx embedding_model.onnx; do get "$OWW/$f" "$M/$f"; done
 get https://raw.githubusercontent.com/snakers4/silero-vad/master/src/silero_vad/data/silero_vad.onnx "$M/silero_vad.onnx"
-echo "✓ Assistant set up."
+echo "▸ Assistant: Room's voice (Kokoro)"
+K="$HOME/.local/share/room/assistant/kokoro"; mkdir -p "$K"
+KURL=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
+for f in kokoro-v1.0.fp16.onnx voices-v1.0.bin; do get "$KURL/$f" "$K/$f"; done
+
+echo "▸ Assistant: its service (starts with the Surface, restarts if it stops)"
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/room-assistant.service <<UNIT
+[Unit]
+Description=Room's voice assistant
+After=pipewire.service wireplumber.service pipewire-pulse.service
+Wants=pipewire.service
+
+[Service]
+WorkingDirectory=$HERE
+ExecStart=$HERE/assistant/.venv/bin/python -u -m assistant
+Restart=always
+RestartSec=3
+Nice=-5
+
+[Install]
+WantedBy=default.target
+UNIT
+systemctl --user daemon-reload
+systemctl --user enable room-assistant.service >/dev/null
+systemctl --user restart room-assistant.service
+sleep 6
+journalctl --user -u room-assistant -n 8 --no-pager -o cat
+echo "✓ Assistant set up and running. Its log: journalctl --user -u room-assistant -f"

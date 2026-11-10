@@ -17,6 +17,12 @@ if [ -f ~/.config/systemd/user/room-airplay.service ] && [ ! -f "$D/buffers.conf
   systemctl --user daemon-reload
   systemctl --user restart room-airplay.service
 fi
+# the assistant (its own Python and service), if it's set up
+if [ -x "$HERE/assistant/.venv/bin/python" ]; then
+  export PATH="$HOME/.local/bin:$PATH"
+  command -v uv >/dev/null && uv pip install -q --python "$HERE/assistant/.venv/bin/python" -r assistant/requirements.txt || true
+  systemctl --user try-restart room-assistant.service 2>/dev/null || true
+fi
 # the helper command
 mkdir -p ~/.local/bin && ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
 systemctl --user restart room.service

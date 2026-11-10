@@ -89,6 +89,30 @@ class Lights(QObject):
                         "level": b.dimming if b else 0})
         return out
 
+    def lamps_now(self) -> list[dict]:
+        """Every light (for the voice assistant): id, name, room, on/off and what it's set to."""
+        out = []
+        for r in self.rooms:
+            for i, d in enumerate(r.get("devices", [])):
+                b = self.wiz.bulbs.get(norm_mac(d.get("mac", ""))) if d.get("type") == "wiz" else None
+                o = {"id": norm_mac(d.get("mac", "")) or f"{r.get('name')}-{i}", "name": d.get("name") or f"lamp {i + 1}",
+                     "room": r.get("name", ""), "state": "unavailable" if not (b and b.reachable) else ("on" if b.on else "off")}
+                if b and b.on:
+                    o["brightness"] = b.dimming
+                    if b.temp: o["kelvin"] = b.temp
+                    if b.rgb: o["rgb"] = list(b.rgb)
+                out.append(o)
+        return out
+
+    def set_lamps(self, ids, on=None, level=None, kelvin=None, rgb=None) -> int:
+        n = 0
+        for mac in ids:
+            b = self.wiz.bulbs.get(norm_mac(mac))
+            if b:
+                self.wiz.set(b.mac, on=on, dimming=level, kelvin=kelvin, rgb=rgb); n += 1
+        self.changed.emit()
+        return n
+
     def toggle_lamp(self, mac: str):
         b = self.wiz.bulbs.get(norm_mac(mac))
         if b:

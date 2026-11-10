@@ -456,6 +456,26 @@ class Spotify(QObject):
                 best, score = d, sc
         return best
 
+    def play_search(self, query: str, kind: str | None, speaker: str | None, done):
+        """Search Spotify and play the best match: a track plays with its album after it, an artist plays their top
+        songs, a playlist or album plays from the start. done(name or None, why)."""
+        from urllib.parse import quote
+        kind = kind if kind in ("track", "artist", "album", "playlist") else "track"
+        def got(status, data):
+            if status != 200:
+                done(None, "spotify search failed"); return
+            try:
+                items = (json.loads(data).get(kind + "s") or {}).get("items") or []
+                it = next((i for i in items if i), None)
+            except Exception:
+                it = None
+            if not it:
+                done(None, "nothing found"); return
+            uri, name = it.get("uri", ""), it.get("name", "")
+            self.play_uri(uri, speaker=speaker)
+            done(name, None)
+        self._api("GET", f"/search?q={quote(query)}&type={kind}&limit=3&market=from_token", got)
+
     def set_volume(self, pct: int):
         pct = max(0, min(100, int(pct)))
         if self.player and self.player.get("device"):

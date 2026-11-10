@@ -183,16 +183,23 @@ class Listener:
     def __init__(self, mic: Mic, wake: Wake, vad: VAD):
         self.mic, self.wake, self.vad = mic, wake, vad
         self.last_wake = 0.0
+        self.tap = threading.Event()        # a tap on the panel: listen now, no wake word needed
+        self.abort = threading.Event()      # stop listening to this request (a tap to cancel)
 
     verbose = False         # print the mic level and the best "Alexa" score every 2 s (tests)
 
     def wait_wake(self) -> float:
         best, loud, since = 0.0, 0.0, time.time()
         while True:
+            if self.tap.is_set():
+                self.tap.clear()
+                return -1.0
             try:
-                f = self.mic.q.get(timeout=3)
+                f = self.mic.q.get(timeout=0.5)
             except queue.Empty:
-                log("no sound from the mic for 3 s"); continue
+                if time.time() - since > 3:
+                    log("no sound from the mic"); since = time.time()
+                continue
             s = self.wake.score(f)
             if self.verbose:
                 best = max(best, s)
@@ -205,11 +212,23 @@ class Listener:
                 self.wake.reset()
                 return s
 
-    def record(self):
+    def record(self, onset=None, fresh=False):
+        """fresh: drop what the mic queued before now (after Room has spoken: that's its own voice). Not after
+        "Alexa" — whatever you started saying straight after it is already queued, and is wanted."""
+        onset = onset or self.ONSET
+        self.abort.clear()
+        while fresh and not self.mic.q.empty():
+            try: self.mic.q.get_nowait()
+            except queue.Empty: break
         self.vad.reset()
         frames, started, quiet, t0 = [], None, 0.0, time.time()
         while True:
-            f = self.mic.q.get()
+            if self.abort.is_set():
+                return None, {"onset": None, "took": time.time() - t0, "aborted": True}
+            try:
+                f = self.mic.q.get(timeout=0.5)
+            except queue.Empty:
+                continue
             frames.append(f)
             t = len(frames) * FRAME / RATE
             p = self.vad.prob(f)
@@ -219,7 +238,7 @@ class Listener:
                 quiet = 0.0
             elif started is not None:
                 quiet += FRAME / RATE
-            if started is None and t > self.ONSET:
+            if started is None and t > onset:
                 return None, {"onset": None, "took": time.time() - t0}
             if started is not None and (quiet >= self.END_QUIET or t > self.MAX):
                 a = np.concatenate(frames)[int(started * RATE):]

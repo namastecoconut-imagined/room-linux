@@ -73,6 +73,12 @@ Item {
                               : mode === "miss" ? [blue, blue, mint, 0.28] : [blue, mint, blue, 0.0]
     ShaderEffect {
         anchors.fill: parent; anchors.margins: -60
+        // drawn at a third of the size and scaled up: the fog is all soft light, so it looks the same — and it's ~9×
+        // less work for the graphics chip, which shares its power budget with the CPU making Room's voice (full size,
+        // the voice broke up and came late)
+        layer.enabled: true
+        layer.textureSize: Qt.size(Math.round(width / 3), Math.round(height / 3))
+        layer.smooth: true
         opacity: vo.mode === "gone" ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.OutCubic } }
         visible: opacity > 0

@@ -33,6 +33,15 @@ if [ ! -f "$W" ]; then
   mkdir -p "$(dirname "$W")"
   printf 'wireplumber.settings = { bluetooth.autoswitch-to-headset-profile = false }\n' > "$W"
 fi
+# speed: the assistant goes first when the Surface is busy (its voice is made as it plays — late, it broke up), and the
+# Surface runs on its "performance" power profile (it's always plugged in)
+D=~/.config/systemd/user/room-assistant.service.d
+if [ -f ~/.config/systemd/user/room-assistant.service ] && [ ! -f "$D/perf.conf" ]; then
+  mkdir -p "$D"
+  printf '[Service]\nCPUWeight=1000\nIOWeight=1000\n' > "$D/perf.conf"
+  systemctl --user daemon-reload
+fi
+command -v powerprofilesctl >/dev/null && powerprofilesctl set performance 2>/dev/null || true
 # the assistant (its own Python and service), if it's set up
 if [ -x "$HERE/assistant/.venv/bin/python" ]; then
   export PATH="$HOME/.local/bin:$PATH"

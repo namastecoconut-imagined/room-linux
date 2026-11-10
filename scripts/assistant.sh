@@ -45,6 +45,9 @@ ExecStart=$HERE/assistant/.venv/bin/python -u -m assistant
 Restart=always
 RestartSec=3
 Nice=-5
+# first in line when the Surface is busy: its voice is made as it plays
+CPUWeight=1000
+IOWeight=1000
 
 [Install]
 WantedBy=default.target

@@ -151,7 +151,7 @@ Item {
         }
     }
 
-    // ---------------------------------------------------------------- top bar, right: All off · Dim · Night · settings
+    // ---------------------------------------------------------------- top bar, right: All off · Dim · Night · mic · settings
     Row {
         anchors.right: parent.right; anchors.rightMargin: 72; y: Theme.topY; spacing: 10
         Repeater {
@@ -161,6 +161,8 @@ Item {
                 onTapped: index === 0 ? room.allOff() : index === 1 ? room.dimAll() : room.night()
             }
         }
+        // the assistant without the wake word: Room starts listening (the assistant's screen comes up when it does)
+        RoundBtn { size: 68; icon: "mic"; iconSize: 26; fill: Qt.rgba(1, 1, 1, 0.09); visible: room.voice.state !== "off"; onTapped: room.listen() }
         RoundBtn { size: 68; icon: "settings"; iconSize: 24; fill: Qt.rgba(1, 1, 1, 0.09); onTapped: home.openSettings() }
     }
 

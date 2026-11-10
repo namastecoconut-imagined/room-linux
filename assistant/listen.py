@@ -211,7 +211,12 @@ class Wake:
         if os.path.exists(self.OWN):
             try:
                 from livekit.wakeword import WakeWordModel
-                self.m = WakeWordModel(models=[self.OWN])
+                import onnxruntime as ort
+                # One thread, no spinning: it runs every 80 ms, and onnxruntime's default (a worker per core, kept
+                # spinning between runs) held three cores at ~60 % nonstop and made the Surface hot. Same scores.
+                o = ort.SessionOptions(); o.inter_op_num_threads = o.intra_op_num_threads = 1
+                o.add_session_config_entry("session.intra_op.allow_spinning", "0")
+                self.m = WakeWordModel(models=[self.OWN], sess_options=o)
                 self.name = "Room's own alexa.onnx (LiveKit)"
             except Exception as e:
                 log(f"couldn't load Room's own wake word ({e!r}) — using the stock one")

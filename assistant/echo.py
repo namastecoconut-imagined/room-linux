@@ -109,7 +109,7 @@ class _Tap:
 class EchoCanceller:
     """The mic, minus what Room is playing: every real output's monitor (the Surface's speakers, a Bluetooth speaker —
     whatever's connected, checked every 10 s), summed, delayed by how late the mic hears it (measured from the
-    music itself every few seconds: ~20 ms on the Surface's speakers, ~310 ms on the Xiaomi), then LinearAEC.
+    music itself every few seconds: ~20 ms on the Surface's speakers, ~310 ms on the Xiaomi), then LinearAEC. The delay is measured with GCC-PHAT (see measure()).
 
     Measured on this Surface (bench/aec_eval, 10 lines over music): "Alexa" caught 4/10 → 10/10 on the Surface's
     speakers and 9/10 → 10/10 on the Xiaomi; Sarvam got 2/10 lines right → 8/10 on the Surface's speakers."""
@@ -119,11 +119,12 @@ class EchoCanceller:
         self.aec = LinearAEC()
         self.shift = int(0.0 * RATE)
         self.hist = np.zeros(RATE, np.float32)            # the last second of reference (for the delay line)
-        self.env_m, self.env_r = [], []                    # 10 ms loudness of mic and reference, last 8 s
+        self.win_m = np.zeros(4 * RATE, np.float32)        # the last 4 s of mic and of what's playing (for the delay)
+        self.win_r = np.zeros(4 * RATE, np.float32)
+        self.looks = []
         self.clock = 0.0                                   # seconds of mic heard (its own clock, not the wall's)
         self.next_look = 0.0
         self.next_delay = 5.0
-        self.cand = None
         self.said = 0.0
         self.removed = []
 
@@ -175,35 +176,42 @@ class EchoCanceller:
         return (np.clip(out, -1, 1) * 32767).astype(np.int16)
 
     def _watch(self, mic, ref, out, now):
-        k = len(mic) // 160
-        self.env_m += list(np.sqrt(np.mean(mic[:k * 160].reshape(k, 160) ** 2, axis=1)))
-        self.env_r += list(np.sqrt(np.mean(ref[:k * 160].reshape(k, 160) ** 2, axis=1)))
-        self.env_m, self.env_r = self.env_m[-800:], self.env_r[-800:]
+        self.win_m = np.concatenate([self.win_m[len(mic):], mic])
+        self.win_r = np.concatenate([self.win_r[len(ref):], ref])
         playing = float(np.mean(ref ** 2)) > 1e-5
         if playing:
             self.removed.append((float(np.mean(mic ** 2)), float(np.mean(out ** 2))))
-        if now >= self.next_delay and len(self.env_r) >= 600 and np.mean(np.square(self.env_r[-600:])) > 1e-5:
-            self.next_delay = now + 4
-            a, b = np.array(self.env_m), np.array(self.env_r)
-            a, b = a - a.mean(), b - b.mean()
-            best, lag = -1.0, 0
-            for dd in range(0, 60):
-                c = float(np.dot(a[dd:], b[:len(b) - dd])) / (np.linalg.norm(a[dd:]) * np.linalg.norm(b[:len(b) - dd]) + 1e-9)
-                if c > best:
-                    best, lag = c, dd
-            if best > 0.3:
-                ms = lag * 10
-                if self.cand is not None and abs(ms - self.cand) <= 20:      # two looks agree
+        if now >= self.next_delay and float(np.mean(self.win_r ** 2)) > 1e-5:
+            self.next_delay = now + 3
+            ms, sure = self.measure()
+            if sure:
+                # three looks in a row within 15 ms of each other before acting on it (one stray look used to reset
+                # the canceller every few seconds, and it never settled)
+                self.looks = [x for x in self.looks[-2:] if abs(x - ms) <= 15] + [ms]
+                if len(self.looks) >= 3:
+                    ms = int(np.median(self.looks))
                     want = max(0, int((ms - 30) / 1000 * RATE))
                     if abs(want - self.shift) > int(0.03 * RATE):
                         print(f"[assistant] echo: the mic hears it {ms} ms late — following that", flush=True)
                         self.shift = want
                         self.aec = LinearAEC()
-                self.cand = ms
         if now - self.said > 120 and len(self.removed) > 300:
             mi = np.mean([x for x, _ in self.removed]); oi = np.mean([y for _, y in self.removed])
             print(f"[assistant] echo: taking out {10 * np.log10((mi + 1e-12) / (oi + 1e-12)):.1f} dB of what's playing", flush=True)
             self.said, self.removed = now, []
+
+    def measure(self):
+        """How late the mic hears what's playing (ms), and whether that's clear. GCC-PHAT over the last 4 s: it lines
+        up the fine detail of the sound, not its loudness — loudness alone matched music with a beat to itself a
+        beat later (it swung between 0 and 360 ms)."""
+        n = len(self.win_m)
+        X = np.fft.rfft(self.win_r, 2 * n); Y = np.fft.rfft(self.win_m, 2 * n)
+        G = Y * np.conj(X); G /= np.abs(G) + 1e-9
+        cc = np.fft.irfft(G)[:int(0.6 * RATE)]
+        i = int(np.argmax(cc)); peak = cc[i]
+        rest = np.abs(np.concatenate([cc[:max(0, i - 80)], cc[i + 80:]]))
+        sure = rest.size > 0 and peak > 5 * float(np.percentile(rest, 99))
+        return i * 1000 // RATE, bool(sure)
 
     def close(self):
         for t in self.taps.values():

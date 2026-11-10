@@ -114,10 +114,23 @@ class Mic:
             if self._wire(name):
                 wired = True; break
         got = threading.Event()
+        self.last = time.time()
+        proc = self.proc
 
-        def watchdog():                     # no sound within 3 s: give up on this way, use the plain mic
-            if not got.wait(3) and self.proc.poll() is None:
-                self.proc.terminate()
+        def watchdog():
+            # No sound within 3 s at the start: this way doesn't work here (then: the plain mic). And later, any 3 s
+            # with no sound at all — the mic or a link went away (after a restart the mic's node can be made again
+            # once the session settles, leaving this stream linked to nothing, waiting forever: "no sound from the
+            # mic") — start it again, linked afresh.
+            if not got.wait(3):
+                if proc.poll() is None:
+                    proc.terminate()
+                return
+            while proc.poll() is None and not self.stopping:
+                time.sleep(1)
+                if time.time() - self.last > 3:
+                    log("the mic went quiet (its link went away) — linking it again")
+                    proc.terminate(); return
         threading.Thread(target=watchdog, daemon=True).start()
         if not wired:
             log("echo: couldn't link the mic into the echo canceller — using the plain mic")
@@ -128,7 +141,7 @@ class Mic:
             b = self.proc.stdout.read(FRAME * 8)
             if len(b) < FRAME * 8:
                 break
-            got.set()
+            got.set(); self.last = time.time()
             x = np.frombuffer(b, dtype="<f4").reshape(-1, 2)
             mic, ref = x[:, 0].copy(), x[:, 1].copy()
             try:

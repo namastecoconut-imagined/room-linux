@@ -3,12 +3,19 @@
 # (energy_performance_preference = balance_power). On "balanced" all cores sat at 2.6 GHz doing almost nothing and
 # the case ran warm; with this they idle at 1 GHz and still speed up the moment Room needs them (its voice is fine).
 # Not Fedora's "powersave" profile: that also sleeps the sound chip and Wi-Fi (clipped first words, AirPlay stutter).
-# Safe to run again. Undo: sudo tuned-adm profile balanced
+# Safe to run again. Undo: in /etc/tuned/ppd.conf put balanced=balanced (and balanced=balanced-battery under
+# [battery]), then sudo systemctl restart tuned-ppd
 set -e
 command -v tuned-adm >/dev/null || { echo "  (tuned isn't installed — skipped)"; exit 0; }
 d=/etc/tuned/profiles; [ -d "$d" ] || d=/etc/tuned
 sudo mkdir -p "$d/room"
 printf '[main]\nsummary=Room: balanced, but the CPU leans to saving power (cooler)\ninclude=balanced\n\n[cpu]\nenergy_performance_preference=balance_power\n' \
   | sudo tee "$d/room/tuned.conf" >/dev/null
+# Fedora's tuned-ppd brings back its remembered mode ("balanced") at every start, over any profile set by hand —
+# so "balanced" itself is pointed at Room's profile (on mains and on battery), and anything asking for balanced
+# (boot, GNOME) gets the cool one
+[ -f /etc/tuned/ppd.conf ] && sudo sed -i -e 's/^balanced=balanced$/balanced=room/' \
+  -e 's/^balanced=balanced-battery$/balanced=room/' /etc/tuned/ppd.conf
+systemctl is-active -q tuned-ppd 2>/dev/null && sudo systemctl restart tuned-ppd && sleep 2
 sudo tuned-adm profile room
 echo "▸ Cool: $(tuned-adm active | sed 's/.*: //') · CPU $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null)"

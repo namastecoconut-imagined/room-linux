@@ -365,19 +365,12 @@ class Ears:
             self.last_text, self.text_at = text, time.time()
         if self.mine_first and not WAKE_RE.search(text):
             return                          # still only Room's own voice before "Alexa"
-        # Sarvam's early guesses change from one update to the next ("However, whatever." → "what's the weather
-        # like?"); only the words two updates in a row agree on are shown, so the screen holds what's settled and
-        # never shows a guess that's about to vanish. The final words are still taken as Sarvam gives them.
-        prev = getattr(s, "prev_partial", "")
-        s.prev_partial = t
-        k = lambda x: re.sub(r"[^a-z0-9' ]", "", x.lower()).split()
-        a, b, n = k(prev), k(t), 0
-        while n < min(len(a), len(b)) and a[n] == b[n]:
-            n += 1
-        steady = " ".join(t.split()[:n])
-        if steady and len(steady) >= len(getattr(s, "steady", "")):
-            s.steady = steady
-            self.emit(ev="partial", text=steady)
+        # Sarvam's words along the way are rough guesses ("Right. What's next?" for "What's the weather going to be
+        # in Bali tomorrow?") that it only puts right in its final answer, a moment after you stop. Showing them
+        # looked like Room mishearing, so by default the screen shows the final words only.
+        # "showPartials": true in voiceSettings brings them back.
+        if t and self.cfg.get("showPartials") is True:
+            self.emit(ev="partial", text=t)
 
     def _end(self, text, s):
         if s is not self.stream:

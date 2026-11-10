@@ -42,7 +42,10 @@ class Assistant:
         self.brain = Brain(key, cfg.get("anthropicModel"), room="living room") if key else None
         self.computer = Computer(cfg.get("computer"))
         self.link = Link(on_command=self.command)
-        self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", True) is not False)
+        # echo cancelling is off unless asked for ("echoCancel": true): its two-channel stream ties the mic and the
+        # Surface's speakers (two separately clocked devices) into one, and PipeWire was then killed every few
+        # seconds (status 9, its real-time thread over its limit) — no sound at all, Bluetooth dropping, the mic gone
+        self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", False) is True)
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         self.voice = Voice(voice=a.get("voice", "af_heart"))
         self.mic.hold = lambda: self.voice.busy
@@ -203,14 +206,26 @@ class Assistant:
 
     def speak_wait(self) -> bool:
         """Wait while Room speaks. With barge-in on, "Alexa" stops it: True if you cut in."""
-        if not self.barge:
-            while self.voice.busy and not self.cancelled:
-                time.sleep(0.05)
-            return False
         import queue
         w = self.ears.wake
         w.reset()
+        last, moved = -1, time.time()
         while self.voice.busy and not self.cancelled:
+            # the speaker stopped taking sound (the sound system restarted under it): don't wait for good — the
+            # screen stayed up on the answer for ever
+            p = self.voice.player.played
+            if p != last:
+                last, moved = p, time.time()
+            elif not self.voice.making and time.time() - moved > 4:
+                log("the speaker stopped playing — ending this answer, opening the speaker again")
+                self.voice.stop()
+                try:                            # a stream the sound system dropped stays silent: open a new one
+                    self.voice.player.close(); self.voice.player.start()
+                except Exception as e:
+                    log(f"couldn't open the speaker again — {e!r}")
+                return False
+            if not self.barge:
+                time.sleep(0.05); continue
             try:
                 f = self.mic.q.get(timeout=0.1)
             except queue.Empty:
@@ -228,8 +243,7 @@ class Assistant:
         self.state(state="speaking", stage="error", reply=words)
         self.voice.say(words)
         time.sleep(0.2)
-        while self.voice.busy:
-            time.sleep(0.05)
+        self.speak_wait()
         self.state(state="idle", stage="error", reply=words)
 
 

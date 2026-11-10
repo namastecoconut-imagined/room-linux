@@ -55,9 +55,6 @@ class Voice:
         o.inter_op_num_threads = 1
         sess = ort.InferenceSession(os.path.join(KDIR, model), sess_options=o, providers=["CPUExecutionProvider"])
         self.k = Kokoro.from_session(sess, os.path.join(KDIR, "voices-v1.0.bin"))
-        # …but the first words of an answer, made while nothing is playing yet, use every core: nothing can break up
-        # then, and they're what you wait for (2–3 s with a core left free)
-        self.k_fast = Kokoro(os.path.join(KDIR, model), os.path.join(KDIR, "voices-v1.0.bin"))
         self.voice, self.speed = voice, speed
         self.player = Player()
         self.player.start()
@@ -67,11 +64,11 @@ class Voice:
         self.making = False
         threading.Thread(target=self._prepare, daemon=True).start()
 
-    def _make(self, text, fast=False):
+    def _make(self, text):
         if text in self.cache:
             return self.cache[text]
         with self.lock:
-            a, sr = (self.k_fast if fast else self.k).create(text, voice=self.voice, speed=self.speed, lang="en-us")
+            a, sr = self.k.create(text, voice=self.voice, speed=self.speed, lang="en-us")
         a = np.asarray(a, dtype=np.float32)
         if len(text) <= 60:
             self.cache[text] = (a, sr)
@@ -80,11 +77,9 @@ class Voice:
         return a, sr
 
     def _prepare(self):
-        # at start nothing's playing: everyday lines are made with every core (and that warms the fast session — its
-        # first use was slow, 3–5 s before the first words of the first answer)
         for t in COMMON:
             try:
-                self._make(t, fast=True)
+                self._make(t)
             except Exception as e:
                 print("[assistant] voice:", repr(e), flush=True); return
 
@@ -101,12 +96,11 @@ class Voice:
                 for i, p in enumerate(pieces(text)):
                     if g != self.gen:
                         break
-                    a, sr = self._make(p, fast=(i == 0 and not self.player.busy))
+                    a, sr = self._make(p)
                     if g != self.gen:
                         break
                     if i == 0:
-                        print(f"[assistant] voice: first sound {time.time() - t0:.2f} s after the answer "
-                              f"({len(p.split())} words, {len(a) / sr:.1f} s of speech)", flush=True)
+                        print(f"[assistant] voice: first sound {time.time() - t0:.2f} s after the answer", flush=True)
                     self.player.feed(a, sr)
             except Exception as e:
                 print("[assistant] voice:", repr(e), flush=True)

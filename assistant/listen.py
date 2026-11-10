@@ -37,8 +37,8 @@ EARS = "room-assistant-ears"
 
 class Mic:
     """The raw Surface mic at a fixed level, 80 ms frames (int16) on a queue — with what Room is playing (music, its
-    own voice) taken back out first, if "assistant": {"echoCancel": true} is set in config.json (assistant/echo.py;
-    off by default).
+    own voice) taken back out first (assistant/echo.py; "assistant": {"echoCancel": false} in config.json turns it
+    off).
 
     With echo cancelling it records one two-channel stream that nothing links by itself: Room links the mic into the
     left channel and every output's monitor (the Surface's speakers, a Bluetooth speaker) into the right, so the two

@@ -26,6 +26,7 @@ def main():
     mic = Mic(float(cfg.get("assistantMicLevel", 0.65)))
     mic.start()
     ears = Listener(mic, Wake(), VAD())
+    ears.verbose = True
     duck = Duck()
     print("\nSay \"Alexa\"… (Ctrl+C to stop)\n", flush=True)
     n = 0

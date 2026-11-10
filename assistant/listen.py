@@ -163,10 +163,22 @@ class Listener:
         self.mic, self.wake, self.vad = mic, wake, vad
         self.last_wake = 0.0
 
+    verbose = False         # print the mic level and the best "Alexa" score every 2 s (tests)
+
     def wait_wake(self) -> float:
+        best, loud, since = 0.0, 0.0, time.time()
         while True:
-            f = self.mic.q.get()
+            try:
+                f = self.mic.q.get(timeout=3)
+            except queue.Empty:
+                log("no sound from the mic for 3 s"); continue
             s = self.wake.score(f)
+            if self.verbose:
+                best = max(best, s)
+                loud = max(loud, float(np.sqrt(np.mean((f.astype(np.float32) / 32768) ** 2))))
+                if time.time() - since > 2:
+                    print(f"   mic {20 * np.log10(max(loud, 1e-6)):6.1f} dB · best \"Alexa\" score {best:.2f}", flush=True)
+                    best, loud, since = 0.0, 0.0, time.time()
             if s >= self.wake.threshold and time.time() - self.last_wake > 2.0:
                 self.last_wake = time.time()
                 self.wake.reset()

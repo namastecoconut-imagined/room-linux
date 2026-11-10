@@ -46,7 +46,15 @@ def pieces(text: str) -> list[str]:
 class Voice:
     def __init__(self, voice="af_heart", speed=1.0, model="kokoro-v1.0.fp16.onnx"):
         from kokoro_onnx import Kokoro
-        self.k = Kokoro(os.path.join(KDIR, model), os.path.join(KDIR, "voices-v1.0.bin"))
+        import onnxruntime as ort
+        # Kokoro leaves a core free: with every core busy making the next sentence, the speaker's callback (Python,
+        # every 50 ms) was served late — the voice broke up ("sound system missed 46 blocks" an answer) while there
+        # was plenty made ("ran dry 0×")
+        o = ort.SessionOptions()
+        o.intra_op_num_threads = max(1, (os.cpu_count() or 4) // 2 - 1)
+        o.inter_op_num_threads = 1
+        sess = ort.InferenceSession(os.path.join(KDIR, model), sess_options=o, providers=["CPUExecutionProvider"])
+        self.k = Kokoro.from_session(sess, os.path.join(KDIR, "voices-v1.0.bin"))
         self.voice, self.speed = voice, speed
         self.player = Player()
         self.player.start()

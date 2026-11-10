@@ -5,8 +5,6 @@
 # where you can pick GNOME or Room again.
 systemctl --user import-environment WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP 2>/dev/null
 dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP 2>/dev/null
-# the Surface is always plugged in: full speed (the assistant makes its voice on the CPU as it speaks)
-command -v powerprofilesctl >/dev/null && powerprofilesctl set performance 2>/dev/null
 systemctl --user restart room.service
 # everything else Room uses starts with the session anyway; make sure (no-op when they're already running)
 for s in room-assistant room-airplay room-spotify; do

@@ -20,7 +20,7 @@ import numpy as np
 
 
 class Player:
-    def __init__(self, rate=48000, block=960, prebuffer=0.30, reprime=0.15, seconds=30, device=None,
+    def __init__(self, rate=48000, block=2400, prebuffer=0.30, reprime=0.15, seconds=30, device=None,
                  on_played=None, name="Room assistant"):
         self.rate, self.block, self.device = rate, block, device
         self.prebuffer, self.reprime = int(prebuffer * rate), int(reprime * rate)
@@ -44,7 +44,10 @@ class Player:
         os.environ.setdefault("PIPEWIRE_PROPS", '{ application.name = "Room assistant" media.role = "Assistant" }')
         import sounddevice as sd
         self.stream = sd.OutputStream(samplerate=self.rate, blocksize=self.block, channels=1, dtype="float32",
-                                      latency="high", device=self.device, callback=self._callback)
+                                      latency=0.25, device=self.device, callback=self._callback)
+        # 50 ms blocks and a quarter of a second queued in the sound system: the callback runs in Python, so it can be
+        # a little late when the Surface is busy — with 20 ms blocks and "high" (~0.1 s) it missed blocks and the
+        # voice broke up. Adds nothing you'd hear at the start of an answer.
         self.stream.start()
 
     def close(self):

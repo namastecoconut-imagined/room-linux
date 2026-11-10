@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 
 // The voice assistant on screen (design B + D): the window of light in the middle, its orb swelling with your voice
 // and sending out a ripple on each syllable, while the whole edge of the screen glows with it. Live words aren't
@@ -30,7 +31,9 @@ Item {
     property real phase: 0
     property real cur: 0            // 0…1: how loud the voice is right now (quick up, slow down)
     property real thinkMix: 0
-    property real lastPeak: 0
+    // the beat of your voice, the way the music screen follows the music: loudness over its own recent floor
+    property real beatFloor: -1
+    property real beat: 0
     Timer {
         interval: 33; repeat: true; running: vo.active && vo.visible
         onTriggered: {
@@ -40,12 +43,11 @@ Item {
                      : vo.mode === "think" ? 0.18 + 0.08 * Math.sin(vo.phase * 3) : 0.1
             vo.cur += (want - vo.cur) * (want > vo.cur ? 0.35 : 0.08)
             vo.thinkMix += ((vo.mode === "think" ? 1 : 0) - vo.thinkMix) * 0.06
-            // a ripple on each syllable while you talk
-            if (vo.mode === "listen" && room.level > 0.45 && vo.phase - vo.lastPeak > 0.22) {
-                vo.lastPeak = vo.phase
-                ripples.next = (ripples.next + 1) % 5
-                ripples.itemAt(ripples.next).go(vo.cur)
-            }
+            var l = room.level
+            if (vo.beatFloor < 0) vo.beatFloor = l
+            else vo.beatFloor += (l - vo.beatFloor) * (l < vo.beatFloor ? 0.2 : 0.02)
+            var b = vo.mode === "listen" || vo.mode === "speak" ? Math.max(0, Math.min(1, (l - vo.beatFloor) * 4)) : 0
+            vo.beat += (b - vo.beat) * (b > vo.beat ? 0.5 : 0.12)
         }
     }
 
@@ -68,13 +70,39 @@ Item {
         fragmentShader: shaderDir + "edge.frag.qsb"
     }
 
-    // ---------------------------------------------------------------- the window of light (B)
+    // ---------------------------------------------------------------- the glow behind the window, pulsing with your
+    // voice the way the music screen's glow pulses with the song (its colours slowly turn: warm, blue, mint, coral)
+    Shape {
+        id: glow
+        width: 1500; height: 1500
+        x: (vo.width - width) / 2; y: 150 + vo.winH / 2 - height / 2
+        scale: 0.85 + 0.35 * vo.beat + 0.05 * Math.sin(vo.phase * 0.8)
+        opacity: vo.mode === "gone" ? 0 : vo.mode === "think" ? 0.45 + 0.1 * Math.sin(vo.phase * 3) : 0.4 + 0.5 * vo.beat
+        preferredRendererType: Shape.CurveRenderer
+        readonly property real k: (Math.sin(vo.phase * 0.35) + 1) / 2
+        readonly property color c: Qt.rgba((vo.c0[0] * (1 - k) + vo.c1[0] * k) / 255, (vo.c0[1] * (1 - k) + vo.c1[1] * k) / 255,
+                                           (vo.c0[2] * (1 - k) + vo.c1[2] * k) / 255, 1)
+        ShapePath {
+            strokeColor: "transparent"
+            fillGradient: RadialGradient {
+                centerX: glow.width / 2; centerY: glow.height / 2; centerRadius: glow.width / 2
+                focalX: centerX; focalY: centerY
+                GradientStop { position: 0; color: Qt.rgba(glow.c.r, glow.c.g, glow.c.b, 0.42) }
+                GradientStop { position: 0.4; color: Qt.rgba(glow.c.r, glow.c.g, glow.c.b, 0.16) }
+                GradientStop { position: 1; color: Qt.rgba(glow.c.r, glow.c.g, glow.c.b, 0) }
+            }
+            PathRectangle { x: 0; y: 0; width: glow.width; height: glow.height; radius: glow.width / 2 }
+        }
+    }
+
+    // ---------------------------------------------------------------- the window of light (B), softer
+    // (blurred further and dimmer than the phone's: a haze of light rather than a shape)
     readonly property real winW: 760
     readonly property real winH: 300
     Item {
         id: winBox
         x: (vo.width - vo.winW) / 2; y: 150; width: vo.winW; height: vo.winH
-        opacity: vo.mode === "gone" ? 0 : vo.mode === "miss" ? 0.35 : 1
+        opacity: vo.mode === "gone" ? 0 : vo.mode === "miss" ? 0.3 : 0.7
         scale: vo.mode === "gone" ? 0.94 : 1
         Behavior on opacity { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
         Behavior on scale { NumberAnimation { duration: 420; easing.type: Easing.OutBack } }
@@ -83,7 +111,7 @@ Item {
             anchors.fill: parent
             property size res: Qt.size(width, height)
             property real radius: 140
-            property real blur: 22
+            property real blur: 70
             property color gTop: vo.col(vo.c3, 0.3)
             property color gMid: vo.col(vo.c1, 0.75)
             property color gBot: vo.col(vo.c0, 0.95)
@@ -101,27 +129,6 @@ Item {
             property vector3d haze2: Qt.vector3d(width / 2 + Math.sin(t * 0.33 + 5) * width * 0.32,
                                                  height * 0.55 + Math.sin(t * 0.41 + 1) * height * 0.2, 300 * (1 + vo.cur * 0.35))
             fragmentShader: shaderDir + "window.frag.qsb"
-        }
-        // a soft bloom from the orb on each syllable — blurred light, not lines
-        Repeater {
-            id: ripples
-            property int next: 0
-            model: 4
-            Item {
-                property real k: 1
-                property real size0: 140
-                function go(strength) { size0 = 120 + strength * 120; anim.restart() }
-                readonly property real d: size0 * (1 + k * 1.6)
-                x: win.orb.x - d / 2; y: win.orb.y - d / 2; width: d; height: d
-                opacity: 0.55 * (1 - k) * (1 - k)
-                Rectangle {
-                    anchors.fill: parent; radius: width / 2
-                    color: Qt.rgba(1, 0.96, 0.88, 0.35)
-                    layer.enabled: true
-                    layer.effect: MultiEffect { blurEnabled: true; blur: 1.0; blurMax: 48; autoPaddingEnabled: true }
-                }
-                NumberAnimation on k { id: anim; running: false; from: 0; to: 1; duration: 1300; easing.type: Easing.OutCubic }
-            }
         }
     }
 
@@ -151,6 +158,8 @@ Item {
         spacing: 12
         layoutDirection: Qt.LeftToRight
         Behavior on y { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+        opacity: vo.mode === "gone" ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 300 } }
         readonly property bool small: vo.mode === "speak" || vo.mode === "done"
         Repeater {
             model: vo.heard ? vo.heard.split(" ") : []

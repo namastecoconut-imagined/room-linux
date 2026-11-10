@@ -23,6 +23,15 @@ if [ -x "$HERE/assistant/.venv/bin/python" ]; then
   command -v uv >/dev/null && uv pip install -q --python "$HERE/assistant/.venv/bin/python" -r assistant/requirements.txt || true
   systemctl --user try-restart room-assistant.service 2>/dev/null || true
 fi
+# the Surface's own Spotify (Soloist): the same bigger sound buffers as AirPlay — it crackled on the Surface's
+# speakers once the assistant was also running
+D=~/.config/systemd/user/room-spotify.service.d
+if [ -f ~/.config/systemd/user/room-spotify.service ] && [ ! -f "$D/buffers.conf" ]; then
+  mkdir -p "$D"
+  printf '[Service]\nEnvironment=PIPEWIRE_LATENCY=4096/48000\nEnvironment=PULSE_LATENCY_MSEC=85\n' > "$D/buffers.conf"
+  systemctl --user daemon-reload
+  systemctl --user restart room-spotify.service
+fi
 # the helper command
 mkdir -p ~/.local/bin && ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
 systemctl --user restart room.service

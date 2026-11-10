@@ -148,6 +148,8 @@ class Assistant:
         here = [a for a in actions if a.get("kind") not in LOCAL]
         summary = []
         if here:
+            if any(a.get("kind") == "volume" for a in here):
+                self.duck.up()          # music back first, so the new volume isn't undone when the duck lifts
             s = self.link.request({"t": "run", "actions": here}, 15)
             summary.append(s if s is not None else "couldn't reach the panel")
         looked = None

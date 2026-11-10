@@ -70,7 +70,7 @@ Item {
     // ---------------------------------------------------------------- volume (the slider at the bottom right)
     property real volDrag: -1                        // 0…1 while sliding
     readonly property bool sliding: volDrag >= 0
-    Timer { id: volSend; interval: 500; onTriggered: room.setVolume(Math.round(mp.volDrag * 100)) }
+    Timer { id: volSend; interval: 80; onTriggered: room.setVolumeLive(Math.round(mp.volDrag * 100)) }
 
     // ---------------------------------------------------------------- cover flow
     property real flowDx: 0

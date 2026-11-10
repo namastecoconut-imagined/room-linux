@@ -32,14 +32,22 @@ class Duck:
             want = self.q.get()
             try:
                 if want == "down" and not self.saved:
-                    for sid, v in self._streams():
-                        self.saved[sid] = v
+                    for sid, app, v in self._streams():
+                        self.saved[sid] = (app, v)
                         subprocess.run(["wpctl", "set-volume", str(sid), f"{v * LEVEL:.3f}"], timeout=2,
                                        stderr=subprocess.DEVNULL)
-                elif want == "up":
-                    for sid, v in self.saved.items():
-                        subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.3f}"], timeout=2,
-                                       stderr=subprocess.DEVNULL)
+                elif want == "up" and self.saved:
+                    # put back by stream, and by app for streams that weren't there before: an app that started a new
+                    # stream meanwhile (the Surface's Spotify does, per song) got the lowered level from PipeWire's
+                    # memory of that app — and stayed quiet ("it went back to a lower volume and stayed there")
+                    by_app = {app: v for app, v in self.saved.values()}
+                    for sid, app, now in self._streams():
+                        v = self.saved[sid][1] if sid in self.saved else by_app.get(app)
+                        if v is not None:
+                            subprocess.run(["wpctl", "set-volume", str(sid), f"{v:.3f}"], timeout=2,
+                                           stderr=subprocess.DEVNULL)
+                    self.saved = {}
+                elif want == "forget":
                     self.saved = {}
             except Exception as e:
                 print("[assistant] duck:", repr(e), flush=True)
@@ -52,15 +60,16 @@ class Duck:
             p = (n.get("info") or {}).get("props") or {}
             if p.get("media.class") != "Stream/Output/Audio":
                 continue
-            name = (p.get("node.name") or "").lower()
-            who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name")).lower()
             if str(p.get("application.process.id")) == str(os.getpid()):
                 continue                    # the assistant's own voice
+            name = (p.get("node.name") or "").lower()
+            who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name")).lower()
             if "room assistant" in who or "room sound" in who or name.startswith(("effect_", "output.", "input.")) \
                     or p.get("node.virtual") or p.get("factory.name") == "filter-chain" or "filter" in name \
                     or "loopback" in name:
                 continue
             props = (((n.get("info") or {}).get("params") or {}).get("Props") or [{}])[0] or {}
             vols = props.get("channelVolumes") or [1.0]
-            out.append((n["id"], max(vols) ** (1 / 3)))          # wpctl's scale (cubic)
+            app = p.get("application.name") or p.get("application.process.binary") or name
+            out.append((n["id"], app, max(vols) ** (1 / 3)))          # wpctl's scale (cubic)
         return out

@@ -57,7 +57,7 @@ Window {
         if (voiceBusy) { voiceUp = true; voiceHide.stop(); wake() }
         else if (voiceUp) voiceHide.restart()
     }
-    Timer { id: voiceHide; interval: room.voice.stage === "miss" ? 2600 : 4500; onTriggered: if (!win.voiceBusy) win.voiceUp = false }
+    Timer { id: voiceHide; interval: room.voice.stage === "miss" ? 2600 : (room.voice.reply || room.voice.line) ? 4500 : 300; onTriggered: if (!win.voiceBusy) win.voiceUp = false }
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }

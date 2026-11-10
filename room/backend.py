@@ -434,6 +434,34 @@ class Room(QObject):
         (self.airplay if self.airplay.showing else self.spotify).previous()
 
     @Slot(int)
+    @Slot(int)
+    def setVolumeLive(self, v):
+        """While the volume slider is being dragged: the Surface's own Spotify (Soloist) gets the new level straight on
+        its sound stream — instant and smooth; asking Spotify's servers every half second made the music cut in and
+        out. The final value still goes to Spotify on release (setVolume). Anything else: as before."""
+        p = self.spotify.player or {}
+        if self.airplay.showing or (p.get("device") or {}).get("name", "").lower() != self.spotify.home:
+            return self.setVolume(v)
+        import subprocess
+        sid = self._soloist_stream()
+        if sid:
+            subprocess.Popen(["wpctl", "set-volume", str(sid), f"{max(0, min(100, int(v))) / 100:.2f}"])
+
+    def _soloist_stream(self):
+        import json, subprocess
+        if time.time() - getattr(self, "_solo_at", 0) < 10:
+            return self._solo_id
+        self._solo_at, self._solo_id = time.time(), None
+        try:
+            for n in json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=3).stdout or "[]"):
+                p = (n.get("info") or {}).get("props") or {}
+                who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
+                if p.get("media.class") == "Stream/Output/Audio" and ("soloist" in who or "spotify" in who):
+                    self._solo_id = n["id"]; break
+        except Exception:
+            pass
+        return self._solo_id
+
     def setVolume(self, v):
         if self.airplay.showing:
             import subprocess

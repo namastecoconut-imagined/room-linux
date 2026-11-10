@@ -37,8 +37,6 @@ class Sleep(QObject):
         self.loud = 0
         self.last_power = 0.0
         self.hush_until = 0.0        # just switched off: its own click isn't a reason to come back
-        self.by_hand = False         # switched off with the power button: only a touch, the button, "Alexa" or an
-                                     # alarm bring it back — not the room's sounds (it came back after 3 s)
         self.why_not = ""
         self.timer = QTimer(self); self.timer.timeout.connect(self._tick); self.timer.start(5000)
 
@@ -53,7 +51,7 @@ class Sleep(QObject):
             self.loud += 1
             if self.loud >= self.NEED:
                 self.sound_at = time.monotonic()
-                if self.asleep and not self.by_hand and time.monotonic() > self.hush_until:
+                if self.asleep and time.monotonic() > self.hush_until:
                     self.wake(f"sound, {db:.0f} dB over a {self.floor:.0f} dB room")
         else:
             self.loud = 0
@@ -81,7 +79,6 @@ class Sleep(QObject):
             self.wake("power button")
         else:
             self.sleep("power button")
-            self.by_hand = True
 
     # ---------------------------------------------------------------- off and on
     def _tick(self):
@@ -103,7 +100,6 @@ class Sleep(QObject):
         if self.asleep:
             return
         self.asleep = True
-        self.by_hand = False
         self.hush_until = time.monotonic() + 3
         self.display.blank(True)
         print(f"[room] screen off ({why})", flush=True)

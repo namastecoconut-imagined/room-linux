@@ -28,7 +28,8 @@ vec3 light(vec2 p) {
     float b2 = exp(-pow((q.x - (0.5 - 0.3 * sin(t * 0.29 + 1.0))) / (0.09 + 0.14 * level), 2.0)) * 0.7;
     float v = exp(-pow((q.y - 0.28) / 0.40, 2.0));
     vec3 c1 = pal(t * 0.035), c2 = pal(t * 0.035 + 0.35);
-    return (c1 * b1 * (0.42 + 0.8 * level) + c2 * b2 * (0.28 + 0.6 * level)) * v + vec3(0.01, 0.02, 0.03) * v;
+    // the voice mostly widens and moves the light; it brightens only a little (it got too bright)
+    return (c1 * b1 * (0.36 + 0.24 * level) + c2 * b2 * (0.24 + 0.16 * level)) * v + vec3(0.01, 0.02, 0.03) * v;
 }
 
 void main() {

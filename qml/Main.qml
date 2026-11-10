@@ -204,7 +204,6 @@ Window {
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
-        VolumeHud {}
         // (checks) where the touch screen doesn't respond
         Repeater {
             model: showDead ? [[Theme.deadA0, Theme.deadB1]] : []
@@ -256,6 +255,16 @@ Window {
             if (onCover) win.screen = "music"
         }
     }
+    // the volume capsule: over the stage, looking through it (its glass blurs what's behind)
+    Item {
+        width: Theme.stageW; height: Theme.stageH
+        anchors.centerIn: parent
+        scale: stage.scale
+        transform: Translate { x: win.shiftX; y: win.shiftY }
+        visible: !win.asleep
+        VolumeHud { backdrop: stage }
+    }
+
     // screen off (room/sleep.py: a quiet room on standby, or the power button): black, backlight off; a touch
     // anywhere brings standby back (and does nothing else)
     readonly property bool asleep: room.asleep

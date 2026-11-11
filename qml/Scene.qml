@@ -166,6 +166,7 @@ Item {
         id: bg
         cover: sc.field
         mode: sc.rV ? "room" : sc.m ? "music" : "idle"
+        playing: sc.m && !sc.rV && sc.music.playing === true
         roomColour: roomV.light
         roomOn: sc.curRoom && sc.curRoom.on > 0 ? sc.curRoom.level / 100 : 0
         k: sc.sV ? 0.75 : 1

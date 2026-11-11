@@ -6,8 +6,9 @@ import QtQuick
 // colour, where it sits on the cover, as big as its share (560 + 1500·√share px), drifting along the cover's light
 // (a loop of 14–46 s, 60–220 px: faster and further for vivid, contrasty covers). Grain over them, then a dimmer.
 // No music: a warm terracotta palette. The Room screen: the room's own light. A new song's colours cross-fade (2.2 s).
-// The room's sound (the mic's loudness, with a running quiet floor — as standby always did) swells the lights ≤ 10 %
-// and brightens them ≤ 16 %; a sudden jump sends a soft wave of light out from the first one (3.4 s).
+// While music plays the lights swirl (as lively as the old music standby) and swell with the room's sound (the mic's
+// loudness over a running quiet floor: ≤ 10 % bigger, ≤ 16 % brighter); the rest of the time they only move gently,
+// so the panel looks alive, and the mic plays no part.
 // All of it is one shader (shaders/field.frag), redrawn ~20 times a second — the fanless Surface stays cool.
 ShaderEffect {
     id: f
@@ -24,6 +25,7 @@ ShaderEffect {
     property bool active: true          // drawn and moving
     property int fps: 20
     property rect glassRect: Qt.rect(0, 0, 0, 0)
+    property bool playing: false        // music is playing (the sound swell, the full swirl)
 
     readonly property var idleP: ({ cols: [[196, 106, 62], [184, 102, 74], [74, 33, 23], [138, 69, 40]],
                                     pos: [[0.15, 0.25], [0.8, 0.2], [0.7, 0.85], [0.2, 0.9]], share: [0.3, 0.3, 0.2, 0.2],
@@ -77,12 +79,6 @@ ShaderEffect {
     property vector4d b2: Qt.vector4d(x2, y2, d2, la)
     property vector4d b3: Qt.vector4d(x3, y3, d3, la)
     property vector2d dir: Qt.vector2d(dirX, dirY)
-    // the wave starts from the brightest light
-    readonly property real waveI: {
-        var best = 0, bl = -1
-        for (var i = 0; i < 4; i++) { var c = pal.cols[i], l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; if (l > bl) { bl = l; best = i } }
-        return best
-    }
     property real amp: ampV
     property real dimA: dimV
     property color dimC: "#050302"
@@ -94,6 +90,12 @@ ShaderEffect {
 
     // ---------------------------------------------------------------- the drift (a phase, so a new loop length never jumps)
     property real ph: 0
+    property real tm: 0
+    // the swirl: 0.55 while music plays moves the screen as much as the old music standby did (measured: the same
+    // share of the picture changing over 6 s; the design's drift alone moved it about half as much); otherwise a
+    // gentle 0.25, so the panel never looks frozen
+    property real mv: playing && mode === "music" ? 0.55 : 0.25
+    Behavior on mv { NumberAnimation { duration: 2200 } }
     property real t: 0
     property real last: 0
     Timer {
@@ -105,9 +107,9 @@ ShaderEffect {
             f.last = now
             f.t += dt
             f.ph = (f.ph + dt / Math.max(10, f.pal.period || 30)) % 1000
-            f.waveT = f.t - f.waveAt
-            // the swell eases back down with the room quiet (the level stops arriving when the mic is off)
-            if (!room.micOn) f.sound = 0
+            f.tm = (f.tm + dt * 30 / Math.max(10, f.pal.period || 30)) % 100000    // the swirl: a lively cover turns it faster
+            // the swell eases away when the music stops (or the mic is off: the level stops arriving)
+            if (!room.micOn || !f.playing) f.sound *= 0.8
         }
         onRunningChanged: f.last = 0
     }
@@ -116,19 +118,15 @@ ShaderEffect {
     property real sound: 0
     property real floorL: -1
     property real lastL: 0
-    property real waveAt: -10
-    property real waveT: 10
-    property real waveS: 0
     Connections {
         target: room
-        enabled: room.micOn && f.active && f.visible
+        enabled: room.micOn && f.active && f.visible && f.playing
         function onLevelChanged() {
-            var l = room.level, jump = l - f.lastL
+            var l = room.level
             f.lastL = l
             if (f.floorL < 0) f.floorL = l; else f.floorL += (l - f.floorL) * (l < f.floorL ? 0.3 : 0.01)
             var raw = Math.max(0, Math.min(1, (l - f.floorL - 0.1) * 1.5))
             f.sound += (raw - f.sound) * (raw > f.sound ? 0.3 : 0.12)
-            if (jump > 0.08 && l > 0.22 && f.t - f.waveAt > 0.9) { f.waveAt = f.t; f.waveS = Math.min(1, 0.4 + jump * 1.6) }
         }
     }
 

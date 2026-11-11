@@ -85,6 +85,7 @@ class _Pool:
             err = r.read()
             c.close()
             raise urllib.error.HTTPError(API, r.status, r.reason, r.headers, io.BytesIO(err))
+        r.room_reused = reused               # (for the timing log)
         try:
             yield r
             r.read()                         # drain, so the connection can be reused
@@ -352,8 +353,11 @@ action (closest name from the speaker list).
                 "tool_choice": {"type": "tool", "name": "control_home"}, "messages": messages}
         t0 = time.time()
         js, said = "", False
+        tm = {}                              # where the time goes (logged once the spoken line is ready)
         try:
             with _post(body, self.key) as r:
+                tm["headers"] = time.time() - t0
+                tm["reused"] = getattr(r, "room_reused", None)
                 for raw in r:
                     line = raw.decode("utf-8", "replace").strip()
                     if not line.startswith("data:"):
@@ -362,13 +366,23 @@ action (closest name from the speaker list).
                         ev = json.loads(line[5:].strip())
                     except ValueError:
                         continue
+                    if ev.get("type") == "message_start":
+                        tm["usage"] = ((ev.get("message") or {}).get("usage")) or {}
                     if ev.get("type") == "content_block_delta" and (ev.get("delta") or {}).get("type") == "input_json_delta":
+                        tm.setdefault("first", time.time() - t0)
                         js += ev["delta"].get("partial_json", "")
                         if not said:
                             p = partial_string("say", js)
                             if p and p[1]:
                                 said = True
                                 print(f"[assistant] claude: spoken line ready in {int((time.time() - t0) * 1000)} ms")
+                                u = tm.get("usage") or {}
+                                print(f"[assistant] claude timing: connection {'reused' if tm.get('reused') else 'NEW'} · "
+                                      f"answer starts {int(tm.get('headers', 0) * 1000)} ms · first words "
+                                      f"{int(tm.get('first', 0) * 1000)} ms · spoken line {int((time.time() - t0) * 1000)} ms · "
+                                      f"prompt: {u.get('cache_read_input_tokens', 0)} cached + "
+                                      f"{u.get('cache_creation_input_tokens', 0)} cache-written + "
+                                      f"{u.get('input_tokens', 0)} fresh tokens", flush=True)
                                 on_say(p[0])
                     elif ev.get("type") == "message_stop":
                         break

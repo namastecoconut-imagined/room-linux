@@ -20,7 +20,7 @@ systemctl is-active -q tuned-ppd 2>/dev/null && sudo systemctl restart tuned-ppd
 sudo tuned-adm profile room
 # …and the assistant may boost the CPU for the second or two it takes to make speech, then put it back
 # (assistant/boost.py): the energy-preference files are made writable by your group, at every start
-G=$(id -gn "${SUDO_USER:-$USER}")
+G=$(id -g "${SUDO_USER:-$USER}")      # by number: the start-up's first stage can't look group names up
 printf '# Room: the assistant boosts the CPU while it makes speech (assistant/boost.py)\nz /sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference 0664 root %s - -\n' "$G" \
   | sudo tee /etc/tmpfiles.d/room-boost.conf >/dev/null
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/room-boost.conf

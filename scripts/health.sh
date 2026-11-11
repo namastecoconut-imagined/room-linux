@@ -21,6 +21,11 @@ row() {   # scope unit — state, restarts, since
   since=$("${S[@]}" show -p ActiveEnterTimestamp --value "$2" 2>/dev/null | awk '{print $2, $3}')
   printf '  %s %-28s %-9s %s\n' "$([ "$st" = active ] && echo ✓ || echo ✗)" "$2" "$st" \
     "${since:+since ${since}}${n:+ · restarts $n}"
+  if [ "${n:-0}" -gt 0 ]; then    # why: the last exit the journal has for it since this start
+    local J=(journalctl -b -q --no-pager -u "$2"); [ "$1" = user ] && J=(journalctl -b -q --no-pager "_SYSTEMD_USER_UNIT=$2.service")
+    "${J[@]}" -g 'exited|Failed|failed|code=|Stopped|Started' 2>/dev/null | grep -v 'Started' | tail -1 | cut -d' ' -f5- | cut -c1-150 \
+      | sed 's/^/        why: /'
+  fi
 }
 
 main() {
@@ -39,11 +44,14 @@ echo; echo "== Since this start: crashes and errors"
 c=$(journalctl -b -q --no-pager -g 'dumped core|core-dump|code=killed|code=dumped' 2>/dev/null | wc -l)
 echo "  crashes or kills logged: $c"
 [ "$c" -gt 0 ] && journalctl -b -q --no-pager -g 'dumped core|core-dump|code=killed|code=dumped' | tail -5 | cut -c1-200 | sed 's/^/     /'
+# known and harmless on this Surface: the kernel has no BPF security module (systemd notes it), Intel SGX/TDX are
+# off in its firmware, and its Marvell Bluetooth chip sends one stray event when it starts
+HARMLESS='bpf-restrict-fs|SGX disabled|TDX not supported|unexpected event for opcode 0x0000'
 e=$(journalctl -b -q --no-pager -p err 2>/dev/null)
-n=$(printf '%s' "$e" | grep -c .)
-echo "  error lines: $n"
-[ "$n" -gt 0 ] && printf '%s\n' "$e" | cut -d' ' -f5- | sed 's/\[[0-9]*\]//' | cut -c1-160 | sort | uniq -c | sort -rn \
-  | head -8 | sed 's/^/     /'
+n=$(printf '%s' "$e" | grep -c .); h=$(printf '%s' "$e" | grep -cE "$HARMLESS")
+echo "  error lines: $n ($h of them known and harmless)"
+[ $((n - h)) -gt 0 ] && printf '%s\n' "$e" | grep -vE "$HARMLESS" | cut -d' ' -f5- | sed 's/\[[0-9]*\]//' | cut -c1-160 \
+  | sort | uniq -c | sort -rn | head -8 | sed 's/^/     /'
 
 echo; echo "== Logging"
 echo "  journal: $([ -d /var/log/journal ] && echo 'kept across restarts' || echo 'in memory only (lost at restart)') · $(journalctl --disk-usage 2>/dev/null | grep -oE '[0-9.]+[KMGT]?B?' | head -1) on disk · $(journalctl --list-boots -q 2>/dev/null | wc -l) starts kept"
@@ -55,17 +63,27 @@ for u in room room-assistant room-airplay room-spotify; do
   printf '  %-15s %6s lines since this start%s\n' "$u" "$n" "${last:+ · last at $last}"
 done
 W="$UHOME/.local/state/room/watch.log"
-if [ -s "$W" ]; then
-  echo "  tracker: $(($(wc -l < "$W") - 1)) minutes logged · last: $(tail -1 "$W" | cut -f1)"
-else
-  echo "  tracker: no log yet ($W)"
-fi
+m=$([ -s "$W" ] && echo $(($(wc -l < "$W") - 1)) || echo 0)
+if [ "$m" -gt 0 ]; then echo "  tracker: $m minutes logged · last: $(tail -1 "$W" | cut -f1) ($W)"
+else echo "  tracker: started — its first line comes a minute after it starts ($W)"; fi
+
+echo; echo "== Room's permissions (set again at every start)"
+# by group NUMBER: the start-up's first stage (the boot image) can't look names up — with the name, the speech
+# boost's line logged "Unknown group" there at every start
+G=$(id -g "$U")
+for R in /etc/tmpfiles.d/room-boost.conf /etc/tmpfiles.d/room-power.conf; do
+  if [ -f "$R" ] && grep -qE '^z .* root [^0-9 ][^ ]* ' "$R"; then
+    sed -i -E "s/^(z .* root )[^0-9 ][^ ]*( .*)$/\1$G\2/" "$R" && echo "  ▸ $(basename "$R"): your group by number now"
+  fi
+done
 # the tracker logs watts too when your group may read the power meter (once; at every start after)
 R=/etc/tmpfiles.d/room-power.conf
-if [ ! -f "$R" ]; then
-  printf '# Room: its tracker (scripts/watch.py) reads the processor'"'"'s power meter\nz /sys/class/powercap/intel-rapl:*/energy_uj 0440 root %s - -\n' "$(id -gn "$U")" > "$R"
-  systemd-tmpfiles --create "$R" && echo "  ▸ the tracker may now read the power meter"
-fi
+[ -f "$R" ] || printf '# Room: its tracker (scripts/watch.py) reads the processor'"'"'s power meter\nz /sys/class/powercap/intel-rapl:*/energy_uj 0440 root %s - -\n' "$G" > "$R"
+systemd-tmpfiles --create $(ls /etc/tmpfiles.d/room-boost.conf "$R" 2>/dev/null) 2>&1 | sed 's/^/  ! /'
+p=$(stat -Lc '%A' /sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference 2>/dev/null)
+echo "  $([ "${p:5:1}" = w ] && echo ✓ || echo ✗) speech boost: the assistant may raise the CPU's speed while it talks ($p)"
+p=$(stat -Lc '%A' /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null)
+echo "  $([ "${p:4:1}" = r ] && echo ✓ || echo ✗) power meter: the tracker may read it ($p)"
 
 echo; echo "== Working (sit still for $SECS s — no touching)"
 python3 "$HERE/scripts/watch.py" --report "$SECS"

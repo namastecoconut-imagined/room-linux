@@ -78,5 +78,6 @@ for s in room-airplay room-spotify; do
 done
 # the helper command
 mkdir -p ~/.local/bin && ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
+ln -sf "$HERE/scripts/doctor.sh" ~/.local/bin/room-doctor
 systemctl --user restart room.service
 echo "Room updated to $(git log -1 --format='%h · %s')"

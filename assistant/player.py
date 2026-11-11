@@ -88,6 +88,7 @@ class Player:
                         and time.monotonic() - self.last_sound > self.REST):
                     try:
                         self.stream.stop()
+                        print("[assistant] voice: speaker resting", flush=True)
                     except Exception as e:
                         print(f"[assistant] voice: couldn't rest the speaker — {e!r}", flush=True)
                     self.active = False
@@ -104,6 +105,7 @@ class Player:
                 return False
             self.active = True
             self.last_cb = self.last_sound = time.monotonic()
+            print("[assistant] voice: speaker awake", flush=True)
             return True
 
     def close(self):

@@ -2,7 +2,7 @@
 
 On standby, once the room has been quiet for 5 minutes (no sound above the room's own background, no touch, nothing
 playing, no alarm), the backlight goes off and nothing is drawn. Any sound clearly above the
-background (a voice, a door, footsteps — 12 dB over the room's usual hum) brings the standby screen back; so does a
+background (a voice, a door, footsteps — 8 dB over the room's usual hum) brings the standby screen back; so does a
 touch, an alarm or a timer. The power button does the same by hand: off now, on again.
 
 The background is learnt as it goes: it follows quiet stretches down quickly and rises only slowly, so a fan or the
@@ -19,7 +19,7 @@ class Sleep(QObject):
     changed = Signal()
 
     QUIET_FOR = 300.0          # seconds of a quiet room (on standby) before the screen goes off
-    ABOVE = 12.0               # dB over the room's background that counts as someone there
+    ABOVE = 8.0                # dB over the room's background that counts as someone there (was 12: lowered to wake more readily)
     LOUDEST_QUIET = -48.0      # dBFS: anything quieter than this is never "someone there" (the noise-suppressed mic
                                # gives near-digital silence in a still room, so the background alone read ~ −100 dB
                                # and every tiny tick counted as a sound — the screen never went off)

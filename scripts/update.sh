@@ -65,6 +65,17 @@ if [ -f ~/.config/systemd/user/room-spotify.service ] && [ ! -f "$D/buffers.conf
   systemctl --user daemon-reload
   systemctl --user restart room-spotify.service
 fi
+# AirPlay and Spotify go down and come back up with the sound system. When PipeWire restarted (once, after a burst of
+# volume changes) they kept running but had lost their sound connection: silence until restarted by hand. Bound to it,
+# a PipeWire restart is a short blip for them too.
+for s in room-airplay room-spotify; do
+  if [ -f ~/.config/systemd/user/$s.service ] && [ ! -f ~/.config/systemd/user/$s.service.d/pipewire.conf ]; then
+    mkdir -p ~/.config/systemd/user/$s.service.d
+    printf '[Unit]\nBindsTo=pipewire.service\nAfter=pipewire.service\n' > ~/.config/systemd/user/$s.service.d/pipewire.conf
+    systemctl --user daemon-reload
+    systemctl --user add-wants pipewire.service $s.service >/dev/null 2>&1 || true
+  fi
+done
 # the helper command
 mkdir -p ~/.local/bin && ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
 systemctl --user restart room.service

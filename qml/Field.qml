@@ -39,7 +39,8 @@ ShaderEffect {
     }
     readonly property bool hasCover: cover && cover.cols !== undefined && cover.cols.length === 4
     readonly property var pal: mode === "room" ? roomP : mode === "weather" ? weatherP : (mode === "music" && hasCover) ? cover : idleP
-    // the base: the cover's last colour (room-motion.html: BG.cols[3]), the room's dark, the sky's, terracotta
+    // the base: from the cover (art.base_fill: its least common colour, as room-motion.html's BG.cols[3], kept off
+    // black and white), the room's dark, the sky's, terracotta
     readonly property var baseRgb: pal.base !== undefined ? pal.base : pal.cols[3]
 
     function rgb(a) { return Qt.rgba(a[0] / 255, a[1] / 255, a[2] / 255, 1) }

@@ -47,6 +47,24 @@ def wash(img: QImage) -> tuple[str, list[int]]:
     return path.as_uri(), best
 
 
+def base_fill(cols: list) -> list:
+    """The colour under the lights: the cover's least common colour (as in the design, room-motion.html: BG.cols[3])
+    — unless it's near black or near white, which a real cover's small dark corner or white lettering can be (the
+    design's own covers never were): then the next least common that isn't, and failing that the least common one
+    brought into range. Keeps the field from going black (rejected as too dark) or glaring white."""
+    lo, hi = 0.18, 0.82
+    lum = lambda c: (.2126 * c[0] + .7152 * c[1] + .0722 * c[2]) / 255
+    for c in reversed(cols):
+        if lo <= lum(c) <= hi:
+            return list(c)
+    c, l = cols[-1], lum(cols[-1])
+    if l > hi:
+        return [int(v * hi / l) for v in c]
+    if l >= 0.02:                                    # brightened, keeping its hue
+        return [min(255, int(v * lo / l)) for v in c]
+    return [int(lo * 255)] * 3                       # black: a dark grey
+
+
 def field(img: QImage) -> dict:
     """The cover read for the background (design: room-motion.html, analyse()). At 40 × 40: four colours by k-means
     (8 rounds, started from pixels at 0, ⅓, ⅔ and the end), each with where it sits (its pixels' centre, 0…1) and its
@@ -85,7 +103,8 @@ def field(img: QImage) -> dict:
     vy = (by / bw - dy / dw) if bw and dw else 0
     vl = (vx * vx + vy * vy) ** 0.5 or 1
     energy = max(0.0, min(1.2, sat * .7 + con * .9))
-    return {"cols": [[int(c["r"]), int(c["g"]), int(c["b"])] for c in C],
+    cols = [[int(c["r"]), int(c["g"]), int(c["b"])] for c in C]
+    return {"cols": cols, "base": base_fill(cols),
             "pos": [[round(c.get("x", .5), 3), round(c.get("y", .5), 3)] for c in C],
             "share": [round(c.get("share", .2), 3) for c in C],
             "lum": round(mean / 255, 3), "sat": round(sat, 3), "con": round(con, 3),

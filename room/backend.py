@@ -59,6 +59,9 @@ class Room(QObject):
         # Spotify on the Xiaomi at 15 jumped to 68 the moment AirPlay took over. Now the speaker stays put and the
         # phone's slider moves it proportionally from there (down to 0, up to 100). Room's own slider/buttons re-set it.
         self._pv_anchor, self._pv_last = None, None
+        # how far each step of the phone's volume moves the speaker: the iPhone's buttons step ~6 of 100, which at
+        # a low volume was a big jump (12 → 19 on one click); half by default ("airplayVolumeStep" in config.json)
+        self._pv_step = max(0.1, min(1.0, float(self.cfg.get("airplayVolumeStep", 0.5))))
         self._vol_apply = QTimer(self); self._vol_apply.setSingleShot(True); self._vol_apply.timeout.connect(self._apply_sink)
         self.wx.changed.connect(self.weatherChanged)
         self.calendar.changed.connect(self.eventsChanged)
@@ -572,17 +575,18 @@ class Room(QObject):
         self._set_sink(target)
 
     def _phone_mapped(self, v):
-        """The phone's volume → the speaker's, proportionally from the session's starting point (no jumps)."""
+        """The phone's volume → the speaker's: from the session's starting point, each step of the phone moves the
+        speaker by a fraction of it (airplayVolumeStep). The phone at zero is always silence. Reaching 0 or 100 moves
+        the starting point, so coming back the other way responds from the first click."""
+        if v <= 0:
+            self._pv_anchor = (0, 0.0)           # silence — and turning it back up starts from silence
+            return 0
         pa, sa = self._pv_anchor
-        if v <= pa:
-            return round(sa * v / pa) if pa > 0 else sa
-        if pa >= 100:
-            return sa
-        f = (v - pa) / (100 - pa)
-        # going up from a quiet speaker with the phone already high, a straight line made each press a big step
-        # (68→74 on the phone took the speaker 15→31): gentle at first, still reaching 100 at the top
-        f = f ** (1 + max(0.0, min(1.0, (pa - sa) / 50)))
-        return round(sa + (100 - sa) * f)
+        t = sa + self._pv_step * (v - pa)
+        if t > 100 or t < 0:
+            t = max(0.0, min(100.0, t))
+            self._pv_anchor = (v, t)
+        return round(t)
 
     def _airplay_session(self):
         if self._pv_anchor is not None and not self.airplay.active:

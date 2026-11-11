@@ -19,6 +19,12 @@ the stream's latency. `speaking` is true until then (+ a little slack) — or un
 that's sooner. So a speaker that stalls (the sound system restarted under it) can never hold the assistant on
 "speaking": at `until` it moves on, the rest is dropped, and if the stream itself has died (its callback, which runs
 every 50 ms even in silence, stopped) it's reopened in the background, so the next answer is heard.
+
+Between answers the stream RESTS: 10 s after the last sound it's paused (stream.stop — still open, nothing torn
+down), and the next answer starts it again before anything is queued. Kept running in silence, it kept the Surface's
+speaker tuning (Dolby, ~45 % of every sound cycle) working all day on nothing — even with music on the Bluetooth
+speaker. Waking adds ~0.3 s to the very first sound after a rest (the prebuffer already waits 0.3 s), which the
+prediction allows for.
 """
 import threading
 import time
@@ -47,10 +53,15 @@ class Player:
         self.until = 0.0                     # when the current answer will have finished playing (predicted)
         self.last_cb = time.monotonic()      # the stream's last callback (every 50 ms while it's alive)
         self._healing = False
+        self.active = False                  # the stream is running (not resting)
+        self.last_sound = time.monotonic()   # last time real sound went out
+        self.ctl = threading.Lock()          # start / stop of the stream
 
     LATENCY = 0.25                           # what the sound system holds (the stream's latency, below)
     SLACK = 0.5                              # allowance on top of the prediction
     DEAD = 2.0                               # no callback for this long: the stream has died
+    REST = 10.0                              # seconds without sound before the stream rests
+    WAKE = 0.3                               # what waking a resting stream adds to the first sound
 
     # ---------------------------------------------------------------- the stream
     def start(self):
@@ -63,6 +74,37 @@ class Player:
         # a little late when the Surface is busy — with 20 ms blocks and "high" (~0.1 s) it missed blocks and the
         # voice broke up. Adds nothing you'd hear at the start of an answer.
         self.stream.start()
+        self.active = True
+        self.last_cb = self.last_sound = time.monotonic()
+        if not getattr(self, "_rester", None):
+            self._rester = threading.Thread(target=self._rest_loop, daemon=True)
+            self._rester.start()
+
+    def _rest_loop(self):
+        while True:
+            time.sleep(1.0)
+            with self.ctl:
+                if (self.active and self.stream and not self.busy and not self._healing
+                        and time.monotonic() - self.last_sound > self.REST):
+                    try:
+                        self.stream.stop()
+                    except Exception as e:
+                        print(f"[assistant] voice: couldn't rest the speaker — {e!r}", flush=True)
+                    self.active = False
+
+    def _wake(self) -> bool:
+        """Start a resting stream. True if it had to (the first sound comes a little later)."""
+        with self.ctl:
+            if self.active or not self.stream:
+                return False
+            try:
+                self.stream.start()
+            except Exception as e:
+                print(f"[assistant] voice: couldn't wake the speaker — {e!r}", flush=True)
+                return False
+            self.active = True
+            self.last_cb = self.last_sound = time.monotonic()
+            return True
 
     def close(self):
         if self.stream:
@@ -95,18 +137,21 @@ class Player:
                     self.need = min(int(0.6 * self.rate), self.reprime * 2 ** (self.dry - 1))
                 self.playing = False
             self.played += n
+            if n:
+                self.last_sound = self.last_cb
         if self.on_played and n:
             self.on_played(out[:, 0].copy())
 
     # ---------------------------------------------------------------- what's said
     def begin(self):
         """A new answer is starting (whatever was playing stops)."""
+        woke = self._wake()
         if self.dead:
             self.heal()
         with self.lock:
             self.r = self.w
             self.playing, self.ended, self.need, self.dry = False, False, self.prebuffer, 0
-            self.until = 0.0
+            self.until = time.monotonic() + self.WAKE if woke else 0.0
         self._rs.clear()
 
     def feed(self, samples, rate=None):
@@ -162,7 +207,8 @@ class Player:
 
     @property
     def dead(self) -> bool:
-        return self.stream is None or time.monotonic() - self.last_cb > self.DEAD
+        """Running but its callback stopped coming (a resting stream isn't dead)."""
+        return self.stream is None or (self.active and time.monotonic() - self.last_cb > self.DEAD)
 
     def heal(self):
         """Reopen the stream (in the background — never blocks the assistant). Called when its callback stopped."""

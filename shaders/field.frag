@@ -28,6 +28,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 c0; vec4 c1; vec4 c2; vec4 c3;    // the lights' colours
     vec4 b0; vec4 b1; vec4 b2; vec4 b3;    // the lights: x, y (centre, stage px), diameter, opacity
     vec4 glass;        // the glass card: x, y, w, h (stage px; w = 0: none)
+    float glassA;      // how much of it there is (it fades in and out with the card)
 };
 
 const float TAU = 6.28318531;
@@ -101,7 +102,7 @@ void main() {
     // inside the glass card: no grain, a little more colour (its frosted glass blurs and saturates what's behind)
     float inGlass = 0.0;
     if (glass.z > 0.0) {
-        inGlass = 1.0 - smoothstep(-0.5, 0.5, roundBox(p, glass, glassR));
+        inGlass = (1.0 - smoothstep(-0.5, 0.5, roundBox(p, glass, glassR))) * glassA;
         float g = dot(col, vec3(0.2126, 0.7152, 0.0722));
         col = mix(col, clamp(mix(vec3(g), col, 1.3), 0.0, 1.0), inGlass);
     }

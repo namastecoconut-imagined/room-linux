@@ -30,15 +30,25 @@ Item {
     signal openSettings()
     signal goHome()
 
-    readonly property bool hV: view === "home"
-    readonly property bool pV: view === "player"
-    readonly property bool sV: view === "standby"
-    readonly property bool rV: view === "room"
-    readonly property bool oV: view === "other"
-    readonly property bool cV: view === "clock"
-    readonly property bool wV: view === "weather"
-    readonly property bool remV: view === "reminders"
-    readonly property bool setV: view === "settings"
+    // what's on screen: the view, a step behind it — so that coming off standby (waking) is known before anything
+    // starts to move. Waking is choreographed: the clock glides to its place, standby's bits sink away, the
+    // background warms up slowly and Home's pieces rise into place one after another, instead of all at once.
+    property string cur: view
+    property bool waking: false
+    onViewChanged: {
+        if (cur === "standby" && view !== "standby") { waking = true; wakeEnd.restart() }
+        cur = view
+    }
+    Timer { id: wakeEnd; interval: 1900; onTriggered: sc.waking = false }
+    readonly property bool hV: cur === "home"
+    readonly property bool pV: cur === "player"
+    readonly property bool sV: cur === "standby"
+    readonly property bool rV: cur === "room"
+    readonly property bool oV: cur === "other"
+    readonly property bool cV: cur === "clock"
+    readonly property bool wV: cur === "weather"
+    readonly property bool remV: cur === "reminders"
+    readonly property bool setV: cur === "settings"
     readonly property bool scV: cV || wV || remV || setV      // the redesigned screens (pass 2)
     readonly property bool menu: rV || oV
 
@@ -181,6 +191,7 @@ Item {
     }
     Field {
         id: bg
+        soft: sc.waking
         cover: sc.field
         mode: sc.rV ? "room" : sc.wV ? "weather" : sc.m ? "music" : "idle"
         playing: sc.m && !sc.rV && sc.music.playing === true
@@ -195,20 +206,37 @@ Item {
         fps: sc.sV ? (sc.night ? 8 : sc.dayTime ? 12 : 10) : 20
         external: sc.sV && sc.musicFace && words.opacity > 0.002      // music standby: in step with the words (30 a second)
         glassRect: card.opacity > 0.01 ? Qt.rect(card.x, card.y, card.width, card.height) : Qt.rect(0, 0, 0, 0)
+        glassA: card.opacity
     }
 
     // ---------------------------------------------------------------- the pieces
     component Mover: Item {
         id: mv
         property int order: 0
+        property int wake: 3            // waking: when it arrives (0 first), each step 60 ms after the last
         transformOrigin: Item.TopLeft
         visible: opacity > 0.002
-        Behavior on x { SequentialAnimation { PauseAnimation { duration: mv.order * 16 } NumberAnimation { duration: Theme.moveMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } } }
-        Behavior on y { SequentialAnimation { PauseAnimation { duration: mv.order * 16 } NumberAnimation { duration: Theme.moveMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } } }
-        Behavior on width { SequentialAnimation { PauseAnimation { duration: mv.order * 16 } NumberAnimation { duration: Theme.moveMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } } }
-        Behavior on height { SequentialAnimation { PauseAnimation { duration: mv.order * 16 } NumberAnimation { duration: Theme.moveMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } } }
-        Behavior on scale { SequentialAnimation { PauseAnimation { duration: mv.order * 16 } NumberAnimation { duration: Theme.moveMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } } }
-        Behavior on opacity { SequentialAnimation { PauseAnimation { duration: mv.order * 16 } NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } } }
+        // waking, what arrives rises as it fades in (and what leaves sinks as it fades out)
+        transform: Translate { y: sc.waking ? (1 - mv.opacity) * 22 : 0 }
+        readonly property int mDur: sc.waking ? 1000 : Theme.moveMs
+        readonly property var mEase: sc.waking ? Theme.easeSoft : Theme.ease
+        readonly property int mWait: sc.waking ? 0 : mv.order * 16
+        Behavior on x { SequentialAnimation { PauseAnimation { duration: mv.mWait } NumberAnimation { duration: mv.mDur; easing.type: Easing.BezierSpline; easing.bezierCurve: mv.mEase } } }
+        Behavior on y { SequentialAnimation { PauseAnimation { duration: mv.mWait } NumberAnimation { duration: mv.mDur; easing.type: Easing.BezierSpline; easing.bezierCurve: mv.mEase } } }
+        Behavior on width { SequentialAnimation { PauseAnimation { duration: mv.mWait } NumberAnimation { duration: mv.mDur; easing.type: Easing.BezierSpline; easing.bezierCurve: mv.mEase } } }
+        Behavior on height { SequentialAnimation { PauseAnimation { duration: mv.mWait } NumberAnimation { duration: mv.mDur; easing.type: Easing.BezierSpline; easing.bezierCurve: mv.mEase } } }
+        Behavior on scale { SequentialAnimation { PauseAnimation { duration: mv.mWait } NumberAnimation { duration: mv.mDur; easing.type: Easing.BezierSpline; easing.bezierCurve: mv.mEase } } }
+        // waking: what arrives waits its turn and fades in over 0.8 s; what leaves goes quickly (0.32 s)
+        Behavior on opacity {
+            id: fade
+            SequentialAnimation {
+                PauseAnimation { duration: !sc.waking ? mv.order * 16 : fade.targetValue > mv.opacity ? 140 + mv.wake * 60 : 0 }
+                NumberAnimation {
+                    duration: !sc.waking ? Theme.fadeMs : fade.targetValue > mv.opacity ? 800 : 320
+                    easing.type: Easing.BezierSpline; easing.bezierCurve: sc.waking ? [0.33, 0, 0.2, 1, 1, 1] : Theme.ease
+                }
+            }
+        }
     }
     // something you press: shrinks a touch (0.94) while pressed
     component Tap: Press { pressScale: 0.94 }
@@ -224,6 +252,7 @@ Item {
     Mover {
         id: card
         order: 1
+        wake: 1
         x: sc.pV ? 44 : 690; y: sc.pV ? 140 : 128
         width: sc.pV ? 1280 : 420; height: sc.pV ? 730 : 740
         opacity: sc.hV || sc.pV ? 1 : 0
@@ -233,6 +262,7 @@ Item {
     Mover {
         id: cover
         order: 2
+        wake: 1
         x: sc.pV ? 72 : 706; y: sc.pV ? 168 : 144
         width: sc.pV ? 674 : 388; height: sc.pV ? 674 : 388     // (not "height: width": that would chase the moving width and lag)
         opacity: ((sc.hV && sc.m) || sc.pV ? sc.kCover : 0) * sc.hk
@@ -281,6 +311,7 @@ Item {
     Mover {
         id: title
         order: 3
+        wake: 2
         x: sc.pV ? 790 : sc.sV ? 236 : 722; y: sc.pV ? 170 : sc.sV ? 722 : 556
         scale: sc.pV ? 2.2 : 1
         width: sc.pV ? 232 : sc.sV ? 560 : 376; height: tc.height
@@ -300,6 +331,7 @@ Item {
     Mover {
         id: meta
         order: 4
+        wake: 3
         x: sc.pV ? 792 : 722; y: sc.pV ? 660 : 632
         width: 360; height: sc.pV ? 44 : 30
         opacity: (sc.hV || sc.pV) && sc.live ? 1 : 0
@@ -327,6 +359,7 @@ Item {
     Mover {
         id: prog
         order: 5
+        wake: 3
         x: sc.pV ? 792 : sc.sV ? 236 : 722; y: sc.pV ? 516 : sc.sV ? 800 : 672
         width: sc.pV ? 500 : sc.sV ? 520 : 356; height: 48
         opacity: ((sc.hV && sc.live) || sc.pV || (sc.sV && sc.m)) && (sc.music.duration || 0) > 0 ? 1 : 0
@@ -348,6 +381,7 @@ Item {
     Mover {
         id: vol
         order: 6
+        wake: 3
         x: sc.pV ? 792 : 722; y: sc.pV ? 667 : 724
         width: sc.pV ? 500 : 356; height: 30
         opacity: (sc.hV || sc.pV) && sc.music.canVolume !== false && sc.exists ? 1 : 0
@@ -373,6 +407,7 @@ Item {
     Mover {
         id: btns
         order: 7
+        wake: 3
         x: sc.pV ? 792 : 722; y: sc.pV ? 578 : 790
         scale: sc.pV ? 1.25 : 1
         width: 300; height: 44
@@ -423,6 +458,7 @@ Item {
     Mover {
         id: lib
         order: 9
+        wake: 4
         // the names end level with the big cover's bottom edge, the card's own margin below them (no heading: the
         // covers and their names say what they are, and it left the row crowding the card's edge)
         x: 792; y: 842 - 104
@@ -471,6 +507,7 @@ Item {
     Mover {
         id: info
         order: 11
+        wake: 0
         x: 48; y: 392; width: 560; height: 360
         opacity: (sc.hV ? 1 : 0) * sc.hk
         GlanceList { items: sc.glance }
@@ -478,6 +515,7 @@ Item {
     Mover {
         id: foot
         order: 12
+        wake: 5
         x: 48; y: 824
         opacity: sc.hV ? 1 : 0
         width: 400; height: 50
@@ -497,6 +535,7 @@ Item {
     Mover {
         id: nav
         order: 13
+        wake: 4
         x: 44; y: 34
         opacity: (sc.hV ? 1 : 0) * sc.hk
         width: navR.width; height: 44
@@ -514,6 +553,7 @@ Item {
     Mover {
         id: ctl
         order: 14
+        wake: 4
         x: 1332 - 640; y: 34        // a fixed box, its row kept to the right edge (a width that follows the row would
         opacity: (sc.hV || sc.pV ? 1 : 0) * sc.hk     // drag x behind it, easing, every time a label changed)
         width: 640; height: 44
@@ -608,6 +648,7 @@ Item {
     Mover {
         id: lightsCap
         order: 21
+        wake: 3
         x: 1150; y: 540
         opacity: sc.hV ? 1 : 0
         width: 180; height: 20
@@ -618,6 +659,7 @@ Item {
         Mover {
             id: rw
             order: 22 + index
+            wake: 4 + index
             readonly property real gap: Math.min(68, (880 - 582) / Math.max(1, sc.rooms.length))
             readonly property bool reach: modelData.reachable !== 0 && modelData.reachable !== false
             readonly property int lv: modelData.on > 0 ? modelData.level : 0

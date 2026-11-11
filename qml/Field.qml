@@ -25,6 +25,7 @@ ShaderEffect {
     property bool active: true          // drawn and moving
     property int fps: 20
     property rect glassRect: Qt.rect(0, 0, 0, 0)
+    property real glassA: 1
     property bool playing: false        // music is playing (the sound swell, the full swirl)
 
     readonly property var idleP: ({ cols: [[196, 106, 62], [184, 102, 74], [74, 33, 23], [138, 69, 40]],
@@ -72,7 +73,9 @@ ShaderEffect {
     property real dirX: pal.dir[0];           Behavior on dirX { Glide {} }
     property real dirY: pal.dir[1];           Behavior on dirY { Glide {} }
     property real ampV: pal.amp;              Behavior on ampV { Glide {} }
-    property real dimV: dim;                Behavior on dimV { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
+    property bool soft: false           // waking from standby: brighten slowly, evenly
+    property real dimV: dim
+    Behavior on dimV { NumberAnimation { duration: f.soft ? 1600 : Theme.fadeMs; easing.type: f.soft ? Easing.InOutSine : Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
 
     property vector4d b0: Qt.vector4d(x0, y0, d0, la)
     property vector4d b1: Qt.vector4d(x1, y1, d1, la)

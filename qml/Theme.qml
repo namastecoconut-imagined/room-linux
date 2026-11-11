@@ -26,6 +26,7 @@ QtObject {
     readonly property color rainC: "#9cc4ff"
     readonly property color onWhite: "#1a120c"             // text on a solid white button
     readonly property var ease: [0.22, 1, 0.36, 1, 1, 1]   // cubic-bezier(.22, 1, .36, 1): every move
+    readonly property var easeSoft: [0.3, 0, 0.15, 1, 1, 1]  // a slow start and a long settle: waking from standby
     readonly property int moveMs: 850
     readonly property int fadeMs: 700
     property real px: 1                                     // screen pixels per stage pixel (2 on the Surface)

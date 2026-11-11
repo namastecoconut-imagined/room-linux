@@ -123,4 +123,5 @@ class Voice:
 
     @property
     def busy(self) -> bool:
-        return self.making or self.player.busy
+        """Making or speaking. Speaking ends at the answer's predicted end (player.py), never on a stalled speaker."""
+        return self.making or self.player.speaking

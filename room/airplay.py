@@ -63,6 +63,7 @@ class AirPlay(QObject):
         self.npi_title, self.npi_at = "", 0.0    # the last Now Playing info (copl): its song, and when it came
         self.volume = 50
         self.last_seen = 0.0
+        self.audio_at = 0.0          # when AirPlay's sound was last seen flowing in PipeWire (room/output.py)
         self.art_dir = STATE_DIR / "airplay"
         self.art_dir.mkdir(parents=True, exist_ok=True)
         for old in self.art_dir.glob("cover-*.jpg"):       # last run's covers: start clean
@@ -212,9 +213,13 @@ class AirPlay(QObject):
         changed = False
         if isinstance(dur, (int, float)) and dur > 0:
             self.duration = float(dur); changed = True
+        # It may say "playing", never "paused": these messages can arrive late and still say paused just after the
+        # song resumed — that left Room thinking AirPlay was paused while it played (the phone's volume was ignored,
+        # and after 5 min the music card and its slider went away). Pauses come from AirPlay's own pause (ssnc/paus).
+        moving = isinstance(rate, (int, float)) and rate > 0
         if isinstance(el, (int, float)):
             pos = float(el)
-            playing = rate > 0 if isinstance(rate, (int, float)) else self.playing
+            playing = moving
             if playing and isinstance(ts, datetime.datetime):
                 # elapsed was true at the Timestamp (UTC): move it on to now — unless the clocks disagree wildly
                 now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
@@ -224,16 +229,13 @@ class AirPlay(QObject):
             if self.duration:
                 pos = min(pos, self.duration)
             self.position, self.at = max(0.0, pos), time.time()
-            self.playing = playing
-            if playing:
-                self.active = True
+            if moving:
+                self.playing = self.active = True
             changed = True
             print(f"[room] airplay: now playing {self.npi_title!r} at {self.position:.1f} of {self.duration:.1f} s"
-                  f" ({'playing' if playing else 'paused'})", flush=True)
-        elif isinstance(rate, (int, float)):
-            if self.playing and rate == 0:
-                self.position += time.time() - self.at
-            self.playing, self.at = rate > 0, time.time()
+                  f" ({'playing' if moving else 'sender says paused'})", flush=True)
+        elif moving and not self.playing:
+            self.playing, self.at = True, time.time()
             changed = True
         return changed
 
@@ -243,7 +245,10 @@ class AirPlay(QObject):
 
     @property
     def showing(self) -> bool:
-        """AirPlay owns the music card while a sender is connected and has played in the last few minutes."""
+        """AirPlay owns the music card while a sender is connected and has played in the last few minutes — or while
+        its sound is actually flowing (seen by room/output.py), whatever the metadata last said."""
+        if time.time() - self.audio_at < 45:
+            return True
         return self.active and (self.playing or time.time() - self.last_seen < 300)
 
     def snapshot(self) -> dict:

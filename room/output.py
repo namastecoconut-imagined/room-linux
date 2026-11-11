@@ -27,6 +27,7 @@ class Output:
         self.moved: dict = {}          # AirPlay stream id → where it was sent
         self.poked = threading.Event()
         self.headroom = abs(float(cfg.get("speakerHeadroomDb", 4)))
+        self.on_airplay_audio = None   # called (from this thread) when AirPlay's sound is seen flowing
 
     def poke(self):
         """Something changed (AirPlay started, a speaker came or went): look now, and again over the next few seconds
@@ -85,6 +86,8 @@ class Output:
             sid = n["id"]
             if (n.get("info") or {}).get("state") != "running":
                 continue                    # paused / idle: nothing to move (it's checked again when it plays)
+            if not spot and self.on_airplay_audio:
+                self.on_airplay_audio()     # AirPlay's sound is flowing: it's the music source, whatever metadata says
             if sid not in self.moved and not spot:
                 # a new AirPlay stream starts at full (not Spotify's: its loudness is Spotify's volume): PipeWire may have kept a lower level for this app from an
                 # old duck that was never undone (how AirPlay got quiet)

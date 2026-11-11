@@ -109,7 +109,9 @@ class Room(QObject):
         self.spotify.start()
         self.airplay.start()
         from .output import Output
-        self.output = Output(self.cfg); self.output.start()
+        self.output = Output(self.cfg)
+        self.output.on_airplay_audio = lambda: setattr(self.airplay, "audio_at", time.time())
+        self.output.start()
         self.airplay.changed.connect(self.output.poke)
         # One thing plays at a time, as on any speaker: AirPlay starting pauses the Surface's own Spotify, and the
         # Surface's Spotify starting pauses AirPlay (the phone pauses too). Both used to play over each other, with
@@ -560,9 +562,10 @@ class Room(QObject):
     def _phone_volume(self, v):
         print(f"[room] AirPlay: the phone's volume is {v}", flush=True)
         self._pv_last = v
-        if self._pv_anchor is None or not self.airplay.playing:
-            # a session starting (or AirPlay paused / something else playing): the phone's level only becomes the
-            # starting point — the speaker stays where it is. It moves the speaker only while AirPlay plays.
+        if self._pv_anchor is None or not self.airplay.showing:
+            # a session starting (AirPlay wasn't the music here — e.g. Room's Spotify was playing): the phone's level
+            # only becomes the starting point and the speaker stays where it is. (It once asked "is AirPlay playing?",
+            # and a wrong "paused" made every click of the phone's volume do nothing.)
             here = self._out_volume if self._out_volume is not None else v
             if self._pv_anchor != (v, here):
                 print(f"[room] AirPlay: the speaker stays at {here} — the phone's {v} is the starting point", flush=True)

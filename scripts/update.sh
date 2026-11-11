@@ -3,7 +3,13 @@
 set -e
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 cd "$HERE"
-[ -n "${ROOM_NO_PULL:-}" ] || git pull --ff-only
+if [ -z "${ROOM_NO_PULL:-}" ]; then
+  before=$(git rev-parse HEAD)
+  git pull --ff-only
+  # the pull may have changed this very script — but bash is still running the old copy, so every change to these
+  # steps only took effect on the NEXT room-update. Start again with the new copy.
+  [ "$(git rev-parse HEAD)" = "$before" ] || ROOM_NO_PULL=1 exec bash "$HERE/scripts/update.sh" "$@"
+fi
 # the exact versions Room is tested with (requirements.lock); nothing newer sneaks in on an update
 if [ -f requirements.lock ]; then "$HERE/.venv/bin/pip" install -q -r requirements.lock; else "$HERE/.venv/bin/pip" install -q -r requirements.txt; fi
 # the old voice assistant is gone: its Python, models and state go too

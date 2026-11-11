@@ -34,7 +34,8 @@ Item {
     readonly property bool rV: view === "room"
     readonly property bool oV: view === "other"
     readonly property bool cV: view === "clock"
-    readonly property bool scV: cV                    // the redesigned screens (pass 2: Clock so far)
+    readonly property bool wV: view === "weather"
+    readonly property bool scV: cV || wV              // the redesigned screens (pass 2 so far)
     readonly property bool menu: rV || oV
 
     // ---------------------------------------------------------------- what's playing
@@ -177,7 +178,7 @@ Item {
     Field {
         id: bg
         cover: sc.field
-        mode: sc.rV ? "room" : sc.m ? "music" : "idle"
+        mode: sc.rV ? "room" : sc.wV ? "weather" : sc.m ? "music" : "idle"
         playing: sc.m && !sc.rV && sc.music.playing === true
         roomColour: roomV.light
         roomOn: sc.curRoom && sc.curRoom.on > 0 ? sc.curRoom.level / 100 : 0
@@ -185,8 +186,8 @@ Item {
         lightA: sc.rV ? (sc.curRoom && sc.curRoom.on > 0 ? 0.8 : 0.2) : sc.sV ? 0.9 : 0.95
         // standby: darker overall, so its lights must differ more from the base to keep their movement visible;
         // a bright cover dims standby further (the words are light)
-        pop: sc.sV ? 1.8 : 1.45
-        dim: sc.sV ? 0.35 + 0.5 * sc.lift : sc.pV || sc.scV ? Math.max(0.1, sc.lift) : sc.oV ? 0.3 : sc.lift
+        pop: sc.sV ? 1.8 : sc.wV ? 1.0 : 1.45          // (the sky is a set palette: as designed)
+        dim: sc.sV ? 0.35 + 0.5 * sc.lift : sc.wV ? 0.1 : sc.pV || sc.scV ? Math.max(0.1, sc.lift) : sc.oV ? 0.3 : sc.lift
         fps: sc.sV ? (sc.night ? 8 : sc.dayTime ? 12 : 10) : 20
         external: sc.sV && sc.musicFace && words.opacity > 0.002      // music standby: in step with the words (30 a second)
         glassRect: card.opacity > 0.01 ? Qt.rect(card.x, card.y, card.width, card.height) : Qt.rect(0, 0, 0, 0)
@@ -557,7 +558,7 @@ Item {
         order: 15
         x: 150; y: 34; width: 300; height: 44
         opacity: sc.scV ? 1 : 0
-        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : "") }
+        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : "") }
     }
     Mover {
         id: scrTop
@@ -567,6 +568,8 @@ Item {
         Row {
             anchors.right: parent.right; spacing: 12; height: 44
             Btn { visible: sc.cV; text: "+ New alarm"; ink: "white"; onTapped: clockV.newAlarm() }
+            Mono { visible: sc.wV && !!(room.weather || {}).updated; anchors.verticalCenter: parent.verticalCenter; rightPadding: 8
+                   color: Theme.w62; text: "Updated " + ((room.weather || {}).updated || "") }
         }
     }
     // the Room screen's top bar: Turn off / on · settings
@@ -732,6 +735,7 @@ Item {
 
     // ================================================================= the screens (pass 2)
     ClockView { id: clockV; shown: sc.cV; now: sc.now }
+    WeatherView { shown: sc.wV }
 
     // ================================================================= the sheets
     Sheet {

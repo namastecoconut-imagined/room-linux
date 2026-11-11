@@ -61,7 +61,41 @@ Item {
     property real kSb: 1
     property real kTitle: 1
     property real kWords: 1
-    function commitSong() { sTitle = music.title || ""; sArtist = music.artist || ""; sAlbum = music.album || ""; sArt = music.art || "" }
+    function commitSong() {
+        sTitle = music.title || ""; sArtist = music.artist || ""; sAlbum = music.album || ""; sArt = music.art || ""
+        if (swipeWait) { swipeWait = false; swipeBack.stop(); slideIn(-swipeDir) }     // the new cover comes in from the other side
+    }
+
+    // the player's cover, swiped: it follows your finger; let go past 36 px and it flies off that way (the song
+    // skips), and the next cover slides in from the other side once the player has moved on (or the same one comes
+    // back after 3 s if it didn't)
+    property real swipeX: 0
+    property real swipeO: 1
+    property int swipeDir: 0
+    property bool swipeWait: false
+    readonly property bool swiping: swipeWait || flyOut.running || slideInA.running || swipeX !== 0
+    function flyAway(dir) {
+        swipeDir = dir; slideInA.stop()
+        flyOut.to = dir * (cover.width + 160); flyOut.start(); fadeOut.start()
+        if (dir < 0) room.next(); else room.previous()
+        swipeWait = true; swipeBack.restart()
+    }
+    function slideIn(from) {
+        flyOut.stop(); fadeOut.stop()
+        swipeX = from * cover.width * 0.45; swipeO = 0
+        slideInA.restart()
+    }
+    function swipeReset() { swipeWait = false; swipeBack.stop(); flyOut.stop(); fadeOut.stop(); slideInA.stop(); swipeX = 0; swipeO = 1 }
+    onPVChanged: if (!pV) swipeReset()
+    NumberAnimation { id: flyOut; target: sc; property: "swipeX"; duration: 260; easing.type: Easing.InCubic }
+    NumberAnimation { id: fadeOut; target: sc; property: "swipeO"; to: 0; duration: 260; easing.type: Easing.InQuad }
+    ParallelAnimation {
+        id: slideInA
+        NumberAnimation { target: sc; property: "swipeX"; to: 0; duration: 560; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease }
+        NumberAnimation { target: sc; property: "swipeO"; to: 1; duration: 420; easing.type: Easing.OutQuad }
+    }
+    NumberAnimation { id: springBack; target: sc; property: "swipeX"; to: 0; duration: 380; easing.type: Easing.OutBack }
+    Timer { id: swipeBack; interval: 3000; onTriggered: { sc.swipeWait = false; sc.slideIn(sc.swipeDir) } }
     onSongKeyChanged: if (sTitle === "" && sArtist === "") commitSong(); else if (songKey !== "") swap.restart()
     Connections { target: sc; function onMusicChanged() { if (!swap.running && sc.songKey !== "" && (sc.music.art || "") !== sc.sArt) sc.sArt = sc.music.art || "" } }
     Component.onCompleted: commitSong()
@@ -180,26 +214,40 @@ Item {
         x: sc.pV ? 72 : 706; y: sc.pV ? 168 : 144
         width: sc.pV ? 674 : 388; height: sc.pV ? 674 : 388     // (not "height: width": that would chase the moving width and lag)
         opacity: (sc.hV && sc.m) || sc.pV ? sc.kCover : 0
-        layer.enabled: sc.kCover < 0.999
+        // a new song's blur (not while a swipe carries the cover past its edges: the blur would clip it)
+        layer.enabled: sc.kCover < 0.999 && !sc.swiping
         layer.effect: MultiEffect { blurEnabled: true; blur: 1 - sc.kCover; blurMax: 32 }
-        RectangularShadow { anchors.fill: parent; offset.y: 24; blur: 50; spread: -14; radius: 14; color: Qt.rgba(0, 0, 0, 0.6) }
-        Art {
-            anchors.fill: parent; radius: 14
-            source: sc.sArt; rgb: sc.music.rgb || [201, 185, 163]; rgb2: sc.music.rgb2 || [44, 40, 34]
+        Item {
+            anchors.fill: parent
+            opacity: sc.swipeO
+            transform: Translate { x: sc.swipeX }
+            RectangularShadow { anchors.fill: parent; offset.y: 24; blur: 50; spread: -14; radius: 14; color: Qt.rgba(0, 0, 0, 0.6) }
+            Art {
+                anchors.fill: parent; radius: 14
+                source: sc.sArt; rgb: sc.music.rgb || [201, 185, 163]; rgb2: sc.music.rgb2 || [44, 40, 34]
+            }
         }
-        // the player's cover: tap to play / pause, swipe sideways to skip (its lower part — the screen answers there)
+        // the player's cover: tap to play / pause; swipe sideways to skip — it follows your finger (its lower part:
+        // the screen answers there)
         MouseArea {
             anchors.fill: parent; enabled: sc.pV && sc.exists
             preventStealing: true
             property real x0: 0
-            onPressed: (e) => { x0 = e.x }
-            onReleased: (e) => { var dx = e.x - x0; if (Math.abs(dx) > 36) { if (dx < 0) room.next(); else room.previous() } else room.playPause() }
+            onPressed: (e) => { x0 = e.x; if (!sc.swipeWait) { sc.swipeReset(); springBack.stop() } }
+            onPositionChanged: (e) => { if (!sc.swipeWait) sc.swipeX = (e.x - x0) * 0.9 }
+            onReleased: (e) => {
+                var dx = e.x - x0
+                if (sc.swipeWait) return
+                if (Math.abs(dx) > 36) sc.flyAway(dx < 0 ? -1 : 1)
+                else { springBack.start(); if (Math.abs(dx) < 20) room.playPause() }
+            }
+            onCanceled: if (!sc.swipeWait) springBack.start()
         }
     }
     Mover {
         id: title
         order: 3
-        x: sc.pV ? 790 : sc.sV ? 236 : 722; y: sc.pV ? 190 : sc.sV ? 722 : 556
+        x: sc.pV ? 790 : sc.sV ? 236 : 722; y: sc.pV ? 170 : sc.sV ? 722 : 556
         scale: sc.pV ? 2.2 : 1
         width: sc.pV ? 232 : sc.sV ? 560 : 376; height: tc.height
         opacity: sc.hV || sc.pV || (sc.sV && sc.m) ? sc.kTitle : 0
@@ -213,38 +261,37 @@ Item {
             T { width: parent.width; height: 36; verticalAlignment: Text.AlignVCenter; text: sc.live || sc.sV ? sc.sArtist : "Pick up where you left off"; font.pixelSize: 30; color: Theme.w62 }
         }
     }
+    // where it's playing: on Home just the words (a target that small isn't worth aiming at); in the player a proper
+    // button beside the volume (where it plays, how loud), for choosing the speaker (Spotify only)
     Mover {
         id: meta
         order: 4
-        x: sc.pV ? 792 : 722; y: sc.pV ? 650 : 632
-        width: 360; height: 30
-        opacity: sc.hV || sc.pV ? 1 : 0
-        Row {
-            spacing: 22; height: parent.height
-            Tap {
-                visible: sc.live && sc.music.liked !== null && sc.music.liked !== undefined
-                width: 22; height: 30; anchors.verticalCenter: parent.verticalCenter
-                onTapped: room.toggleLiked()
-                Icon { anchors.centerIn: parent; name: sc.music.liked ? "heartOn" : "heart"; size: 18; color: "white" }
+        x: sc.pV ? 792 : 722; y: sc.pV ? 660 : 632
+        width: 360; height: sc.pV ? 44 : 30
+        opacity: (sc.hV || sc.pV) && sc.live ? 1 : 0
+        readonly property real room_: sc.pV && sc.live && sc.spotify ? spk.width + 28 : 0     // what the volume leaves it
+        Tap {
+            id: spk
+            enabled: sc.pV && sc.spotify
+            width: Math.min(260, spkL.implicitWidth + (sc.pV ? 36 : 0)); height: parent.height
+            onTapped: { room.refreshDevices(); sc.sheet = "speakers" }
+            Rectangle {
+                anchors.fill: parent; radius: 8; color: "transparent"
+                border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.3)
+                opacity: sc.pV && sc.spotify ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: Theme.fadeMs } }
             }
-            Tap {
-                visible: sc.live
-                width: spkL.implicitWidth; height: 30; anchors.verticalCenter: parent.verticalCenter
-                onTapped: if (sc.spotify) { room.refreshDevices(); sc.sheet = "speakers" }
-                Mono { id: spkL; anchors.verticalCenter: parent.verticalCenter; size: 13; color: Theme.w62
-                       text: (sc.music.device || "Choose a speaker") + (sc.spotify ? " ▾" : "") }
-            }
-            Tap {
-                width: plL.implicitWidth; height: 30; anchors.verticalCenter: parent.verticalCenter
-                onTapped: sc.sheet = "library"
-                Mono { id: plL; anchors.verticalCenter: parent.verticalCenter; size: 13; color: Theme.w62; text: "Playlists" }
+            Mono {
+                id: spkL; anchors.centerIn: parent; size: 13; width: Math.min(implicitWidth, 260 - 36); elide: Text.ElideRight
+                color: sc.pV ? "white" : Theme.w62
+                text: (sc.music.device || (sc.spotify ? "Choose a speaker" : "AirPlay")) + (sc.pV && sc.spotify ? "  ▾" : "")
             }
         }
     }
     Mover {
         id: prog
         order: 5
-        x: sc.pV ? 792 : sc.sV ? 236 : 722; y: sc.pV ? 512 : sc.sV ? 800 : 672
+        x: sc.pV ? 792 : sc.sV ? 236 : 722; y: sc.pV ? 516 : sc.sV ? 800 : 672
         width: sc.pV ? 500 : sc.sV ? 520 : 356; height: 48
         opacity: ((sc.hV && sc.live) || sc.pV || (sc.sV && sc.m)) && (sc.music.duration || 0) > 0 ? 1 : 0
         Seek {
@@ -265,14 +312,16 @@ Item {
     Mover {
         id: vol
         order: 6
-        x: sc.pV ? 792 : 722; y: sc.pV ? 686 : 724
+        x: sc.pV ? 792 : 722; y: sc.pV ? 667 : 724
         width: sc.pV ? 500 : 356; height: 30
         opacity: (sc.hV || sc.pV) && sc.music.canVolume !== false && sc.exists ? 1 : 0
         property real dragV: -1
-        Mono { anchors.verticalCenter: parent.verticalCenter; size: 13; color: Theme.w62; text: "Vol" }
+        property real inset: meta.room_
+        Behavior on inset { NumberAnimation { duration: Theme.moveMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
+        Mono { x: vol.inset; anchors.verticalCenter: parent.verticalCenter; size: 13; color: Theme.w62; text: "Vol" }
         Seek {
             id: volSeek
-            x: 41; width: parent.width - 41 - 42
+            x: vol.inset + 41; width: parent.width - vol.inset - 41 - 42
             value: (sc.music.volume || 0) / 100
             every: 80
             onMoved: (v) => room.setVolumeLive(Math.round(v * 100))
@@ -283,14 +332,15 @@ Item {
     Mover {
         id: btns
         order: 7
-        x: sc.pV ? 792 : 722; y: sc.pV ? 572 : 790
+        x: sc.pV ? 792 : 722; y: sc.pV ? 578 : 790
         scale: sc.pV ? 1.25 : 1
-        width: 260; height: 44
+        width: 300; height: 44
         opacity: sc.hV || sc.pV ? 1 : 0
+        Mono { id: pauseRef; visible: false; text: "Pause" }          // the pill keeps Pause's width when it says Play
         Row {
             spacing: 12; height: parent.height
             Tap {
-                width: ppL.implicitWidth + 40 + 26; height: 44
+                width: (sc.live ? Math.max(ppL.implicitWidth, pauseRef.implicitWidth) : ppL.implicitWidth) + 40 + 26; height: 44
                 onTapped: sc.live ? room.playPause() : room.playLiked()
                 Rectangle { anchors.fill: parent; radius: 8; color: "white" }
                 Row {
@@ -309,12 +359,18 @@ Item {
                 onTapped: room.next()
                 Icon { anchors.centerIn: parent; name: "next"; size: 20; color: "white" }
             }
+            Tap {             // nothing playing: your playlists (outlined, so it reads as a button)
+                visible: !sc.live; width: plL.implicitWidth + 36; height: 44
+                onTapped: sc.sheet = "library"
+                Rectangle { anchors.fill: parent; radius: 8; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.35) }
+                Mono { id: plL; anchors.centerIn: parent; color: "white"; text: "Playlists" }
+            }
         }
     }
     Mover {
         id: upn
         order: 8
-        x: 792; y: 372; scale: 0.9
+        x: 792; y: 358; scale: 0.9
         opacity: sc.pV && (sc.music.nextUp || []).length > 0 ? 1 : 0
         width: 460; height: upc.height
         Column {
@@ -326,7 +382,7 @@ Item {
     Mover {
         id: lib
         order: 9
-        x: 792; y: 730
+        x: 792; y: 736          // its covers end level with the big cover
         opacity: sc.pV ? 1 : 0
         width: 500; height: 130
         readonly property var lists: [{ name: "Liked songs", uri: "liked", art: "" }].concat(sc.music.playlists || [])

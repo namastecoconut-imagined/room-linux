@@ -31,22 +31,36 @@ SMALL = {"a", "an", "the", "in", "on", "at", "of", "to", "for", "with", "and", "
 
 
 def pieces(text: str) -> list[str]:
-    """The answer as speakable pieces: a short first one, then whole sentences."""
-    sents = [s.strip() for s in re.findall(r"[^.!?]+[.!?]*", text) if s.strip()]
-    if not sents:
-        return []
-    first, rest = sents[0], sents[1:]
-    w = first.split()
-    if len(w) > 5:
-        # making a piece takes about as long as saying it: the first one short, so the first sound comes quickly
-        cut = next((i + 1 for i, x in enumerate(w[:5]) if x.endswith((",", ";", ":"))), None)
-        if not cut:                     # no comma early on: about 4 words, never ending on "in", "the", "and"…
-            cut = 4
-            while cut > 2 and w[cut - 1].lower().strip(",") in SMALL:
-                cut -= 1
-        rest.insert(0, " ".join(w[cut:]))
-        first = " ".join(w[:cut])
-    return [first] + rest
+    """The answer as speakable pieces, growing: ~3 words, then ~5, ~7, ~10, ~14… — never past a sentence's end.
+
+    Making a piece takes about as long as saying it (0.7× with the CPU boosted), so the first is tiny (Room starts
+    talking almost at once) and each next one is only a little longer than what's already queued to play — it's made
+    while that plays, so there's no gap. One tiny first piece followed by the whole rest of the sentence "ran dry":
+    a pause after the opening words. Breaks fall on a sentence end, else a comma near the budget, never on "the",
+    "and", "you"…"""
+    words = text.split()
+    out, i, budget = [], 0, 3.0
+    while i < len(words):
+        # this sentence's end, from here
+        end = next((j + 1 for j in range(i, len(words)) if words[j].endswith((".", "!", "?"))), len(words))
+        n = max(2, int(round(budget)))
+        if end - i <= n + max(2, n // 3):            # the rest of the sentence fits (or nearly): take it whole
+            cut = end
+        else:
+            cut = None
+            for j in range(min(i + n + 1, end - 1), i, -1):         # a comma at or just past the budget, or before it
+                if words[j - 1].endswith((",", ";", ":")):
+                    cut = j
+                    break
+            if not cut:                 # nearest to the budget, either way, that doesn't end on "you", "the", "and"…
+                near = sorted(range(i + 2, end), key=lambda c: (abs(c - (i + n)), c > i + n))
+                cut = next((c for c in near if words[c - 1].lower().strip(",;:") not in SMALL), i + n)
+            if end - cut <= 2:          # never leave a stub ("…like me / to do?"): the sentence's end goes with it
+                cut = end
+        out.append(" ".join(words[i:cut]))
+        i = cut
+        budget = min(budget * 1.45, 40)
+    return out
 
 
 class Voice:

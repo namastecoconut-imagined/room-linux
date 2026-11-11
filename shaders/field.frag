@@ -15,6 +15,7 @@ layout(std140, binding = 0) uniform buf {
     float dimA;        // the dimmer (0…1)
     float grainA;      // the grain's strength (0.13)
     float glassR;      // the glass card's corner radius
+    float pop;         // how far the lights stand out from the base (1: the cover's colours as they are)
     float rotP;        // the swirl's phases (radians, each kept within one turn, so they never jump): the turn
     vec4 orbX; vec4 orbY;   // each light's circling, across and up and down
     vec4 brP;          // each light's growing and shrinking
@@ -65,7 +66,10 @@ vec3 light(vec3 under, vec2 p, int i, vec4 b, vec4 c) {
     float r = b.z * 0.5 * breathe(i) * (1.0 + 0.1 * sound);
     float f = 1.0 - length(p - place(i, b)) / r;         // closest-side radial: full at the centre, nothing at the edge
     if (f <= 0.0) return under;
-    vec3 col = min(c.rgb * (1.0 + 0.16 * sound), vec3(1.0));
+    // pushed away from the base so the lights read against it as they move (a cover whose colours sit close
+    // together otherwise gives one flat wash)
+    vec3 col = clamp(base.rgb + (c.rgb - base.rgb) * pop, 0.0, 1.0);
+    col = min(col * (1.0 + 0.16 * sound), vec3(1.0));
     return over(under, col, f * b.w);
 }
 

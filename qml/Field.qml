@@ -84,6 +84,8 @@ ShaderEffect {
     property color dimC: "#050302"
     property real grainA: 0.13
     property real glassR: 22
+    property real pop: 1.45             // the lights pushed away from the base, so their movement shows
+    Behavior on pop { NumberAnimation { duration: 1400 } }
     property vector4d glass: Qt.vector4d(glassRect.x, glassRect.y, glassRect.width, glassRect.height)
     property size size: Qt.size(width, height)
     property point origin: Qt.point(x, y)

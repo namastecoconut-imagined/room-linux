@@ -170,8 +170,10 @@ Item {
         roomColour: roomV.light
         roomOn: sc.curRoom && sc.curRoom.on > 0 ? sc.curRoom.level / 100 : 0
         k: sc.sV ? 0.75 : 1
-        lightA: sc.rV ? (sc.curRoom && sc.curRoom.on > 0 ? 0.8 : 0.2) : sc.sV ? 0.8 : 0.95
-        dim: sc.sV ? 0.45 : sc.pV ? Math.max(0.1, sc.lift) : sc.oV ? 0.3 : sc.lift
+        lightA: sc.rV ? (sc.curRoom && sc.curRoom.on > 0 ? 0.8 : 0.2) : sc.sV ? 0.9 : 0.95
+        // standby: darker overall, so its lights stand out further from the base to keep their movement visible
+        pop: sc.sV ? 1.8 : 1.45
+        dim: sc.sV ? 0.35 : sc.pV ? Math.max(0.1, sc.lift) : sc.oV ? 0.3 : sc.lift
         fps: sc.sV ? (sc.night ? 8 : sc.dayTime ? 12 : 10) : 20
         glassRect: card.opacity > 0.01 ? Qt.rect(card.x, card.y, card.width, card.height) : Qt.rect(0, 0, 0, 0)
     }

@@ -272,21 +272,39 @@ def removal_test(db, cand):
     return cand, moved, "the removal test didn't settle"
 
 
-DNF_TRIES = [["--setopt=clean_requirements_on_remove=False", "--disablerepo=*"],
-             ["--setopt=clean_requirements_on_remove=False"], []]
+def protected(cand):
+    """dnf's protected packages — what it refuses to remove — minus the ones on our list. (Fedora Workstation
+    protects gnome-shell from being removed by accident; here it's on purpose.) Returns (keep, lifted)."""
+    names = []
+    for line in sh(["dnf", "--dump-main-config"]).stdout.splitlines():
+        if re.match(r"\s*protected_packages\s*=", line):
+            names += [t for t in re.split(r"[,\s]+", line.split("=", 1)[1]) if t and not t.startswith("glob:")]
+    for f in glob.glob("/etc/dnf/protected.d/*.conf"):
+        try:
+            for line in open(f):
+                names += line.split("#", 1)[0].split()
+        except OSError:
+            pass
+    names = sorted(set(names))
+    return [n for n in names if n not in cand], [n for n in names if n in cand]
 
 
 def dnf_preview(cand):
-    """dnf's own dry run of the same list: (output, how many it would remove, the dnf options that worked)."""
-    out = ""
-    for opts in DNF_TRIES:
+    """dnf's own dry run of the same list: (output, how many it would remove, rows, the dnf options that worked)."""
+    keep, _ = protected(cand)
+    exact = "--setopt=clean_requirements_on_remove=False"          # exactly the list — no extra 'unused' clean-up
+    prot = "--setopt=protected_packages=" + ",".join(keep)          # still protects dnf, systemd, sudo, the kernel…
+    tries = [[exact, "--disablerepo=*", prot], [exact, prot], [exact, "--disablerepo=*", "--setopt=protected_packages="]]
+    outs = []
+    for opts in tries:
         r = sh(["dnf", "remove", "--assumeno", *opts, *sorted(cand)])
         out = r.stdout + r.stderr
         m = re.search(r"(?im)^\s*remov(?:e|ing):?\s+(\d+)\s+packages?\b", out)
         if m:
             rows = set(re.findall(r"(?m)^ (\S+)\s+(?:x86_64|noarch|i686)\s", out))
             return out, int(m.group(1)), rows, opts
-    return out, None, set(), []
+        outs.append(f"[dnf remove --assumeno {' '.join(o if len(o) < 90 else o[:87] + '…' for o in opts)} …]\n{out.strip()}")
+    return "\n\n".join(outs), None, set(), []
 
 
 def du(path):
@@ -385,6 +403,10 @@ def do_check(db, who, home):
 
     body = ["", "== stays anyway — reviewed by hand, or this disk needs it"]
     body += [f"  {n}  — {w}" for n, w in sorted(p["why"].items())]
+    lifted = protected(cand)[1] if not err else []
+    if lifted:
+        body += ["", "== dnf protects these from removal; lifted for this one removal (dnf, systemd, sudo, the kernel… stay "
+                 "protected): " + ", ".join(lifted)]
     body += ["", "== stays — the removal test found something staying needs it"]
     body += [f"  {n}  — {w}" for n, w in sorted(moved.items())] or ["  (none)"]
     body += ["", "== also goes: Flatpak apps and leftovers"]

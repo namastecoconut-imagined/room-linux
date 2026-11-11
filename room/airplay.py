@@ -60,6 +60,7 @@ class AirPlay(QObject):
         self.duration = 0.0
         self.position = 0.0
         self.at = 0.0
+        self.npi_title, self.npi_at = "", 0.0    # the last Now Playing info (copl): its song, and when it came
         self.volume = 50
         self.last_seen = 0.0
         self.art_dir = STATE_DIR / "airplay"
@@ -123,11 +124,14 @@ class AirPlay(QObject):
         if t == "core":
             if c == "astm" and len(d) == 4:              # the song's length in ms (AirPlay 2 sends this, not prgr)
                 ms = int.from_bytes(d, "big")
-                if ms > 0 and not self.duration:
+                # only when the Now Playing info hasn't given it: astm also comes for other songs (the queue)
+                if ms > 0 and not self.duration and not self._npi_fresh(self.title):
                     self.duration = ms / 1000
                 return True
             if c == "minm":
-                if s() != self.title:                    # a new song starts at 0
+                if s() != self.title and not self._npi_fresh(s()):
+                    # a new song starts at 0 — unless its Now Playing info (the true position) just came: the
+                    # title can arrive after it, and resetting then put a song you joined halfway back at 0
                     self.duration = 0.0; self.position = 0.0; self.at = time.time()
                 self.title = s(); return True
             if c == "asar": self.artist = s(); return True
@@ -202,6 +206,9 @@ class AirPlay(QObject):
             return False
         k = lambda name: npi.get("kMRMediaRemoteNowPlayingInfo" + name)
         dur, el, rate, ts = k("Duration"), k("ElapsedTime"), k("PlaybackRate"), k("Timestamp")
+        if isinstance(k("Title"), str) and k("Title"):
+            self.npi_title = k("Title")
+        self.npi_at = time.time()
         changed = False
         if isinstance(dur, (int, float)) and dur > 0:
             self.duration = float(dur); changed = True
@@ -221,12 +228,18 @@ class AirPlay(QObject):
             if playing:
                 self.active = True
             changed = True
+            print(f"[room] airplay: now playing {self.npi_title!r} at {self.position:.1f} of {self.duration:.1f} s"
+                  f" ({'playing' if playing else 'paused'})", flush=True)
         elif isinstance(rate, (int, float)):
             if self.playing and rate == 0:
                 self.position += time.time() - self.at
             self.playing, self.at = rate > 0, time.time()
             changed = True
         return changed
+
+    def _npi_fresh(self, title: str) -> bool:
+        """Did this song's Now Playing info come in the last few seconds?"""
+        return bool(title) and title.strip().lower() == self.npi_title.strip().lower() and time.time() - self.npi_at < 15
 
     @property
     def showing(self) -> bool:

@@ -129,7 +129,7 @@ class Room(QObject):
         self.airplay.volumeSet.connect(self._phone_volume)
         self.bt.connectedChanged.connect(self.output.poke)
         # the volume slider works on the speaker the music is on: a Bluetooth speaker when one's connected, otherwise
-        # the Surface's own (the Dolby tuning). Looked up off the screen's thread (pw-dump is slow), at start, when a
+        # the Surface's own. Looked up off the screen's thread (pw-dump is slow), at start, when a
         # speaker connects or goes (its sink appears a moment after), and every minute in case.
         self._sinkFound.connect(self._sink_changed, Qt.ConnectionType.QueuedConnection)
         self._find_sink()

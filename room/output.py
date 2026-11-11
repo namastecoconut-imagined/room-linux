@@ -1,8 +1,8 @@
-"""Keeps sound going through the speaker tuning. Your Dolby filter (the Windows tuning rebuilt for Linux) is a sink of
-its own; when a Bluetooth speaker disconnects, PipeWire falls back to the raw "Built-in Audio" sink instead, so
-everything plays untuned and much quieter. Every 10 s: if the default output is the
-Surface's raw speakers and a tuned sink exists (its name contains "preferSink" from config.json, "Dolby" by default),
-the tuned one becomes the default again. A Bluetooth speaker or anything else you pick is left alone.
+"""Where the music plays, and the levels underneath it.
+
+(There's no speaker tuning any more: the Dolby filter cost about half a core, all day — it processed even silence —
+and the realtime load it put on PipeWire got it killed. Music mostly goes to the Bluetooth speaker, which has its
+own. The Surface's speakers play raw.)
 
 AirPlay always goes to the Bluetooth speaker when one is connected (whatever the default output is), and back to the
 Surface's speakers when it isn't ("airplayToBluetooth": false turns that off). Checked the moment AirPlay starts or
@@ -11,7 +11,7 @@ run every few seconds on a battery.
 
 At start (and every few minutes) the levels underneath are put right: the Surface's own speakers at full — PipeWire's
 level for the raw speakers and the chip's Speaker control (Master a few dB under full — see levels()); the volume slider works on the output in front of
-them (the Dolby tuning, or a Bluetooth speaker), and a lowered level underneath (it sat around 20 %) only made
+them (the Surface's speakers, or a Bluetooth speaker), and a lowered level underneath (it sat around 20 %) only made
 everything quiet — and any music stream left turned down is put back to full (PipeWire remembers a stream's level per
 app, so one left low stays low for good; how loud music is belongs to the phone, Spotify and the speaker).
 """
@@ -23,8 +23,6 @@ import time
 
 class Output:
     def __init__(self, cfg: dict):
-        self.want = (cfg.get("preferSink") or "Dolby").lower()
-        self.off = cfg.get("preferSink") is False
         self.airplay_bt = cfg.get("airplayToBluetooth") is not False
         self.moved: dict = {}          # AirPlay stream id → where it was sent
         self.poked = threading.Event()
@@ -49,8 +47,6 @@ class Output:
                     self.levels(nodes, heal=(n == 0))
                 if self.airplay_bt:
                     self.airplay(nodes)
-                if not self.off:
-                    self.check(nodes)
             except Exception as e:
                 print(f"[room] output: {e!r}")
             n += 1
@@ -143,22 +139,3 @@ class Output:
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["amixer", "-q", "-c", "0", "sset", "Master", f"-{self.headroom:g}dB" if self.headroom else "100%", "unmute"],
                        timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-    def check(self, nodes):
-        sinks, default = {}, None
-        for n in nodes:
-            props = (n.get("info") or {}).get("props") or {}
-            if props.get("media.class") == "Audio/Sink":
-                sinks[props.get("node.name", "")] = (n["id"], (props.get("node.description") or "").lower())
-            if n.get("type") == "PipeWire:Interface:Metadata" and (n.get("props") or {}).get("metadata.name") == "default":
-                for m in n.get("metadata") or []:
-                    if m.get("key") == "default.audio.sink":
-                        v = m.get("value")
-                        default = (v or {}).get("name") if isinstance(v, dict) else None
-        tuned = next((name for name, (_, desc) in sinks.items() if self.want in desc or self.want in name.lower()), None)
-        if not tuned or not default or default == tuned:
-            return
-        raw = default.startswith("alsa_output.pci") and "hdmi" not in default
-        if raw:
-            subprocess.run(["wpctl", "set-default", str(sinks[tuned][0])], timeout=5)
-            print(f"[room] output: back to the tuned speakers ({tuned}) — the default had fallen back to {default}", flush=True)

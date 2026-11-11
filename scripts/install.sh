@@ -66,8 +66,7 @@ echo "▸ Sound"
 mkdir -p ~/.config/wireplumber/wireplumber.conf.d
 printf 'wireplumber.settings = { bluetooth.autoswitch-to-headset-profile = false }\n' \
   > ~/.config/wireplumber/wireplumber.conf.d/90-room-no-headset.conf
-# the speaker tuning's end limiter (only if the Dolby tuning is installed), then every level where it belongs
-[ -f ~/.config/pipewire/pipewire.conf.d/Dolby_Balanced.conf ] && bash "$HERE/scripts/speaker-guard.sh" || true
+# every level where it belongs
 bash "$HERE/scripts/sound-fix.sh" >/dev/null || true
 
 echo "▸ Room in the app grid"

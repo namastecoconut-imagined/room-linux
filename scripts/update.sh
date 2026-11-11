@@ -39,6 +39,13 @@ if [ ! -f "$W" ]; then
   mkdir -p "$(dirname "$W")"
   printf 'wireplumber.settings = { bluetooth.autoswitch-to-headset-profile = false }\n' > "$W"
 fi
+# …and Bluetooth only ever does music (A2DP): no headset/hands-free roles at all, so a speaker can't come back as a
+# low-quality mono "headset" (it did once, after a reconnect). Takes effect the next time WirePlumber starts.
+W=~/.config/wireplumber/wireplumber.conf.d/91-room-bluetooth-music-only.conf
+if [ ! -f "$W" ]; then
+  mkdir -p "$(dirname "$W")"
+  printf '# Room: Bluetooth is for music only (A2DP) — never a headset (HSP/HFP), never mono\nmonitor.bluez.properties = {\n  bluez5.roles = [ a2dp_sink a2dp_source ]\n}\n' > "$W"
+fi
 # the assistant goes first when the Surface is busy (its voice is made as it plays — late, it broke up); the Surface
 # stays on its balanced power profile (performance kept it warm)
 D=~/.config/systemd/user/room-assistant.service.d

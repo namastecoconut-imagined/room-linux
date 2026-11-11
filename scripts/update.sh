@@ -65,6 +65,14 @@ if [ -f ~/.config/systemd/user/room-spotify.service ] && [ ! -f "$D/buffers.conf
   systemctl --user daemon-reload
   systemctl --user restart room-spotify.service
 fi
+# The sound system doesn't look for AirPlay speakers on the network (PipeWire's RAOP discovery): Room is an AirPlay
+# receiver, never a sender. It found the Macs — and Room's own receiver, as a speaker called "Room": sound sent there
+# would loop back into itself. (Takes effect the next time PipeWire starts.)
+N=~/.config/pipewire/pipewire.conf.d/90-room-no-airplay-speakers.conf
+if [ ! -f "$N" ]; then
+  mkdir -p "$(dirname "$N")"
+  printf '# Room: no AirPlay speakers (RAOP discovery) — Room only receives AirPlay\ncontext.properties = { module.raop = false }\n' > "$N"
+fi
 # AirPlay and Spotify go down and come back up with the sound system. When PipeWire restarted (once, after a burst of
 # volume changes) they kept running but had lost their sound connection: silence until restarted by hand. Bound to it,
 # a PipeWire restart is a short blip for them too.

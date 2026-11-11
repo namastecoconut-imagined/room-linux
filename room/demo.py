@@ -30,7 +30,8 @@ MUSIC = {"enabled": True, "exists": True, "playing": True, "title": "Fidelio", "
          "nextUp": [{"title": "Lowlight", "artist": "Sundays", "art": "", "uri": ""}, {"title": "Weightless", "artist": "Marconi Union", "art": "", "uri": ""}],
          "recent": [{"title": "Night Owl", "artist": "Galimatias", "art": "", "uri": ""}, {"title": "Nightcall", "artist": "Kavinsky", "art": "", "uri": ""}],
          "playlists": [{"name": "Late night", "uri": "", "art": ""}, {"name": "Focus", "uri": "", "art": ""}, {"name": "Sunday", "uri": "", "art": ""},
-                       {"name": "Drive", "uri": "", "art": ""}, {"name": "In Rainbows", "uri": "", "art": ""}, {"name": "Dinner", "uri": "", "art": ""}],
+                       {"name": "Drive", "uri": "", "art": ""}, {"name": "In Rainbows", "uri": "", "art": ""}, {"name": "Dinner", "uri": "", "art": ""},
+                       {"name": "Blonde", "uri": "", "art": ""}, {"name": "Morning", "uri": "", "art": ""}, {"name": "Rain", "uri": "", "art": ""}],
          "devices": [{"id": "a", "name": "Living room speaker", "type": "Speaker", "active": True},
                      {"id": "b", "name": "Aviral's MacBook Air", "type": "Computer", "active": False},
                      {"id": "c", "name": "Aviral's iPhone", "type": "Smartphone", "active": False}]}

@@ -98,12 +98,19 @@ Item {
             }
         }
 
-        // ------------------------------------------------------------ playlists and albums
+        // ------------------------------------------------------------ playlists and albums: seven at a time, the
+        // arrows go through them (no swiping: this touch screen isn't reliable at it)
         ListView {
+            id: libRow
             visible: sh.shown === "library"
-            x: 36; y: 72; width: 1280 - 72; height: 240
+            x: 126; y: 72; width: 7 * 128 + 6 * 22; height: 200
             orientation: ListView.Horizontal; spacing: 22; clip: true
+            interactive: false
             boundsBehavior: Flickable.StopAtBounds
+            Behavior on contentX { NumberAnimation { duration: 520; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
+            readonly property real maxX: Math.max(originX, originX + contentWidth - width)
+            function page(dir) { contentX = Math.max(originX, Math.min(maxX, contentX + dir * 7 * (128 + 22))) }
+            Connections { target: sh; function onShownChanged() { if (sh.shown === "library") libRow.contentX = libRow.originX } }
             model: [{ name: "Liked songs", uri: "liked", art: "" }].concat(sh.music.playlists || [])
             delegate: Press {
                 width: 128; height: 200; pressScale: 0.95
@@ -113,8 +120,22 @@ Item {
                     source: modelData.art || ""; liked: modelData.uri === "liked"
                     rgb: [[140, 94, 78], [78, 110, 140], [110, 140, 94], [140, 122, 78], [122, 106, 140], [94, 140, 132]][index % 6]; rgb2: [21, 21, 21]
                 }
-                Mono { y: 140; width: parent.width; text: modelData.name; size: 12 }
+                Mono { y: 140; width: parent.width; text: modelData.name; size: 12; elide: Text.ElideRight }
             }
         }
+        component Arrow: Press {
+            id: ar
+            property string icon: "chev"
+            property bool can: true
+            width: 64; height: 64; pressScale: 0.92
+            visible: sh.shown === "library" && libRow.count > 7
+            opacity: can ? 1 : 0.3
+            enabled: can
+            Behavior on opacity { NumberAnimation { duration: 250 } }
+            Rectangle { anchors.fill: parent; radius: 32; color: Qt.rgba(1, 1, 1, 0.06); border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.25) }
+            Icon { anchors.centerIn: parent; name: ar.icon; size: 26; color: "white" }
+        }
+        Arrow { x: 36; y: 72 + 64 - 32; icon: "back"; can: libRow.contentX > libRow.originX + 4; onTapped: libRow.page(-1) }
+        Arrow { x: 1280 - 36 - 64; y: 72 + 64 - 32; icon: "chev"; can: libRow.contentX < libRow.maxX - 4; onTapped: libRow.page(1) }
     }
 }

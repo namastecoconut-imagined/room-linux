@@ -15,7 +15,7 @@ layout(std140, binding = 0) uniform buf {
     float dimA;        // the dimmer (0…1)
     float grainA;      // the grain's strength (0.13)
     float glassR;      // the glass card's corner radius
-    float pop;         // how far the lights stand out from the base (1: the cover's colours as they are)
+    float pop;         // how far brighter lights are pushed from the base (1: as the cover has them)
     float rotP;        // the swirl's phases (radians, each kept within one turn, so they never jump): the turn
     vec4 orbX; vec4 orbY;   // each light's circling, across and up and down
     vec4 brP;          // each light's growing and shrinking
@@ -68,9 +68,20 @@ vec3 light(vec3 under, vec2 p, int i, vec4 b, vec4 c) {
     if (f <= 0.0) return under;
     f = f * f * (3.0 - 2.0 * f);                         // …eased at both ends: no visible rim, no bright point
                                                          // (a straight fade showed its edge once the lights had contrast)
-    // pushed away from the base so the lights read against it as they move (a cover whose colours sit close
-    // together otherwise gives one flat wash)
-    vec3 col = clamp(base.rgb + (c.rgb - base.rgb) * pop, 0.0, 1.0);
+    // lights are pushed away from the base so they read as they move (a cover whose colours sit close together
+    // otherwise gives one flat wash). A brighter light is pushed fully (it glows); a darker one only a little, never
+    // below 60 % of its own colour, and never more than 0.35 darker than the base — a light cover's small dark patch
+    // otherwise became a black stain wandering over it
+    vec3 dv = c.rgb - base.rgb;
+    float lb = dot(base.rgb, vec3(0.2126, 0.7152, 0.0722));
+    vec3 col;
+    if (dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)) >= lb) {
+        col = clamp(base.rgb + dv * pop, 0.0, 1.0);
+    } else {
+        col = max(clamp(base.rgb + dv * (1.0 + (pop - 1.0) * 0.4), 0.0, 1.0), c.rgb * 0.6);
+        float lo = lb - 0.35, l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+        if (l < lo) col = mix(col, base.rgb, (lo - l) / max(0.001, lb - l));
+    }
     col = min(col * (1.0 + 0.16 * sound), vec3(1.0));
     return over(under, col, f * b.w);
 }

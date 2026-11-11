@@ -45,10 +45,20 @@ Item {
     // the song's place: after a seek, hold the new place until the player reports it (Spotify takes a second or two)
     property real seekTo: -1
     property real seekAt: 0
-    readonly property real livePos: exists ? Math.min(music.duration || 0, (music.position || 0) + (music.playing ? now - music.at : 0)) : 0
-    readonly property real pos: seekTo >= 0 && now - seekAt < 4 && Math.abs(livePos - (seekTo + (music.playing ? now - seekAt : 0))) > 2
-                                ? Math.min(music.duration || 0, seekTo + (music.playing ? now - seekAt : 0)) : livePos
-    function seek(f) { var s = f * (music.duration || 0); seekTo = s; seekAt = now; room.seek(s) }
+    // the song's place moves smoothly: while it's on screen and playing, its clock ticks 20 times a second (in step
+    // with the background, which redraws that often anyway — so no extra drawing), not once a second in jumps
+    property real fineNow: 0
+    Timer {
+        id: fine
+        interval: 50; repeat: true
+        running: sc.visible && sc.music.playing === true && prog.opacity > 0
+        onTriggered: sc.fineNow = Date.now() / 1000
+    }
+    readonly property real tNow: fine.running && fineNow > 0 ? fineNow : now
+    readonly property real livePos: exists ? Math.min(music.duration || 0, (music.position || 0) + (music.playing ? tNow - music.at : 0)) : 0
+    readonly property real pos: seekTo >= 0 && tNow - seekAt < 4 && Math.abs(livePos - (seekTo + (music.playing ? tNow - seekAt : 0))) > 2
+                                ? Math.min(music.duration || 0, seekTo + (music.playing ? tNow - seekAt : 0)) : livePos
+    function seek(f) { var s = f * (music.duration || 0); seekTo = s; seekAt = tNow; room.seek(s) }
     function mmss(s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + Theme.two(s % 60) }
 
     // a new song: the old cover and words blur away (0.42 s), the new ones resolve in, one after another (90 ms)

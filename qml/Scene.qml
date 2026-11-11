@@ -33,6 +33,8 @@ Item {
     readonly property bool sV: view === "standby"
     readonly property bool rV: view === "room"
     readonly property bool oV: view === "other"
+    readonly property bool cV: view === "clock"
+    readonly property bool scV: cV                    // the redesigned screens (pass 2: Clock so far)
     readonly property bool menu: rV || oV
 
     // ---------------------------------------------------------------- what's playing
@@ -184,7 +186,7 @@ Item {
         // standby: darker overall, so its lights must differ more from the base to keep their movement visible;
         // a bright cover dims standby further (the words are light)
         pop: sc.sV ? 1.8 : 1.45
-        dim: sc.sV ? 0.35 + 0.5 * sc.lift : sc.pV ? Math.max(0.1, sc.lift) : sc.oV ? 0.3 : sc.lift
+        dim: sc.sV ? 0.35 + 0.5 * sc.lift : sc.pV || sc.scV ? Math.max(0.1, sc.lift) : sc.oV ? 0.3 : sc.lift
         fps: sc.sV ? (sc.night ? 8 : sc.dayTime ? 12 : 10) : 20
         external: sc.sV && sc.musicFace && words.opacity > 0.002      // music standby: in step with the words (30 a second)
         glassRect: card.opacity > 0.01 ? Qt.rect(card.x, card.y, card.width, card.height) : Qt.rect(0, 0, 0, 0)
@@ -448,9 +450,9 @@ Item {
     Mover {
         id: clock
         order: 10
-        x: sc.hV ? 40 : (sc.pV || sc.rV) ? 652 : sc.sV ? (sc.m ? 56 : 52) : 652
-        y: sc.hV ? 120 : (sc.pV || sc.rV) ? 38 : sc.sV ? (sc.m ? 52 : 150) : 38
-        scale: sc.hV ? 1 : (sc.pV || sc.rV) ? 0.2 : sc.sV ? (sc.m ? 0.38 : 1.28) : 0.2
+        x: sc.hV ? 40 : (sc.pV || sc.rV || sc.scV) ? 652 : sc.sV ? (sc.m ? 56 : 52) : 652
+        y: sc.hV ? 120 : (sc.pV || sc.rV || sc.scV) ? 38 : sc.sV ? (sc.m ? 52 : 150) : 38
+        scale: sc.hV ? 1 : (sc.pV || sc.rV || sc.scV) ? 0.2 : sc.sV ? (sc.m ? 0.38 : 1.28) : 0.2
         opacity: sc.oV ? 0 : 1
         width: clockT.implicitWidth; height: clockT.implicitHeight
         Serif {
@@ -537,7 +539,7 @@ Item {
         id: back
         order: 15
         x: 36; y: 34
-        opacity: sc.pV || sc.rV ? 1 : 0
+        opacity: sc.pV || sc.rV || sc.scV ? 1 : 0
         width: 120; height: 44
         Tap {
             anchors.fill: parent
@@ -547,6 +549,24 @@ Item {
                 Icon { anchors.verticalCenter: parent.verticalCenter; name: "back"; size: 20; color: "white" }
                 Mono { anchors.verticalCenter: parent.verticalCenter; text: "Home" }
             }
+        }
+    }
+    // the screens' top bar: "/ Clock" beside ‹ Home, and the screen's own action on the right
+    Mover {
+        id: crumb
+        order: 15
+        x: 150; y: 34; width: 300; height: 44
+        opacity: sc.scV ? 1 : 0
+        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : "") }
+    }
+    Mover {
+        id: scrTop
+        order: 16
+        x: 1332 - 640; y: 34; width: 640; height: 44
+        opacity: sc.scV ? 1 : 0
+        Row {
+            anchors.right: parent.right; spacing: 12; height: 44
+            Btn { visible: sc.cV; text: "+ New alarm"; ink: "white"; onTapped: clockV.newAlarm() }
         }
     }
     // the Room screen's top bar: Turn off / on · settings
@@ -709,6 +729,9 @@ Item {
         Art { anchors.fill: parent; radius: 12; source: sc.sArt; rgb: sc.music.rgb || [201, 185, 163]; rgb2: sc.music.rgb2 || [44, 40, 34] }
     }
     readonly property rect coverRect: Qt.rect(sbCover.x, sbCover.y, sbCover.width, sbCover.height)
+
+    // ================================================================= the screens (pass 2)
+    ClockView { id: clockV; shown: sc.cV; now: sc.now }
 
     // ================================================================= the sheets
     Sheet {

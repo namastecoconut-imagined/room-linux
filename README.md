@@ -56,8 +56,8 @@ journalctl --user -u room -f                                          # live log
 | `qml/Field.qml` + `shaders/field.frag` | the background: four soft lights in the cover's colours, drifting, swelling with sound (GPU shader) |
 | `qml/StandbyWords.qml` | music standby's giant drifting words, blurred sideways |
 | `qml/RoomView.qml` · `qml/Sheet.qml` | one room's controls · the scenes, speakers and library sheets |
+| `qml/ClockView.qml` | the Clock screen: next alarm, timers, alarms, the alarm editor sheet |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
-| `qml/DotText.qml` | the 5×7 dot numerals; dots glide to their new places each minute |
 | `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
 | `room/mic.py` | how loud the room is (screen wake; while music plays, the background's swell) |

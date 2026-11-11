@@ -9,6 +9,7 @@ Item {
     signal held()
     property real pressScale: 0.96
     property bool bloom: true               // the light behind it
+    property int holdMs: 900                // how long a press is before it's a hold
     property alias pressed: ma.pressed
     property real dip: 1
     scale: dip
@@ -39,7 +40,7 @@ Item {
     MouseArea {
         id: ma
         anchors.fill: parent
-        pressAndHoldInterval: 900
+        pressAndHoldInterval: p.holdMs
         property real t0: 0
         onPressed: (e) => {
             t0 = Date.now(); quick.stop(); up.stop(); down.restart()

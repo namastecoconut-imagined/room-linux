@@ -122,7 +122,7 @@ Window {
         Scene {
             id: scene
             view: win.standbyOn ? "standby" : win.screen === "home" ? "home" : win.screen === "music" ? "player"
-                  : win.screen === "room" ? "room" : "other"
+                  : win.screen === "room" ? "room" : win.screen === "clock" ? "clock" : "other"
             roomName: win.roomName
             now: win.now
             night: win.lateNight
@@ -137,12 +137,6 @@ Window {
             onOpenReminders: win.screen = "reminders"
             onOpenSettings: win.screen = "settings"
             onGoHome: win.screen = "home"
-        }
-        ClockScreen {
-            now: visible ? win.now : 0
-            opacity: win.screen === "clock" ? 1 : 0; visible: opacity > 0 && !win.covered
-            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
-            onBack: win.screen = "home"
         }
         WeatherScreen {
             opacity: win.screen === "weather" ? 1 : 0; visible: opacity > 0 && !win.covered

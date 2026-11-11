@@ -28,6 +28,7 @@ DEMO_ASK = {
     "schedule": ("What's on today?", "Dinner at ten tonight. Then the team standup on Tuesday at ten thirty."),
     "alarm": ("Wake me up at seven", "Done. Your alarm's set for seven tomorrow morning."),
     "lights": ("Dim the living room to thirty", "Living room's at thirty now."),
+    "reminder": ("Remind me to water the plants at six", "Okay. I'll remind you to water the plants at six this evening."),
     "none": ("Who made Fidelio?", "Fidelio is by ansh. It's from Late Night, the playlist that's on right now. "
                                   "Want me to play more like it?"),
 }
@@ -686,11 +687,13 @@ class Room(QObject):
             card = os.environ.get("ROOM_DEMO_CARD", "forecast")
             q, a = DEMO_ASK.get(card, DEMO_ASK["forecast"])
             return {"listen": {"state": "listening", "stage": "wake", "heard": ""},
+                    "remlisten": {"state": "listening", "stage": "wake", "heard": "", "about": "reminder"},
                     "follow": {"state": "listening", "stage": "follow", "heard": ""},
                     "think": {"state": "thinking", "stage": "think", "heard": q},
                     "speak": {"state": "speaking", "stage": "done", "heard": q, "reply": a, "line": a.lower(),
-                              "card": "" if card in ("lights", "none") else card,
-                              "lit": ["Living room"] if card == "lights" else []},
+                              "card": "" if card in ("lights", "reminder", "none") else card,
+                              "lit": ["Living room"] if card == "lights" else [],
+                              "reminded": "r1" if card == "reminder" else ""},
                     "error": {"state": "speaking", "stage": "error", "heard": q,
                               "reply": "Sorry, I couldn't reach my brain just now — try again in a moment."},
                     "miss": {"state": "idle", "stage": "miss", "heard": ""},
@@ -700,6 +703,11 @@ class Room(QObject):
     @Slot()
     def listen(self):
         self.voicelink.listen()
+
+    @Slot(str)
+    def listenFor(self, about):
+        """Listen for something in particular ("reminder": the Reminders screen's + Add a reminder)."""
+        self.voicelink.listen(about)
 
     @Slot()
     def cancelVoice(self):

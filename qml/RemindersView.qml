@@ -1,11 +1,10 @@
 import QtQuick
-import QtQuick.Controls.Basic
 
 // The Reminders screen (room-motion.html fillScreen('rem')), kept on this panel only. Up top, to read: how many are
-// left and how many are due today; what reminders do. Below: every reminder in two columns — tap one to tick it off
-// (tap again to bring it back), hold it to delete it (it slides away). Four at a time; the arrows go through the rest
-// (swiping isn't reliable on this screen). "+ Add a reminder" (here and in the top bar) raises a sheet: type it, pick
-// when (in an hour · this evening · tomorrow morning · no time), Add. "Say it" asks the assistant instead.
+// left and how many are due today; on the right, how to add one — you ask the assistant ("Alexa, remind me to …"),
+// with examples. Below: every reminder in two columns — tap one to tick it off (tap again to bring it back), hold it to
+// delete it (it slides away). Four at a time; the arrows go through the rest (swiping isn't reliable on this screen).
+// "+ Add a reminder" (here and in the top bar) starts the assistant listening for one: you just say what and when.
 Item {
     id: rv
     width: 1368; height: 912
@@ -16,9 +15,8 @@ Item {
     visible: opacity > 0.002
     opacity: shown ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
-    function add() { adder.show() }
-    Component.onCompleted: if (startScreen === "remadd") adder.show()       // (checks)
-    readonly property bool sheetOpen: adder.open
+    function add() { room.listenFor("reminder") }
+    readonly property bool sheetOpen: false
 
     component Rise: Item {
         id: rz
@@ -46,13 +44,28 @@ Item {
         }
         Mono { y: 26 + 150 + 12; visible: rv.dueToday.length > 0; color: Theme.timer; text: rv.dueToday.length + " due today" }
     }
+    // how to add one: ask
     Rise {
         order: 1
-        x: 1324 - 420; y: 150; width: 420; height: 160
-        Mono {
-            width: parent.width; horizontalAlignment: Text.AlignRight; wrapMode: Text.WordWrap; lineHeight: 1.8
-            color: Theme.w62
-            text: "Kept on this panel only. When one's due, Room chimes and keeps it on standby until you tick it off."
+        x: 1324 - 560; y: 126; width: 560; height: 300
+        Column {
+            width: parent.width; spacing: 10
+            Mono { width: parent.width; horizontalAlignment: Text.AlignRight; color: Theme.w62; text: "To add one, ask Alexa" }
+            Repeater {
+                model: ["“Remind me to water the plants at six”", "“Remind me to call the bank tomorrow”"]
+                Serif {
+                    width: parent.width; horizontalAlignment: Text.AlignRight; wrapMode: Text.WordWrap
+                    css: false; height: implicitHeight
+                    text: modelData; font.pixelSize: 38; lineHeight: 1.05
+                }
+            }
+            Item { width: 1; height: 4 }
+            Mono {
+                width: parent.width; horizontalAlignment: Text.AlignRight; wrapMode: Text.WordWrap; lineHeight: 1.6
+                size: 12; color: Theme.w62
+                text: "Or tap + Add a reminder and just say what and when. Kept on this panel only: when one's due, Room "
+                      + "chimes and keeps it on standby until you tick it off."
+            }
         }
     }
 
@@ -62,7 +75,7 @@ Item {
         x: 44; y: 524; width: 1280; height: 360
         Mono { text: "All reminders"; color: Theme.w62 }
         Mono { anchors.right: parent.right; visible: rv.list.length > 0; text: "Tap to tick off · hold to delete"; color: Theme.w62 }
-        Mono { y: 46; visible: rv.list.length === 0; text: "Nothing yet · add one below, or say “Alexa, remind me to…”"; color: Theme.w62 }
+        Mono { y: 46; visible: rv.list.length === 0; text: "Nothing yet · tap + Add a reminder and say it, or say “Alexa, remind me to …”"; color: Theme.w62 }
         GridView {
             id: grid
             y: 36; width: 1280 + 24; height: 192
@@ -113,11 +126,7 @@ Item {
                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.1) }
             }
         }
-        Row {
-            y: 288; spacing: 10
-            Chip { solid: true; text: "+ Add a reminder"; onTapped: adder.show() }
-            Chip { text: "Say it"; onTapped: room.listen() }
-        }
+        Chip { y: 288; solid: true; text: "+ Add a reminder"; onTapped: rv.add() }
         Row {           // more than four: the arrows go through them
             anchors.right: parent.right; y: 288; spacing: 10
             visible: grid.pages > 1
@@ -127,53 +136,6 @@ Item {
             }
             Chip { text: "‹"; padX: 22; opacity: grid.page > 0 ? 1 : 0.35; enabled: grid.page > 0; onTapped: grid.page-- }
             Chip { text: "›"; padX: 22; opacity: grid.page < grid.pages - 1 ? 1 : 0.35; enabled: grid.page < grid.pages - 1; onTapped: grid.page++ }
-        }
-    }
-
-    // ---------------------------------------------------------------- the add sheet
-    SheetFrame {
-        id: adder
-        paneY: 520
-        onClose: open = false
-        property int pick: 0
-        readonly property var picks: ["In 1 hour", "This evening", "Tomorrow morning", "No time"]
-        function show() { field.text = ""; pick = 0; open = true; field.forceActiveFocus() }
-        function due() {
-            var d = new Date()
-            if (pick === 0) return d.getTime() / 1000 + 3600
-            if (pick === 1) { d.setHours(d.getHours() >= 18 ? d.getHours() + 1 : 18, 0, 0, 0); return d.getTime() / 1000 }
-            if (pick === 2) { d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.getTime() / 1000 }
-            return 0
-        }
-        function save() { if (field.text.trim() !== "") room.addReminder(field.text.trim(), due()); open = false }
-
-        Mono { x: 36; y: 28; text: "New reminder"; color: Theme.w62 }
-        TextField {
-            id: field
-            x: 36; y: 58; width: 1280 - 72; height: 76
-            placeholderText: "Remind me to…"
-            font.family: Theme.serif; font.pixelSize: 44
-            color: "white"; placeholderTextColor: Theme.w42
-            leftPadding: 0; topPadding: 0; bottomPadding: 0
-            background: Rectangle { y: parent.height - 1; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.2) }
-            inputMethodHints: Qt.ImhNoPredictiveText
-            onAccepted: adder.save()
-        }
-        Row {
-            x: 36; y: 162; spacing: 10
-            Repeater {
-                model: adder.picks
-                Chip { text: modelData; warm: adder.pick === index; onTapped: adder.pick = index }
-            }
-        }
-        Row {
-            anchors.right: parent.right; anchors.rightMargin: 36; y: 162; spacing: 10
-            Chip { text: "Cancel"; onTapped: adder.open = false }
-            Chip { solid: true; text: "Add"; onTapped: adder.save() }
-        }
-        Mono {
-            x: 36; y: 236; size: 12; color: Theme.w62
-            text: "Type it with a keyboard, or say “Alexa, remind me to …”"
         }
     }
 }

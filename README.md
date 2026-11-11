@@ -58,7 +58,7 @@ journalctl --user -u room -f                                          # live log
 | `qml/RoomView.qml` · `qml/Sheet.qml` | one room's controls · the scenes, speakers and library sheets |
 | `qml/ClockView.qml` | the Clock screen: next alarm, timers, alarms, the alarm editor sheet |
 | `qml/WeatherView.qml` | the Weather screen: now, the rain to expect, the next 12 hours as one line, three days |
-| `qml/RemindersView.qml` | the Reminders screen: two columns (tap to tick, hold to delete), the add sheet |
+| `qml/RemindersView.qml` | the Reminders screen: two columns (tap to tick, hold to delete); new ones are asked for (the assistant) |
 | `qml/SettingsView.qml` | the Settings screen: brightness, Bluetooth, web browser / desktop / shut down (asks first) |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `qml/VoiceOverlay.qml` + `shaders/horizon.frag` | the assistant over the top band: the light line, your words, the answer, buttons under the line |

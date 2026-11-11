@@ -5,12 +5,13 @@ import QtQuick.Effects
 // What the assistant found or did, beside its answer (room-motion.html aCard): a glass card, 512 × 320, drawn from
 // Room's own state so it stays live (a timer counts down in it). The assistant picks the kind with its answer —
 // weather (now, the next hours) · forecast (tomorrow, the next days) · air · timer · music · schedule · alarm; Room
-// adds "lights" itself when the answer changed some (the room, its level, its lamps).
+// adds "lights" itself when the answer changed some (the room, its level, its lamps), and "reminder" when it made one.
 Item {
     id: vc
     width: 512; height: 320
     property string kind: ""
     property var lit: []
+    property string reminded: ""            // reminder: its id
     readonly property var wx: room.weather || ({})
     readonly property bool wxOk: wx.ok === true
 
@@ -41,7 +42,7 @@ Item {
         anchors.fill: parent
         sourceComponent: vc.kind === "weather" ? now : vc.kind === "forecast" ? days : vc.kind === "air" ? air
                        : vc.kind === "timer" ? timer : vc.kind === "music" ? music : vc.kind === "schedule" ? schedule
-                       : vc.kind === "alarm" ? alarm : vc.kind === "lights" ? lights : null
+                       : vc.kind === "alarm" ? alarm : vc.kind === "lights" ? lights : vc.kind === "reminder" ? reminder : null
     }
 
     // ---------------------------------------------------------------- weather: now, and the next eight hours
@@ -262,6 +263,24 @@ Item {
                     }
                 }
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- reminder: the one it just made
+    Component {
+        id: reminder
+        Item {
+            readonly property var rs: room.things.reminders || []
+            readonly property var r: { for (var i = 0; i < rs.length; i++) if (rs[i].id === vc.reminded) return rs[i]; return null }
+            readonly property int open_: rs.filter(function (x) { return !x.done }).length
+            Mono { x: 30; y: 28; size: 13; color: r && r.when ? Theme.timer : Theme.w62
+                   text: r ? "Reminder" + (r.when ? " · " + r.when : " · no time") : "Reminder" }
+            Serif {
+                x: 30; y: 60; width: 452; css: false; height: 170
+                wrapMode: Text.WordWrap; maximumLineCount: 3; elide: Text.ElideRight
+                text: parent.r ? parent.r.text : ""; font.pixelSize: 54; lineHeight: 1.0
+            }
+            Note { x: 30; y: 246; text: parent.open_ === 1 ? "1 to remember" : parent.open_ + " to remember" }
         }
     }
 }

@@ -215,9 +215,11 @@ class Things(QObject):
     def add_reminder(self, text, due):
         text = (text or "").strip()
         if not text:
-            return
-        self.reminders.append({"id": uuid.uuid4().hex[:8], "text": text, "due": float(due or 0), "done": False, "fired": False})
+            return ""
+        rid = uuid.uuid4().hex[:8]
+        self.reminders.append({"id": rid, "text": text, "due": float(due or 0), "done": False, "fired": False})
         self._save()
+        return rid
 
     def toggle_reminder(self, rid):
         for r in self.reminders:

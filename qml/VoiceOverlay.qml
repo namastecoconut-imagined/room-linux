@@ -30,7 +30,8 @@ Item {
     readonly property bool replying: answering && answer !== ""
     readonly property bool error: stage === "error"
     readonly property var lit: v.lit || []
-    readonly property string cardKind: replying && !error ? (v.card || (lit.length ? "lights" : "")) : ""
+    readonly property bool forReminder: v.about === "reminder"     // the Reminders screen's + Add a reminder
+    readonly property string cardKind: replying && !error ? (v.card || (v.reminded ? "reminder" : lit.length ? "lights" : "")) : ""
     // how long it stays once Room's finished
     readonly property int holdMs: mode === "miss" ? 2600 : replying ? (cardKind !== "" ? 14000 : 8000) : 300
 
@@ -134,7 +135,8 @@ Item {
     Serif {
         x: 44; y: 222; width: 1280; horizontalAlignment: Text.AlignHCenter
         font.pixelSize: 40; color: Qt.rgba(1, 1, 1, 0.6)
-        text: vo.mode === "miss" ? "Sorry, I didn’t catch that" : vo.stage === "follow" ? "Go on…" : "Listening…"
+        text: vo.mode === "miss" ? "Sorry, I didn’t catch that" : vo.stage === "follow" ? "Go on…"
+              : vo.forReminder ? "What should I remind you about?" : "Listening…"
         opacity: (vo.mode === "listen" && !vo.heard) || vo.mode === "miss" ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
@@ -175,6 +177,7 @@ Item {
         x: 812; y: 150
         kind: vo.shownKind
         lit: vo.lit
+        reminded: vo.v.reminded || ""
         opacity: vo.cardIn ? 1 : 0
         visible: opacity > 0.002
         scale: vo.cardIn ? 1 : 0.98
@@ -205,6 +208,7 @@ Item {
         case "alarm": return [["Open clock", "clock"], ["Done", "done"]]
         case "lights": return lit.length === 1 ? [["Open the room", "room"], ["Done", "done"]] : [["Done", "done"]]
         case "schedule": return [["Done", "done"]]
+        case "reminder": return [["Open reminders", "reminders"], ["Done", "done"]]
         default: return [["Ask again", "listen"], ["Done", "done"]]
         }
     }
@@ -212,7 +216,7 @@ Item {
         touched()
         if (k === "done" || k === "cancel") { room.cancelVoice(); close() }
         else if (k === "listen") room.listen()
-        else if (k === "weather" || k === "clock") { close(); go(k, "") }
+        else if (k === "weather" || k === "clock" || k === "reminders") { close(); go(k, "") }
         else if (k === "player") { close(); go("music", "") }
         else if (k === "room") { close(); go("room", lit[0]) }
         else if (k === "skip") room.next()
@@ -230,7 +234,8 @@ Item {
         Mono {
             anchors.verticalCenter: parent.verticalCenter
             color: Theme.w62; size: 13
-            text: "Try “make it cozy” · “what’s the weather tomorrow?” · “play some Arijit Singh”"
+            text: vo.forReminder ? "Say what, and when · “water the plants at six” · “call the bank tomorrow morning”"
+                                 : "Try “make it cozy” · “what’s the weather tomorrow?” · “play some Arijit Singh”"
             opacity: vo.mode === "listen" && !vo.heard && vo.stage !== "follow" ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 400 } }
         }

@@ -33,7 +33,7 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: startScreen === "clockedit" ? "clock" : startScreen === "remadd" ? "reminders" : startScreen === "setconfirm" ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000

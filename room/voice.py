@@ -12,6 +12,7 @@ If the assistant isn't running, Room carries on exactly the same; the screen jus
 import datetime as dt
 import json
 import os
+import time
 
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
@@ -30,8 +31,12 @@ class VoiceLink(QObject):
         self.peer: QLocalSocket | None = None
         self.buf = b""
         self.level = 0.0
-        # lit: the rooms whose lights the last answer changed (Room's own note, for the screen's lights card)
-        self.st = {"state": "off", "stage": "idle", "heard": "", "reply": "", "line": "", "card": "", "follow": False, "lit": []}
+        # Room's own notes, for the screen: lit — the rooms whose lights the last answer changed (the lights card);
+        # reminded — the reminder it just made (the reminder card); about — what Room asked it to listen for
+        # ("reminder": the Reminders screen's + Add a reminder)
+        self.st = {"state": "off", "stage": "idle", "heard": "", "reply": "", "line": "", "card": "", "follow": False,
+                   "lit": [], "reminded": "", "about": ""}
+        self.about_at = 0.0
         self.server = QLocalServer(self)
         self.server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
         self.server.newConnection.connect(self._accept)
@@ -89,7 +94,11 @@ class VoiceLink(QObject):
             return
         if t == "state":
             if m.get("state") == "listening":
-                self.st["lit"] = []                     # a new question
+                self.st["lit"], self.st["reminded"] = [], ""     # a new question
+                if time.monotonic() - self.about_at > 10:
+                    self.st["about"] = ""                         # (not the one Room just asked for)
+            elif m.get("state") == "idle":
+                self.st["about"] = ""
             for k in self.st:
                 if k in m:
                     self.st[k] = m[k]
@@ -100,8 +109,11 @@ class VoiceLink(QObject):
             self.run(m.get("actions") or [], lambda summary, i=m.get("id"): self.send({"t": "reply", "id": i, "data": summary}))
 
     # ---------------------------------------------------------------- what Room tells the assistant
-    def listen(self):
-        self.send({"t": "listen"})
+    def listen(self, about: str = ""):
+        """Start listening (a tap). about: what it's for — "reminder": what you say is something to be reminded of."""
+        self.st["about"], self.about_at = about, time.monotonic()
+        self.send({"t": "listen", "about": about} if about else {"t": "listen"})
+        self.changed.emit()
 
     def cancel(self):
         self.send({"t": "cancel"})
@@ -234,7 +246,7 @@ class VoiceLink(QObject):
                             due = dt.datetime.strptime(a["at"].strip(), "%Y-%m-%d %H:%M").timestamp()
                         except ValueError:
                             pass
-                    th.add_reminder(a["label"][0].upper() + a["label"][1:], due)
+                    self.st["reminded"] = th.add_reminder(a["label"][0].upper() + a["label"][1:], due) or ""
                     parts.append("reminder" + (" · " + dt.datetime.fromtimestamp(due).strftime("%-I:%M %p").lower() if due else ""))
                 elif k == "cancel_reminder" and a.get("reminder_id"):
                     th.delete_reminder(a["reminder_id"]); parts.append("reminder cancelled")

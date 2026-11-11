@@ -68,6 +68,8 @@ class Assistant:
     # ---------------------------------------------------------------- what Room asks
     def command(self, m: dict):
         if m.get("t") == "listen":
+            # "reminder": Room's + Add a reminder — what you say next is the reminder
+            self.about = (m.get("about") or "", time.time())
             self.ears.tap.set()
         elif m.get("t") == "cancel":
             self.cancelled = True
@@ -110,6 +112,9 @@ class Assistant:
 
     def turn(self, follow: bool) -> bool:
         """One request and its answer. True if it should listen again (it asked a question)."""
+        about, at = getattr(self, "about", ("", 0.0))
+        about = about if not follow and time.time() - at < 10 else ""
+        self.about = ("", 0.0)
         warm()
         if self.brain:
             self.brain.warm()
@@ -131,6 +136,8 @@ class Assistant:
             self.answer("Sorry, I can't reach the internet right now.")
             return False
         text = WAKE_WORDS.sub("", text).strip()
+        if about == "reminder" and text and not re.search(r"\bremind", text, re.I):
+            text = "Remind me to " + text[0].lower() + text[1:]      # "water the plants at six" → a reminder
         heard_at = time.time()
         log(f"heard {text!r} · {info.get('spoke', 0):.1f} s of speech · words {heard_at - t0 - info.get('took', 0):.2f} s after you stopped")
         if not text:

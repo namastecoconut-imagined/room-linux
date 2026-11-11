@@ -351,10 +351,7 @@ class Room(QObject):
     def _sound_level(self, rms: float):
         import math
         db = 20 * math.log10(max(rms, 1e-5))
-        # from just above the room's own background (the raw mic hums; room/sleep.py learns it), else from −60 dB:
-        # quiet room ≈ 0, talking ≈ 0.5, music ≈ 0.8
-        base = max(-60.0, self.sleep.floor + 3) if self.sleep.floor is not None else -60.0
-        v = max(0.0, min(1.0, (db - base) / 45))
+        v = max(0.0, min(1.0, (db + 60) / 45))         # quiet room ≈ 0, talking ≈ 0.5, music ≈ 0.8
         self._level += (v - self._level) * (0.5 if v > self._level else 0.12)
         self.levelChanged.emit()
 

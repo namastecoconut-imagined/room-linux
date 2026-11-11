@@ -76,7 +76,9 @@ fi
 # AirPlay and Spotify go down and come back up with the sound system. When PipeWire restarted (once, after a burst of
 # volume changes) they kept running but had lost their sound connection: silence until restarted by hand. Bound to it,
 # a PipeWire restart is a short blip for them too.
-for s in room-airplay room-spotify; do
+# The assistant too: its chime and voice go out through one stream it keeps open, and after a PipeWire restart that
+# stream was dead — it still heard "Alexa" but played nothing.
+for s in room-airplay room-spotify room-assistant; do
   if [ -f ~/.config/systemd/user/$s.service ] && [ ! -f ~/.config/systemd/user/$s.service.d/pipewire.conf ]; then
     mkdir -p ~/.config/systemd/user/$s.service.d
     printf '[Unit]\nBindsTo=pipewire.service\nAfter=pipewire.service\n' > ~/.config/systemd/user/$s.service.d/pipewire.conf

@@ -43,6 +43,8 @@ class Assistant:
         self.link = Link(on_command=self.command)
         self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", True) is not False)
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
+        if a.get("endQuiet"):
+            self.ears.END_QUIET = float(a["endQuiet"])
         self.voice = Voice(voice=a.get("voice", "af_heart"))
         self.mic.hold = lambda: self.voice.busy
         self.duck = Duck(float(a.get("voiceFloor", 0.70)))

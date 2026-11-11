@@ -30,6 +30,7 @@ class Room(QObject):
     settingsChanged = Signal()
     asleepChanged = Signal()
     voiceChanged = Signal()
+    browserChanged = Signal()
     _sinkFound = Signal()                # (from the speaker lookup's thread)
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
@@ -86,6 +87,8 @@ class Room(QObject):
         self._kiosk = False
         self._desktop = False
         self._desktop_note = ""
+        self._browser = None                 # the Firefox Room opened (Settings → Web browser), while it's open
+        self._browser_check = QTimer(self); self._browser_check.timeout.connect(self._browser_closed)
         self.voicelink = VoiceLink(self)
         self.voicelink.changed.connect(self.voiceChanged)
         self.voicelink.changed.connect(lambda: self.voice.get("state") in ("listening", "thinking", "speaking")
@@ -633,6 +636,8 @@ class Room(QObject):
     # ---------------------------------------------------------------- screen off / on, the Surface's buttons
     def _needs_screen(self):
         """'' when nothing needs the screen, else why (it's logged)."""
+        if self.browserOpen:
+            return "the web browser is open"
         if self.music.get("playing"):
             return "music playing"
         if self.alert and self.alert.get("kind"):
@@ -792,6 +797,44 @@ class Room(QObject):
     def desktop(self):
         """GNOME is installed — there's a desktop to switch to."""
         return self._desktop or self.demo
+
+    # ---------------------------------------------------------------- the web browser (Settings → Web browser)
+    @Property(bool, notify=settingsChanged)
+    def browser(self):
+        """Firefox is there to open (in the panel session)."""
+        import shutil
+        return (self._kiosk and shutil.which("firefox") is not None) or self.demo
+
+    @Property(bool, notify=browserChanged)
+    def browserOpen(self):
+        return self._browser is not None and self._browser.poll() is None
+
+    @Slot()
+    def openBrowser(self):
+        """Firefox, full screen over Room (cage shows the newest window). Closing its last tab closes it — Room is
+        underneath, where it was. While it's open Room keeps the screen on (its touches don't reach Room)."""
+        if self.browserOpen:
+            return
+        import subprocess
+        env = dict(os.environ, MOZ_ENABLE_WAYLAND="1")
+        for k in ("QT_QPA_PLATFORM", "QT_SCALE_FACTOR", "QSG_RHI_BACKEND"):
+            env.pop(k, None)
+        try:
+            self._browser = subprocess.Popen(["firefox"], env=env, cwd=os.path.expanduser("~"), stdin=subprocess.DEVNULL,
+                                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as e:
+            print(f"[room] web browser: couldn't open Firefox ({e})", flush=True)
+            return
+        print("[room] web browser: opened", flush=True)
+        self._browser_check.start(2000)
+        self.browserChanged.emit()
+
+    def _browser_closed(self):
+        if self._browser is not None and self._browser.poll() is not None:
+            print("[room] web browser: closed", flush=True)
+            self._browser = None
+            self._browser_check.stop()
+            self.browserChanged.emit()
 
     @Property(str, notify=settingsChanged)
     def desktopNote(self):

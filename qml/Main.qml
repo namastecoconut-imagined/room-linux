@@ -88,6 +88,7 @@ Window {
         onTriggered: {
             var t = Date.now() / 1000
             if (win.alerting || win.voiceUp) win.lastTouch = t   // an alarm or timer going off keeps it awake
+            if (room.browserOpen) win.lastTouch = t                // so does the web browser (its touches don't reach Room)
             // scrolling, mouse moves and keys count as use too (seen by the app itself, so a list that takes the
             // scroll still counts); on standby only a real tap wakes it
             if (!win.standbyOn) win.lastTouch = Math.max(win.lastTouch, room.lastInput())

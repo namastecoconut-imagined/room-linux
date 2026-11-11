@@ -64,27 +64,44 @@ Item {
         Toggle { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; on: st.disp.auto === true; onTapped: room.setAutoBrightness(!on) }
     }
     SectionCap { x: 96; y: Theme.deadB1 + 248; text: "This panel" }
-    Press {
-        id: toDesktop
-        visible: room.kiosk && room.desktop          // (gone once GNOME is uninstalled — nothing to switch to)
-        x: 96; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
-        onTapped: { confirm.kind = "desktop"; confirm.open = true }
-        Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
-        T { x: 24; y: 24; text: "Switch to desktop"; font.pixelSize: 22 }
-        T { x: 24; y: 64; width: parent.width - 48; text: "Restarts into GNOME"; font.pixelSize: 17; color: Theme.sub }
-    }
     T {
         visible: !room.kiosk
         x: 96; y: Theme.deadB1 + 284; width: 258; wrapMode: Text.WordWrap; font.pixelSize: 16; color: Theme.sub
         text: "In the GNOME desktop. For just the panel: room-kiosk on, then restart."
     }
-    Press {
-        x: toDesktop.visible || !room.kiosk ? 366 : 96; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
-        onTapped: { confirm.kind = "off"; confirm.open = true }
-        Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
-        T { x: 24; y: 24; text: "Shut down"; font.pixelSize: 22 }
-        T { x: 24; y: 64; width: parent.width - 48; text: "Turns the Surface off"; font.pixelSize: 17; color: Theme.sub }
-        Icon { anchors.right: parent.right; anchors.rightMargin: 24; y: 26; name: "power"; size: 22; color: Theme.sub }
+    // the panel's own tiles: switch to the desktop while GNOME is installed — once it isn't, the web browser in its
+    // place (Firefox, over Room; close its last tab to come back) — and shut down
+    Row {
+        id: tiles
+        x: room.kiosk ? 96 : 366; y: Theme.deadB1 + 280; spacing: 12
+        readonly property real tileW: 258
+        Press {
+            id: browserTile
+            visible: room.kiosk && room.browser && !room.desktop
+            width: tiles.tileW; height: 112; pressScale: 0.985
+            onTapped: room.openBrowser()
+            Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
+            T { x: 24; y: 24; text: "Web browser"; font.pixelSize: 22 }
+            T { x: 24; y: 64; width: parent.width - 48; text: room.browserOpen ? "Opening…" : "Opens Firefox"; font.pixelSize: 17; color: Theme.sub }
+            Icon { anchors.right: parent.right; anchors.rightMargin: 24; y: 26; name: "globe"; size: 22; color: Theme.sub }
+        }
+        Press {
+            id: toDesktop
+            visible: room.kiosk && room.desktop          // (gone once GNOME is uninstalled — nothing to switch to)
+            width: tiles.tileW; height: 112; pressScale: 0.985
+            onTapped: { confirm.kind = "desktop"; confirm.open = true }
+            Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
+            T { x: 24; y: 24; text: "Switch to desktop"; font.pixelSize: 22 }
+            T { x: 24; y: 64; width: parent.width - 48; text: "Restarts into GNOME"; font.pixelSize: 17; color: Theme.sub }
+        }
+        Press {
+            width: tiles.tileW; height: 112; pressScale: 0.985
+            onTapped: { confirm.kind = "off"; confirm.open = true }
+            Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
+            T { x: 24; y: 24; text: "Shut down"; font.pixelSize: 22 }
+            T { x: 24; y: 64; width: parent.width - 48; text: "Turns the Surface off"; font.pixelSize: 17; color: Theme.sub }
+            Icon { anchors.right: parent.right; anchors.rightMargin: 24; y: 26; name: "power"; size: 22; color: Theme.sub }
+        }
     }
     T {
         visible: room.desktopNote !== ""

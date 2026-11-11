@@ -35,6 +35,16 @@ liberation* default-fonts-core* fontconfig* mesa* libglvnd* libdrm vulkan* intel
 libinput* wlroots* seatd libseat* xorg-x11-server-Xwayland qt6-qtwayland pciutils usbutils lm_sensors
 """.split()
 
+# …but not NetworkManager's VPN plugins (no VPN here; they and their VPN programs go)
+NOT_KEEP = ["NetworkManager-libreswan*", "NetworkManager-openvpn*", "NetworkManager-openconnect*", "NetworkManager-vpnc*",
+            "NetworkManager-pptp*", "NetworkManager-l2tp*", "NetworkManager-sstp*", "NetworkManager-fortisslvpn*",
+            "NetworkManager-ssh*", "NetworkManager-iodine*", "NetworkManager-strongswan*"]
+
+# never taken along by dnf without stopping to ask (on top of whatever is running)
+ESSENTIAL = """kernel* linux-firmware* systemd* dnf* rpm* libdnf* sudo openssh* glibc* grub2* shim* dracut* pam* NetworkManager
+NetworkManager-libnm NetworkManager-wifi wpa_supplicant bluez bluez-libs pipewire* wireplumber* cage greetd* firefox*
+python3 python3-libs iptsd selinux-policy* util-linux* coreutils* bash mesa* alsa-* avahi* tuned* polkit* dbus*""".split()
+
 # from reading the first plan by hand: candidates that stay anyway
 STAY = {
     "microcode_ctl": "the processor's microcode updates (stability and security fixes)",
@@ -100,7 +110,8 @@ KINDS = [
     ("Developer, debugging and network tools", """gdb* binutils cpp libmpc gettext ctags source-highlight libipt tcl tmux
       bc time tree ed xxd zip 7zip dos2unix symlinks lrzsz pinfo man-pages graphviz-libs gd perl-* deltarpm
       distribution-gpg-keys rsync whois* mkpasswd mtr traceroute tcpdump nmap-ncat net-tools bind-* dnsmasq libreswan
-      iptables-* ipset* iptstate wcurl"""),
+      iptables-* ipset* iptstate wcurl NetworkManager-* openvpn openconnect vpnc* pptp* xl2tpd strongswan* stoken*
+      pkcs11-helper"""),
     ("Everything else (libraries the above used, small tools)", "*"),
 ]
 KINDS = [(k, p.split()) for k, p in KINDS]
@@ -145,6 +156,22 @@ def names_in(req):
     return out
 
 
+MERGED = [("/usr/sbin/", "/usr/bin/"), ("/sbin/", "/usr/sbin/"), ("/sbin/", "/usr/bin/"), ("/bin/", "/usr/bin/"),
+          ("/lib64/", "/usr/lib64/"), ("/lib/", "/usr/lib/")]
+
+
+def aliases(path):
+    """A file's path and its other names since Fedora merged /bin, /sbin, /lib into /usr (and /usr/sbin into /usr/bin)."""
+    out = {path}
+    for a, b in MERGED:
+        for p in list(out):
+            if p.startswith(a):
+                out.add(b + p[len(a):])
+            if p.startswith(b):
+                out.add(a + p[len(b):])
+    return out
+
+
 class Db:
     def __init__(self):
         self.ts = rpm.TransactionSet()
@@ -159,9 +186,11 @@ class Db:
             return self._prov[req]
         got = set()
         for n in names_in(req):
-            mi = self.ts.dbMatch("basenames", n) if n.startswith("/") else self.ts.dbMatch("providename", n)
-            for h in mi:
-                got.add(h[rpm.RPMTAG_NAME])
+            if n.startswith("/"):
+                # a file: where it is, where Fedora's merged directories put it now, or a package naming it outright
+                for path in aliases(n):
+                    got.update(h[rpm.RPMTAG_NAME] for h in self.ts.dbMatch("basenames", path))
+            got.update(h[rpm.RPMTAG_NAME] for h in self.ts.dbMatch("providename", n))
         self._prov[req] = got
         return got
 
@@ -229,7 +258,7 @@ def disk_keeps():
 def plan(db):
     run = running(db)
     names = set(db.pkgs)
-    explicit = {n for n in names if matches(n, KEEP)}
+    explicit = {n for n in names if matches(n, KEEP) and not matches(n, NOT_KEEP)}
     core = core_group() & names
     base = db.closure(run | explicit | core)
     stay_pats, disk = dict(STAY), disk_keeps()
@@ -375,8 +404,23 @@ def do_check(db, who, home):
         sys.exit(1)
     p = plan(db)
     cand, moved, err = removal_test(db, p["cand"])
-    preview, count, rows, opts = dnf_preview(cand) if cand and not err else ("", None, set(), [])
-    expect = sum(1 for n in cand for _ in db.ts.dbMatch("name", n))     # (a name installed twice counts twice)
+    preview, count, rows, opts, expect, along, stuck = "", None, set(), [], 0, {}, []
+    for _ in range(4):
+        if not cand or err:
+            break
+        preview, count, rows, opts = dnf_preview(cand)
+        expect = sum(1 for n in cand for _ in db.ts.dbMatch("name", n))     # (a name installed twice counts twice)
+        if count is None or count == expect:
+            break
+        # dnf would take more along: packages that need something going in a way rpm's test doesn't see. They join
+        # the list — unless one is in use or essential, then it stops here and says which.
+        more = rows - cand
+        stuck = sorted(n for n in more if n in p["run"] or matches(n, ESSENTIAL) or n not in db.pkgs)
+        if not more or stuck:
+            break
+        along.update((n, "needs something that goes") for n in more)
+        cand, moved2, err = removal_test(db, cand | more)
+        moved.update(moved2)
     extra = (rows - cand) if count != expect else set()
     left = leftovers(home)
     apps = flatpaks(who)
@@ -394,8 +438,10 @@ def do_check(db, who, home):
                  if not err else err.splitlines()[-1] if err.splitlines() else err))
     if not err:
         head.append(f"  {'✓' if count == expect else '✗'} dnf's own preview: " +
-                    (f"the same {count} packages" if count == expect else
-                     f"{count} packages, not {expect}{' — also ' + ', '.join(sorted(extra)[:8]) if extra else ''} (see the end of the file)"
+                    (f"the same {count} packages" + (f" (with {len(along)} it takes along: {', '.join(sorted(along)[:6])}"
+                                                     f"{'…' if len(along) > 6 else ''})" if along else "") if count == expect else
+                     f"{count} packages, not {expect}{' — also ' + ', '.join(sorted(extra)[:8]) if extra else ''}"
+                     f"{' (in use or essential: ' + ', '.join(stuck) + ')' if stuck else ''} (see the end of the file)"
                      if count is not None else "didn't run — its message is at the end of the file"))
     head.append("  ✓ start-up: greetd → Room (GDM isn't needed)" if dm_ok else
                 "  ✗ start-up still goes through GDM — run  room-kiosk on  first")
@@ -407,6 +453,9 @@ def do_check(db, who, home):
     if lifted:
         body += ["", "== dnf protects these from removal; lifted for this one removal (dnf, systemd, sudo, the kernel… stay "
                  "protected): " + ", ".join(lifted)]
+    if along:
+        body += ["", "== also goes — dnf takes these along: they need something on the list (in a way rpm's test can't see)"]
+        body += [f"  {n}  — {db.summary(n)}" for n in sorted(along)]
     body += ["", "== stays — the removal test found something staying needs it"]
     body += [f"  {n}  — {w}" for n, w in sorted(moved.items())] or ["  (none)"]
     body += ["", "== also goes: Flatpak apps and leftovers"]

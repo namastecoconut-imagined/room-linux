@@ -36,7 +36,8 @@ Item {
     readonly property bool cV: view === "clock"
     readonly property bool wV: view === "weather"
     readonly property bool remV: view === "reminders"
-    readonly property bool scV: cV || wV || remV      // the redesigned screens (pass 2 so far)
+    readonly property bool setV: view === "settings"
+    readonly property bool scV: cV || wV || remV || setV      // the redesigned screens (pass 2)
     readonly property bool menu: rV || oV
 
     // ---------------------------------------------------------------- what's playing
@@ -559,7 +560,7 @@ Item {
         order: 15
         x: 150; y: 34; width: 300; height: 44
         opacity: sc.scV ? 1 : 0
-        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : sc.remV ? "Reminders" : "") }
+        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : sc.remV ? "Reminders" : sc.setV ? "Settings" : "") }
     }
     Mover {
         id: scrTop
@@ -570,6 +571,8 @@ Item {
             anchors.right: parent.right; spacing: 12; height: 44
             Btn { visible: sc.cV; text: "+ New alarm"; ink: "white"; onTapped: clockV.newAlarm() }
             Btn { visible: sc.remV; text: "+ Add a reminder"; ink: "white"; onTapped: remV_.add() }
+            Mono { visible: sc.setV && room.battery.pct !== undefined; anchors.verticalCenter: parent.verticalCenter; rightPadding: 8; color: Theme.w62
+                   text: "Battery " + room.battery.pct + "%" + (room.battery.charging ? " · plugged in" : "") }
             Mono { visible: sc.wV && !!(room.weather || {}).updated; anchors.verticalCenter: parent.verticalCenter; rightPadding: 8
                    color: Theme.w62; text: "Updated " + ((room.weather || {}).updated || "") }
         }
@@ -743,6 +746,7 @@ Item {
     ClockView { id: clockV; shown: sc.cV; now: sc.now }
     WeatherView { shown: sc.wV }
     RemindersView { id: remV_; shown: sc.remV }
+    SettingsView { shown: sc.setV }
 
     // ================================================================= the sheets
     Sheet {

@@ -33,7 +33,7 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: startScreen === "clockedit" ? "clock" : startScreen === "remadd" ? "reminders" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: startScreen === "clockedit" ? "clock" : startScreen === "remadd" ? "reminders" : startScreen === "setconfirm" ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
@@ -123,7 +123,7 @@ Window {
             id: scene
             view: win.standbyOn ? "standby" : win.screen === "home" ? "home" : win.screen === "music" ? "player"
                   : win.screen === "room" ? "room" : win.screen === "clock" ? "clock" : win.screen === "weather" ? "weather"
-                  : win.screen === "reminders" ? "reminders" : "other"
+                  : win.screen === "reminders" ? "reminders" : win.screen === "settings" ? "settings" : "other"
             roomName: win.roomName
             now: win.now
             night: win.lateNight
@@ -138,11 +138,6 @@ Window {
             onOpenReminders: win.screen = "reminders"
             onOpenSettings: win.screen = "settings"
             onGoHome: win.screen = "home"
-        }
-        SettingsScreen {
-            opacity: win.screen === "settings" ? 1 : 0; visible: opacity > 0 && !win.covered
-            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
-            onBack: win.screen = "home"
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}

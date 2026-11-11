@@ -323,7 +323,7 @@ Item {
         Seek {
             id: seek
             y: -14; width: parent.width                 // the line on the box's top edge (the design's margin-top: -14px)
-            shadow: true
+            label: sc.mmss(shown * (sc.music.duration || 0))
             value: sc.music.duration > 0 ? sc.pos / sc.music.duration : 0
             enabled: sc.music.canSeek !== false && !sc.sV
             live: false
@@ -350,10 +350,15 @@ Item {
             x: vol.inset + 41; width: parent.width - vol.inset - 41 - 42
             value: (sc.music.volume || 0) / 100
             every: 80
+            label: Math.round(shown * 100)
             onMoved: (v) => room.setVolumeLive(Math.round(v * 100))
             onReleased: (v) => room.setVolume(Math.round(v * 100))
         }
-        Mono { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; size: 13; text: Math.round(volSeek.shown * 100) }
+        Mono {          // (while you drag, the number rides above the light instead)
+            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; size: 13; text: Math.round(volSeek.shown * 100)
+            opacity: volSeek.dragging ? 0 : 1
+            Behavior on opacity { NumberAnimation { duration: 160 } }
+        }
     }
     Mover {
         id: btns

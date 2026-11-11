@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 
 // One room (the redesign's Room screen, room-motion.html fillRoom): its name and how it's lit up top, its level big
 // on the right (all to read — the touch screen doesn't answer between y 118 and 500); below, everything you touch:
@@ -61,18 +62,39 @@ Item {
         readonly property bool dragging: ma.pressed
         readonly property real f: dragging ? local : rv.level / 100
         Rectangle { y: 20; width: parent.width; height: 4; radius: 2; color: Qt.rgba(1, 1, 1, 0.15) }
+        // the light-point style (as every slider): the line lit in the room's own light, brightening towards a soft
+        // glow at the level, which grows under your finger while you drag
         RectangularShadow {
             y: 20; width: parent.width * bar.f; height: 4; radius: 2
             color: rv.light; blur: 18; visible: width > 1
         }
         Rectangle {
-            y: 20; width: parent.width * bar.f; height: 4; radius: 2; color: rv.light
+            y: 20; width: parent.width * bar.f; height: 4; radius: 2
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0; color: Qt.rgba(rv.light.r, rv.light.g, rv.light.b, 0.35) }
+                GradientStop { position: 1; color: rv.light }
+            }
             Behavior on width { enabled: !bar.dragging; NumberAnimation { duration: 250 } }
         }
-        Rectangle {
-            x: parent.width * bar.f - 12; y: 10; width: 24; height: 24; radius: 12; color: "white"
-            scale: bar.dragging ? 1.3 : 1           // grows under your finger while you drag
-            Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack; easing.overshoot: 2 } }
+        Shape {
+            id: pt
+            property real d: bar.dragging ? 46 : 28
+            Behavior on d { NumberAnimation { duration: 240; easing.type: Easing.OutBack; easing.overshoot: 1.6 } }
+            x: parent.width * bar.f - d / 2; y: 22 - d / 2; width: d; height: d
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                strokeColor: "transparent"
+                fillGradient: RadialGradient {
+                    centerX: pt.d / 2; centerY: pt.d / 2; centerRadius: pt.d / 2
+                    focalX: centerX; focalY: centerY
+                    GradientStop { position: 0; color: "white" }
+                    GradientStop { position: 0.28; color: "white" }
+                    GradientStop { position: 0.55; color: Qt.rgba(rv.light.r, rv.light.g, rv.light.b, 0.6) }
+                    GradientStop { position: 1; color: Qt.rgba(rv.light.r, rv.light.g, rv.light.b, 0) }
+                }
+                PathRectangle { x: 0; y: 0; width: pt.d; height: pt.d; radius: pt.d / 2 }
+            }
         }
         Timer { id: send; interval: 120; onTriggered: rv.setLevel(Math.round(bar.local * 100)) }
         MouseArea {

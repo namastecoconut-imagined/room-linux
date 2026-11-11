@@ -112,16 +112,18 @@ class Output:
         self.moved = {k: v for k, v in self.moved.items() if k in live}
 
     def levels(self, nodes, heal=False):
-        """The Surface's raw speakers at full, and (at start) music streams that were left turned down back to full."""
+        """The Surface's speakers never left muted, the chip never above its crackle cap, and (at start) music streams
+        that were left turned down back to full. It never RAISES the speakers' volume: with the Dolby filter gone the
+        volume slider sets the Surface's speakers directly, and this used to put them back to 100 % every few minutes
+        (it was written for when the filter sat in front and carried the volume)."""
         for n in nodes:
             p = (n.get("info") or {}).get("props") or {}
             name = p.get("node.name", "")
             if p.get("media.class") == "Audio/Sink" and name.startswith("alsa_output.pci") and "hdmi" not in name:
                 out = subprocess.run(["wpctl", "get-volume", str(n["id"])], capture_output=True, text=True, timeout=3).stdout
-                if "1.00" not in out or "MUTED" in out:
-                    subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=3)
+                if "MUTED" in out:
                     subprocess.run(["wpctl", "set-mute", str(n["id"]), "0"], timeout=3)
-                    print(f"[room] output: the Surface's speakers were at {out.strip()} — set to full", flush=True)
+                    print("[room] output: the Surface's speakers were muted — unmuted", flush=True)
             if heal and n.get("type") == "PipeWire:Interface:Node" and p.get("media.class") == "Stream/Output/Audio":
                 who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
                 if "soloist" in who or "spotify" in who or name.startswith(("effect_", "output.", "input.")) \
@@ -132,10 +134,27 @@ class Output:
                 if min(v) < 0.99:
                     subprocess.run(["wpctl", "set-volume", str(n["id"]), "1.0"], timeout=3)
                     print(f"[room] output: {who.split()[0] if who.split() else n['id']} was turned down — back to full", flush=True)
-        # the chip itself: Speaker at full, Master a few dB under — at the very top, both the music and Room's voice
-        # crackled (the speakers themselves, not the tuning: it crackled with the tuning bypassed too).
-        # "speakerHeadroomDb" in config.json (0 = full, as before)
-        subprocess.run(["amixer", "-q", "-c", "0", "sset", "Speaker", "100%", "unmute"], timeout=3,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(["amixer", "-q", "-c", "0", "sset", "Master", f"-{self.headroom:g}dB" if self.headroom else "100%", "unmute"],
-                       timeout=3, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # the chip itself: never muted, and Master never above a few dB under full — at the very top, both the music and
+        # Room's voice crackled (the speakers themselves: it crackled with any tuning bypassed too). Only ever LOWERED
+        # to the cap: the volume slider moves these controls too now. "speakerHeadroomDb" in config.json (0 = no cap)
+        for ctl in ("Speaker", "Master"):
+            subprocess.run(["amixer", "-q", "-c", "0", "sset", ctl, "unmute"], timeout=3,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if self.headroom:
+            db = master_db()
+            if db is not None and db > -self.headroom + 0.01:
+                subprocess.run(["amixer", "-q", "-c", "0", "sset", "Master", f"-{self.headroom:g}dB"], timeout=3,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print(f"[room] output: the chip was at {db:g} dB — down to the crackle cap, -{self.headroom:g} dB", flush=True)
+
+
+def master_db(text: str = None):
+    """The chip's Master level in dB (the first channel amixer reports), or None."""
+    import re
+    if text is None:
+        try:
+            text = subprocess.run(["amixer", "-c", "0", "sget", "Master"], capture_output=True, text=True, timeout=3).stdout
+        except Exception:
+            return None
+    m = re.search(r"\[(-?\d+(?:\.\d+)?)dB\]", text or "")
+    return float(m.group(1)) if m else None

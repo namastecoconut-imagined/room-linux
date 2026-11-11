@@ -19,6 +19,8 @@ layout(std140, binding = 0) uniform buf {
     float waveS;       // its strength
     float glassR;      // the glass card's corner radius
     float waveI;       // which light the wave starts from (the brightest)
+    float tm;          // the swirl's clock (seconds, quicker for a lively cover)
+    float mv;          // how much the lights swirl (1; a room's light: calmer)
     vec2 size;         // this item's size (stage px)
     vec2 origin;       // where its top left sits on the stage
     vec2 dir;          // the cover's light direction
@@ -39,17 +41,31 @@ float hash(vec2 p) {                        // a fixed random grey per stage pix
 
 vec3 over(vec3 under, vec3 col, float a) { return mix(under, col, clamp(a, 0.0, 1.0)); }
 
-vec2 drift(int i) {                         // where light i has drifted to, from its place
+// Where light i is now. Two movements: the cover's own drift along its light direction (the design), and the old
+// colour wash's swirl, brought back — the lights turn slowly round the middle of the screen (±22°, about a minute
+// a turn) and each circles its own place (±16 % of the width, ±14 % of the height, 35–60 s a loop), so the colours
+// keep moving across the screen the way the wash's did.
+vec2 place(int i, vec4 b) {
     float fi = float(i);
     float a = ph * TAU + fi * 1.7;
     float s = sin(a), k = cos(a * 0.7 + fi);
-    return vec2(dir.x * s * amp - dir.y * k * amp * 0.35, dir.y * s * amp + dir.x * k * amp * 0.35);
+    vec2 d = vec2(dir.x * s * amp - dir.y * k * amp * 0.35, dir.y * s * amp + dir.x * k * amp * 0.35);
+    vec2 cc = vec2(684.0, 456.0);
+    float ang = 0.384 * sin(tm / 9.0) * mv;                 // 22°
+    vec2 q = b.xy - cc;
+    q = vec2(q.x * cos(ang) - q.y * sin(ang), q.x * sin(ang) + q.y * cos(ang));
+    vec2 o = vec2(219.0 * sin(tm / (6.0 + fi * 0.8) + fi * 1.3), 128.0 * cos(tm / (7.5 + fi * 0.6) + fi * 2.1)) * mv;
+    return cc + q + d + o;
+}
+float breathe(int i) {                       // and each grows and shrinks a little (±12 %), as the wash's copies did
+    float fi = float(i);
+    return 1.0 + 0.12 * sin(tm / (5.0 + fi * 0.9) + fi * 1.1) * mv;
 }
 
 vec3 light(vec3 under, vec2 p, int i, vec4 b, vec4 c) {
     if (b.w <= 0.0 || b.z <= 0.0) return under;
-    float r = b.z * 0.5 * (1.0 + 0.1 * sound);
-    float f = 1.0 - length(p - (b.xy + drift(i))) / r;   // closest-side radial: full at the centre, nothing at the edge
+    float r = b.z * 0.5 * breathe(i) * (1.0 + 0.1 * sound);
+    float f = 1.0 - length(p - place(i, b)) / r;         // closest-side radial: full at the centre, nothing at the edge
     if (f <= 0.0) return under;
     vec3 col = min(c.rgb * (1.0 + 0.16 * sound), vec3(1.0));
     return over(under, col, f * b.w);
@@ -77,7 +93,7 @@ void main() {
         float e = 1.0 - pow(1.0 - u, 3.0);                   // fast out, slowing as it spreads
         float R = 40.0 + 1500.0 * e;                         // the front
         float w = 110.0 + 230.0 * e;                         // its softness
-        float dd = length(p - (wb.xy + drift(wi))) - R;
+        float dd = length(p - place(wi, wb)) - R;
         float a = 0.36 * waveS * pow(1.0 - u, 1.4) * exp(-dd * dd / (2.0 * w * w));
         col = 1.0 - (1.0 - col) * (1.0 - mix(wcol, vec3(1.0), 0.45) * a);
     }

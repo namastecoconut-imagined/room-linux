@@ -94,6 +94,9 @@ ShaderEffect {
 
     // ---------------------------------------------------------------- the drift (a phase, so a new loop length never jumps)
     property real ph: 0
+    property real tm: 0
+    property real mv: mode === "room" ? 0.4 : 1          // the swirl (a room's light moves less)
+    Behavior on mv { NumberAnimation { duration: 2200 } }
     property real t: 0
     property real last: 0
     Timer {
@@ -105,6 +108,7 @@ ShaderEffect {
             f.last = now
             f.t += dt
             f.ph = (f.ph + dt / Math.max(10, f.pal.period || 30)) % 1000
+            f.tm = (f.tm + dt * 30 / Math.max(10, f.pal.period || 30)) % 100000    // the swirl: a lively cover turns it faster
             f.waveT = f.t - f.waveAt
             // the swell eases back down with the room quiet (the level stops arriving when the mic is off)
             if (!room.micOn) f.sound = 0

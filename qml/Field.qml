@@ -77,6 +77,12 @@ ShaderEffect {
     property vector4d b2: Qt.vector4d(x2, y2, d2, la)
     property vector4d b3: Qt.vector4d(x3, y3, d3, la)
     property vector2d dir: Qt.vector2d(dirX, dirY)
+    // the wave starts from the brightest light
+    readonly property real waveI: {
+        var best = 0, bl = -1
+        for (var i = 0; i < 4; i++) { var c = pal.cols[i], l = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; if (l > bl) { bl = l; best = i } }
+        return best
+    }
     property real amp: ampV
     property real dimA: dimV
     property color dimC: "#050302"

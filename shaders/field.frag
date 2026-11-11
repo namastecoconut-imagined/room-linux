@@ -2,8 +2,8 @@
 // The redesign's background, "Field" (room-motion.html): the screen takes its colour from the album cover.
 // A base fill, then four soft lights — one per main colour of the cover, where that colour sits on the cover, as big
 // as its share — drifting along the cover's light direction; film grain over them (13 %, overlay); then a dimmer.
-// The room's sound swells the lights (≤ 10 %) and brightens them (≤ 16 %); a sudden jump sends a soft wave of light
-// out from the first one. Inside the glass card the grain is gone and the colours a little richer (the card's
+// The room's sound swells the lights (≤ 10 %) and brightens them (≤ 16 %); a sudden jump (a clap, a beat) sends a
+// soft wave of light out from the brightest one, across the screen. Inside the glass card the grain is gone and the colours a little richer (the card's
 // frosted glass blurs what's behind it). Everything is worked out in stage pixels (the 1368 × 912 stage).
 layout(location = 0) in vec2 qt_TexCoord0;
 layout(location = 0) out vec4 fragColor;
@@ -18,6 +18,7 @@ layout(std140, binding = 0) uniform buf {
     float waveT;       // seconds since the last wave started (≥ 3.4: none)
     float waveS;       // its strength
     float glassR;      // the glass card's corner radius
+    float waveI;       // which light the wave starts from (the brightest)
     vec2 size;         // this item's size (stage px)
     vec2 origin;       // where its top left sits on the stage
     vec2 dir;          // the cover's light direction
@@ -38,14 +39,17 @@ float hash(vec2 p) {                        // a fixed random grey per stage pix
 
 vec3 over(vec3 under, vec3 col, float a) { return mix(under, col, clamp(a, 0.0, 1.0)); }
 
-vec3 light(vec3 under, vec2 p, int i, vec4 b, vec4 c) {
-    if (b.w <= 0.0 || b.z <= 0.0) return under;
+vec2 drift(int i) {                         // where light i has drifted to, from its place
     float fi = float(i);
     float a = ph * TAU + fi * 1.7;
     float s = sin(a), k = cos(a * 0.7 + fi);
-    vec2 d = vec2(dir.x * s * amp - dir.y * k * amp * 0.35, dir.y * s * amp + dir.x * k * amp * 0.35);
+    return vec2(dir.x * s * amp - dir.y * k * amp * 0.35, dir.y * s * amp + dir.x * k * amp * 0.35);
+}
+
+vec3 light(vec3 under, vec2 p, int i, vec4 b, vec4 c) {
+    if (b.w <= 0.0 || b.z <= 0.0) return under;
     float r = b.z * 0.5 * (1.0 + 0.1 * sound);
-    float f = 1.0 - length(p - (b.xy + d)) / r;          // closest-side radial: full at the centre, nothing at the edge
+    float f = 1.0 - length(p - (b.xy + drift(i))) / r;   // closest-side radial: full at the centre, nothing at the edge
     if (f <= 0.0) return under;
     vec3 col = min(c.rgb * (1.0 + 0.16 * sound), vec3(1.0));
     return over(under, col, f * b.w);
@@ -63,14 +67,19 @@ void main() {
     col = light(col, p, 1, b1, c1);
     col = light(col, p, 2, b2, c2);
     col = light(col, p, 3, b3, c3);
-    // the wave: a soft brightening that spreads out from the first light (screen blend), gone in 3.4 s
+    // the wave: a soft band of light that travels out from the brightest light across the whole screen and fades
+    // (3.4 s) — a brightening, screen-blended, never a drawn ring
     if (waveT < 3.4 && waveS > 0.0) {
+        int wi = int(waveI + 0.5);
+        vec4 wb = wi == 0 ? b0 : wi == 1 ? b1 : wi == 2 ? b2 : b3;
+        vec3 wcol = wi == 0 ? c0.rgb : wi == 1 ? c1.rgb : wi == 2 ? c2.rgb : c3.rgb;
         float u = waveT / 3.4;
-        float e = 1.0 - pow(1.0 - u, 3.0);
-        float R = 10.0 + 1090.0 * e;
-        float sg = 1.8 * R;
-        float a = 0.22 * waveS * 0.25 * (1.0 - smoothstep(0.0, 1.0, u)) * exp(-dot(p - b0.xy, p - b0.xy) / (2.0 * sg * sg));
-        col = 1.0 - (1.0 - col) * (1.0 - c0.rgb * a);
+        float e = 1.0 - pow(1.0 - u, 3.0);                   // fast out, slowing as it spreads
+        float R = 40.0 + 1500.0 * e;                         // the front
+        float w = 110.0 + 230.0 * e;                         // its softness
+        float dd = length(p - (wb.xy + drift(wi))) - R;
+        float a = 0.36 * waveS * pow(1.0 - u, 1.4) * exp(-dd * dd / (2.0 * w * w));
+        col = 1.0 - (1.0 - col) * (1.0 - mix(wcol, vec3(1.0), 0.45) * a);
     }
     // inside the glass card: no grain, a little more colour (its frosted glass blurs and saturates what's behind)
     float inGlass = 0.0;

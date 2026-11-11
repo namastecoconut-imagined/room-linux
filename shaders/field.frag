@@ -15,7 +15,9 @@ layout(std140, binding = 0) uniform buf {
     float dimA;        // the dimmer (0…1)
     float grainA;      // the grain's strength (0.13)
     float glassR;      // the glass card's corner radius
-    float tm;          // the swirl's clock (seconds, quicker for a lively cover)
+    float rotP;        // the swirl's phases (radians, each kept within one turn, so they never jump): the turn
+    vec4 orbX; vec4 orbY;   // each light's circling, across and up and down
+    vec4 brP;          // each light's growing and shrinking
     float mv;          // how much the lights swirl (1; a room's light: calmer)
     vec2 size;         // this item's size (stage px)
     vec2 origin;       // where its top left sits on the stage
@@ -47,15 +49,15 @@ vec2 place(int i, vec4 b) {
     float s = sin(a), k = cos(a * 0.7 + fi);
     vec2 d = vec2(dir.x * s * amp - dir.y * k * amp * 0.35, dir.y * s * amp + dir.x * k * amp * 0.35);
     vec2 cc = vec2(684.0, 456.0);
-    float ang = 0.384 * sin(tm / 9.0) * mv;                 // 22°
+    float ang = 0.384 * sin(rotP) * mv;                     // 22°
     vec2 q = b.xy - cc;
     q = vec2(q.x * cos(ang) - q.y * sin(ang), q.x * sin(ang) + q.y * cos(ang));
-    vec2 o = vec2(219.0 * sin(tm / (6.0 + fi * 0.8) + fi * 1.3), 128.0 * cos(tm / (7.5 + fi * 0.6) + fi * 2.1)) * mv;
+    vec2 o = vec2(219.0 * sin(orbX[i] + fi * 1.3), 128.0 * cos(orbY[i] + fi * 2.1)) * mv;
     return cc + q + d + o;
 }
 float breathe(int i) {                       // and each grows and shrinks a little (±12 %), as the wash's copies did
     float fi = float(i);
-    return 1.0 + 0.12 * sin(tm / (5.0 + fi * 0.9) + fi * 1.1) * mv;
+    return 1.0 + 0.12 * sin(brP[i] + fi * 1.1) * mv;
 }
 
 vec3 light(vec3 under, vec2 p, int i, vec4 b, vec4 c) {

@@ -90,7 +90,16 @@ ShaderEffect {
 
     // ---------------------------------------------------------------- the drift (a phase, so a new loop length never jumps)
     property real ph: 0
-    property real tm: 0
+    // the swirl's phases, each advanced on its own and kept within one turn (a single clock wrapped every few hours
+    // and the lights jumped): the turn (9 s a radian), each light's circling (6–8.4 s and 7.5–9.3 s a radian), and its
+    // growing and shrinking (5–7.7 s a radian) — all scaled by pace and how lively the cover is
+    property real rotP: 0
+    property vector4d orbX: Qt.vector4d(0, 0, 0, 0)
+    property vector4d orbY: Qt.vector4d(0, 0, 0, 0)
+    property vector4d brP: Qt.vector4d(0, 0, 0, 0)
+    readonly property real tau: 2 * Math.PI
+    function turn(v, d) { return (v + d) % tau }
+    property real pace: 2.2             // everything moves 2.2× the design's speed (the design's felt too still)
     // the swirl: 0.55 while music plays moves the screen as much as the old music standby did (measured: the same
     // share of the picture changing over 6 s; the design's drift alone moved it about half as much); otherwise a
     // gentle 0.25, so the panel never looks frozen
@@ -106,8 +115,12 @@ ShaderEffect {
             var dt = f.last > 0 ? Math.min(0.25, now - f.last) : 0
             f.last = now
             f.t += dt
-            f.ph = (f.ph + dt / Math.max(10, f.pal.period || 30)) % 1000
-            f.tm = (f.tm + dt * 30 / Math.max(10, f.pal.period || 30)) % 100000    // the swirl: a lively cover turns it faster
+            f.ph = (f.ph + f.pace * dt / Math.max(10, f.pal.period || 30)) % 1000
+            var w = f.pace * dt * 30 / Math.max(10, f.pal.period || 30)                    // the swirl: a lively cover turns it faster
+            f.rotP = f.turn(f.rotP, w / 9)
+            f.orbX = Qt.vector4d(f.turn(f.orbX.x, w / 6), f.turn(f.orbX.y, w / 6.8), f.turn(f.orbX.z, w / 7.6), f.turn(f.orbX.w, w / 8.4))
+            f.orbY = Qt.vector4d(f.turn(f.orbY.x, w / 7.5), f.turn(f.orbY.y, w / 8.1), f.turn(f.orbY.z, w / 8.7), f.turn(f.orbY.w, w / 9.3))
+            f.brP = Qt.vector4d(f.turn(f.brP.x, w / 5), f.turn(f.brP.y, w / 5.9), f.turn(f.brP.z, w / 6.8), f.turn(f.brP.w, w / 7.7))
             // the swell eases away when the music stops (or the mic is off: the level stops arriving)
             if (!room.micOn || !f.playing) f.sound *= 0.8
         }

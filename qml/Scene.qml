@@ -382,13 +382,14 @@ Item {
     Mover {
         id: lib
         order: 9
-        x: 792; y: 736          // its covers end level with the big cover
+        // the names end level with the big cover's bottom edge, the card's own margin below them (no heading: the
+        // covers and their names say what they are, and it left the row crowding the card's edge)
+        x: 792; y: 842 - 104
         opacity: sc.pV ? 1 : 0
-        width: 500; height: 130
+        width: 500; height: 104
         readonly property var lists: [{ name: "Liked songs", uri: "liked", art: "" }].concat(sc.music.playlists || [])
-        Mono { size: 12; color: Theme.w62; text: "Your playlists and albums" }
         Row {
-            y: 26; spacing: 16
+            spacing: 16
             Repeater {
                 model: lib.lists.slice(0, 4)
                 Tap {

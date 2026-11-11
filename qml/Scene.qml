@@ -221,6 +221,7 @@ Item {
         Item {
             anchors.fill: parent
             opacity: sc.swipeO
+            scale: coverTap.dip
             transform: Translate { x: sc.swipeX }
             RectangularShadow { anchors.fill: parent; offset.y: 24; blur: 50; spread: -14; radius: 14; color: Qt.rgba(0, 0, 0, 0.6) }
             Art {
@@ -234,16 +235,27 @@ Item {
             anchors.fill: parent; enabled: sc.pV && sc.exists
             preventStealing: true
             property real x0: 0
-            onPressed: (e) => { x0 = e.x; if (!sc.swipeWait) { sc.swipeReset(); springBack.stop() } }
+            onPressed: (e) => { x0 = e.x; coverTap.press(); if (!sc.swipeWait) { sc.swipeReset(); springBack.stop() } }
             onPositionChanged: (e) => { if (!sc.swipeWait) sc.swipeX = (e.x - x0) * 0.9 }
             onReleased: (e) => {
                 var dx = e.x - x0
+                coverTap.release()
                 if (sc.swipeWait) return
                 if (Math.abs(dx) > 36) sc.flyAway(dx < 0 ? -1 : 1)
                 else { springBack.start(); if (Math.abs(dx) < 20) room.playPause() }
             }
-            onCanceled: if (!sc.swipeWait) springBack.start()
+            onCanceled: { coverTap.release(); if (!sc.swipeWait) springBack.start() }
         }
+        // a tap on the cover shows like any button's: it dips and springs back
+        QtObject {
+            id: coverTap
+            property real dip: 1
+            property real t0: 0
+            function press() { t0 = Date.now(); cUp.stop(); cDown.restart() }
+            function release() { cDown.stop(); cUp.restart() }
+        }
+        NumberAnimation { id: cDown; target: coverTap; property: "dip"; to: 0.97; duration: 90; easing.type: Easing.OutQuad }
+        NumberAnimation { id: cUp; target: coverTap; property: "dip"; to: 1; duration: 380; easing.type: Easing.OutBack; easing.overshoot: 2 }
     }
     Mover {
         id: title

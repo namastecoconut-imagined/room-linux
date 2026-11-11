@@ -17,7 +17,11 @@ Item {
     Rectangle { y: 14; width: parent.width; height: 2; color: Qt.rgba(1, 1, 1, 0.22) }
     Rectangle { y: 14; width: parent.width * s.shown; height: 2; color: "white" }
     RectangularShadow { visible: s.shadow; x: parent.width * s.shown - 7; y: 10; width: 14; height: 14; radius: 7; blur: 8; color: Qt.rgba(0, 0, 0, 0.4) }
-    Rectangle { x: parent.width * s.shown - 7; y: 8; width: 14; height: 14; radius: 7; color: "white" }
+    Rectangle {      // the knob grows under your finger while you drag
+        x: parent.width * s.shown - 7; y: 8; width: 14; height: 14; radius: 7; color: "white"
+        scale: drag.pressed ? 1.45 : 1
+        Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack; easing.overshoot: 2 } }
+    }
     Timer { id: throttle; interval: s.every; onTriggered: s.moved(s.local) }
     MouseArea {
         id: drag

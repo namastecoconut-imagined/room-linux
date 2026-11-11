@@ -71,7 +71,8 @@ Item {
         }
         Rectangle {
             x: parent.width * bar.f - 12; y: 10; width: 24; height: 24; radius: 12; color: "white"
-            layer.enabled: false
+            scale: bar.dragging ? 1.3 : 1           // grows under your finger while you drag
+            Behavior on scale { NumberAnimation { duration: 220; easing.type: Easing.OutBack; easing.overshoot: 2 } }
         }
         Timer { id: send; interval: 120; onTriggered: rv.setLevel(Math.round(bar.local * 100)) }
         MouseArea {

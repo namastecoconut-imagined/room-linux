@@ -816,6 +816,7 @@ class Room(QObject):
         if self.browserOpen:
             return
         import subprocess
+        self._browser_size()
         env = dict(os.environ, MOZ_ENABLE_WAYLAND="1")
         for k in ("QT_QPA_PLATFORM", "QT_SCALE_FACTOR", "QSG_RHI_BACKEND"):
             env.pop(k, None)
@@ -829,8 +830,39 @@ class Room(QObject):
         self._browser_check.start(2000)
         self.browserChanged.emit()
 
+    def _browser_size(self):
+        """Firefox at the panel's size. cage draws everything at the screen's own pixels (2736 × 1824, no scaling),
+        so Firefox came up at 100 % — tiny. Room itself is drawn at 200 % (its 1368 × 912 stage); Firefox gets the
+        same through its own setting (layout.css.devPixelsPerPx) in user.js — read at every start of Firefox — in
+        each of its profiles. ("browserScale" in config.json: 2 by default.) A profile Firefox makes on its very
+        first start gets it once it closes."""
+        import configparser
+        scale = float(self.cfg.get("browserScale", 2.0))
+        line = f'user_pref("layout.css.devPixelsPerPx", "{scale}");  // Room: the panel\'s size (room/backend.py)'
+        for base in (os.path.expanduser("~/.mozilla/firefox"), os.path.expanduser("~/.config/mozilla/firefox")):
+            ini = configparser.RawConfigParser()
+            if not ini.read(os.path.join(base, "profiles.ini")):
+                continue
+            for sec in ini.sections():
+                if not ini.has_option(sec, "Path"):
+                    continue
+                path = ini.get(sec, "Path")
+                prof = os.path.join(base, path) if ini.get(sec, "IsRelative", fallback="1") == "1" else path
+                if not os.path.isdir(prof):
+                    continue
+                js = os.path.join(prof, "user.js")
+                try:
+                    old = open(js).read().splitlines() if os.path.exists(js) else []
+                    keep = [l for l in old if "layout.css.devPixelsPerPx" not in l]
+                    if line not in old or len(keep) != len(old) - 1:
+                        open(js, "w").write("\n".join(keep + [line]) + "\n")
+                        print(f"[room] web browser: {scale:g}× in {os.path.basename(prof)}", flush=True)
+                except OSError as e:
+                    print(f"[room] web browser: couldn't set its size in {prof} ({e})", flush=True)
+
     def _browser_closed(self):
         if self._browser is not None and self._browser.poll() is not None:
+            self._browser_size()                     # (a profile made on Firefox's very first start)
             print("[room] web browser: closed", flush=True)
             self._browser = None
             self._browser_check.stop()

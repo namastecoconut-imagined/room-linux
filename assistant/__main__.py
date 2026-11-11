@@ -47,7 +47,11 @@ class Assistant:
         if a.get("endQuiet"):
             self.ears.END_QUIET = float(a["endQuiet"])
         self.voice = Voice(voice=a.get("voice", "af_heart"))
-        self.mic.hold = lambda: self.voice.busy
+        # the echo canceller pauses while Room speaks unless "echoWhileSpeaking" (default on): with it working, Room's own
+        # voice is taken out of the mic and "Alexa" over an answer stands out. (It was paused because its Python work
+        # competed with the voice and made it break up — back when the Dolby filter was eating half a core.)
+        self.echo_speaking = a.get("echoWhileSpeaking", True) is not False
+        self.mic.hold = lambda: self.voice.busy and not self.echo_speaking
         self.duck = Duck(float(a.get("voiceFloor", 0.70)))
         self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False

@@ -46,7 +46,7 @@ class Assistant:
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         if a.get("endQuiet"):
             self.ears.END_QUIET = float(a["endQuiet"])
-        self.voice = Voice(voice=a.get("voice", "af_heart"))
+        self.voice = Voice(voice=a.get("voice", "af_heart"), boost=a.get("cpuBoost", True) is not False)
         # the echo canceller pauses while Room speaks unless "echoWhileSpeaking" (default on): with it working, Room's own
         # voice is taken out of the mic and "Alexa" over an answer stands out. (It was paused because its Python work
         # competed with the voice and made it break up — back when the Dolby filter was eating half a core.)
@@ -142,12 +142,19 @@ class Assistant:
         snap = self.link.request({"t": "snapshot"}, 3) or {}
 
         early = {"said": ""}
+        # the words go on the screen when Room starts saying them, not before (you'd read them first, then wait):
+        # until the voice starts, the screen stays "thinking"
+        show = {"started": False, "final": None, "lock": threading.Lock()}
+
+        def started(first=None):
+            with show["lock"]:
+                show["started"] = True
+                self.state(**(show["final"] or first))
 
         def on_say(sentence):
             if sentence and not self.cancelled:
                 early["said"] = sentence
-                self.state(state="speaking", stage="done", heard=text, reply=sentence)
-                self.voice.say(sentence)
+                self.voice.say(sentence, started=lambda: started(dict(state="speaking", stage="done", heard=text, reply=sentence)))
         got = threading.Event()
         res = {}
         self.brain.interpret(text, snap, follow, self.computer.ok, on_say, lambda out: (res.update(out=out), got.set()))
@@ -192,15 +199,27 @@ class Assistant:
         spoken = looked or ((out.get("say") or "") if out.get("say") and not failed else did)
         self.brain.remember(text, spoken, did=did)
         card = out.get("card") if out.get("card") not in (None, "none") else ""
+        final = dict(state="speaking" if spoken else "idle", stage="done", heard=text, reply=spoken or line,
+                     line=line.lower() if line else "", card=card)
         if spoken and spoken.strip() != early["said"].strip():
             if self.speak_wait():                               # let the first line finish (or you cut in)
                 return "barge"
-            self.voice.say(spoken)
-        self.state(state="speaking" if spoken else "idle", stage="done", heard=text, reply=spoken or line,
-                   line=line.lower() if line else "", card=card)
+            with show["lock"]:
+                show["started"], show["final"] = False, final
+            self.voice.say(spoken, started=lambda: started())
+        else:
+            with show["lock"]:
+                if show["started"] or not early["said"]:
+                    self.state(**final)                         # already speaking (or nothing to say): show it now
+                else:
+                    show["final"] = final                       # shown the moment the voice starts
         time.sleep(0.2)
         if self.speak_wait():
             return "barge"
+        with show["lock"]:                                      # the voice never started (it failed): show the words anyway
+            if not show["started"] and show["final"]:
+                show["started"] = True
+                self.state(**show["final"])
         asked = spoken.strip().endswith("?")
         again = bool(out.get("follow_up", True)) and asked and not self.cancelled
         if not again:

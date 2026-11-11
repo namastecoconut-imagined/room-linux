@@ -18,4 +18,11 @@ printf '[main]\nsummary=Room: balanced, but the CPU leans to saving power (coole
   -e 's/^balanced=balanced-battery$/balanced=room/' /etc/tuned/ppd.conf
 systemctl is-active -q tuned-ppd 2>/dev/null && sudo systemctl restart tuned-ppd && sleep 2
 sudo tuned-adm profile room
+# …and the assistant may boost the CPU for the second or two it takes to make speech, then put it back
+# (assistant/boost.py): the energy-preference files are made writable by your group, at every start
+G=$(id -gn "${SUDO_USER:-$USER}")
+printf '# Room: the assistant boosts the CPU while it makes speech (assistant/boost.py)\nz /sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference 0664 root %s - -\n' "$G" \
+  | sudo tee /etc/tmpfiles.d/room-boost.conf >/dev/null
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/room-boost.conf
+echo "▸ Speech boost: $(ls -l /sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference | awk '{print $1, $3, $4}')"
 echo "▸ Cool: $(tuned-adm active | sed 's/.*: //') · CPU $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null)"

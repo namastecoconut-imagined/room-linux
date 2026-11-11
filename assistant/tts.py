@@ -1,9 +1,10 @@
 """Room's voice: Kokoro ("Heart", af_heart), made on the Surface itself — free, offline — and played by player.py.
 
-Measured on this Surface: the half-precision build (fp16) makes speech about 2× faster than it plays (int8 and full
-precision were slower here). So:
-  • the first piece of an answer is kept short (up to ~7 words, or the first clause if that's shorter), so Room
-    starts talking ~1 s after the answer arrives; the rest is made, sentence by sentence, while it speaks;
+The half-precision build (fp16) is the fastest here — but on the cool power profile it only just keeps up with
+playback (2.06 s to make 2.03 s of speech; 1.43 s with the CPU boosted, see boost.py). So:
+  • the first piece of an answer is very short (3–4 words, or up to the first comma), so Room starts talking well
+    under a second after the answer arrives; the rest is made, sentence by sentence, while it speaks;
+  • the CPU is boosted only while speech is being made (boost.py);
   • short lines ("Done.", "Timer set for ten minutes.") are kept once made — the common ones are made at start —
     so they play instantly.
 """
@@ -14,6 +15,7 @@ import time
 
 import numpy as np
 
+from .boost import Boost
 from .player import Player
 
 KDIR = os.path.expanduser("~/.local/share/room/assistant/kokoro")
@@ -22,7 +24,10 @@ COMMON = ["Done.", "Okay.", "Sure.", "Sorry, I didn't catch that.", "Sorry, I ca
 
 
 SMALL = {"a", "an", "the", "in", "on", "at", "of", "to", "for", "with", "and", "or", "but", "from", "by", "is", "are",
-         "was", "it's", "its", "my", "your", "this", "that", "some", "about", "around", "like", "into"}
+         "was", "it's", "its", "my", "your", "this", "that", "some", "about", "around", "like", "into",
+         # nor on a word that leaves the sentence hanging ("what would you / like…")
+         "you", "i", "we", "they", "he", "she", "would", "could", "should", "will", "can", "be", "have", "has", "do",
+         "does", "did", "not", "so", "as", "than", "if", "when", "what", "which", "who", "how", "there", "here"}
 
 
 def pieces(text: str) -> list[str]:
@@ -32,11 +37,12 @@ def pieces(text: str) -> list[str]:
         return []
     first, rest = sents[0], sents[1:]
     w = first.split()
-    if len(w) > 9:
-        cut = next((i + 1 for i, x in enumerate(w[:9]) if x.endswith((",", ";", ":")) and i >= 2), None)
-        if not cut:                     # no comma early on: about 7 words, never ending on "in", "the", "and"…
-            cut = 7
-            while cut > 4 and w[cut - 1].lower().strip(",") in SMALL:
+    if len(w) > 5:
+        # making a piece takes about as long as saying it: the first one short, so the first sound comes quickly
+        cut = next((i + 1 for i, x in enumerate(w[:5]) if x.endswith((",", ";", ":"))), None)
+        if not cut:                     # no comma early on: about 4 words, never ending on "in", "the", "and"…
+            cut = 4
+            while cut > 2 and w[cut - 1].lower().strip(",") in SMALL:
                 cut -= 1
         rest.insert(0, " ".join(w[cut:]))
         first = " ".join(w[:cut])
@@ -44,7 +50,7 @@ def pieces(text: str) -> list[str]:
 
 
 class Voice:
-    def __init__(self, voice="af_heart", speed=1.0, model="kokoro-v1.0.fp16.onnx"):
+    def __init__(self, voice="af_heart", speed=1.0, model="kokoro-v1.0.fp16.onnx", boost=True):
         from kokoro_onnx import Kokoro
         import onnxruntime as ort
         # Kokoro leaves a core free: with every core busy making the next sentence, the speaker's callback (Python,
@@ -62,6 +68,7 @@ class Voice:
         self.gen = 0
         self.lock = threading.Lock()          # one Kokoro call at a time
         self.making = False
+        self.boost = Boost(boost)
         threading.Thread(target=self._prepare, daemon=True).start()
 
     def _make(self, text):
@@ -83,14 +90,16 @@ class Voice:
             except Exception as e:
                 print("[assistant] voice:", repr(e), flush=True); return
 
-    def say(self, text: str, done=None):
-        """Speak (replacing whatever was being said). done() once it's all been played (or it was stopped)."""
+    def say(self, text: str, done=None, started=None):
+        """Speak (replacing whatever was being said). started() as the first sound goes out (the screen shows the
+        words then, not before); done() once it's all been played (or it was stopped)."""
         self.gen += 1
         g = self.gen
         self.player.begin()
 
         def go():
             self.making = True
+            self.boost.on()
             t0 = time.time()
             try:
                 for i, p in enumerate(pieces(text)):
@@ -99,13 +108,19 @@ class Voice:
                     a, sr = self._make(p)
                     if g != self.gen:
                         break
+                    self.player.feed(a, sr)
                     if i == 0:
                         print(f"[assistant] voice: first sound {time.time() - t0:.2f} s after the answer", flush=True)
-                    self.player.feed(a, sr)
+                        if started:
+                            try:
+                                started()
+                            except Exception as e:
+                                print("[assistant] voice: started():", repr(e), flush=True)
             except Exception as e:
                 print("[assistant] voice:", repr(e), flush=True)
             finally:
                 self.making = False
+                self.boost.off()
                 if g == self.gen:
                     self.player.end()
                     self.player.wait_done()

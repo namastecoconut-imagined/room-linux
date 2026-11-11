@@ -84,6 +84,7 @@ class Room(QObject):
         self.bt = Bluetooth()
         self.bt.changed.connect(self.settingsChanged)
         self._kiosk = False
+        self._desktop = False
         self._desktop_note = ""
         self.voicelink = VoiceLink(self)
         self.voicelink.changed.connect(self.voiceChanged)
@@ -101,7 +102,10 @@ class Room(QObject):
             return
         self._display.start()
         self.bt.refresh()
-        self._kiosk = self._session() == "room-panel"
+        # the panel session says so itself (kiosk.sh); the login manager's note is the fallback
+        self._kiosk = os.environ.get("XDG_CURRENT_DESKTOP") == "Room" or self._session() == "room-panel"
+        import shutil
+        self._desktop = shutil.which("gnome-session") is not None     # GNOME still installed (scripts/slim.py removes it)
         self.wx.start()
         self.screen.start()
         self.calendar.start()
@@ -784,6 +788,11 @@ class Room(QObject):
         """Started as just the panel (room-kiosk on), not inside GNOME."""
         return self._kiosk or self.demo
 
+    @Property(bool, notify=settingsChanged)
+    def desktop(self):
+        """GNOME is installed — there's a desktop to switch to."""
+        return self._desktop or self.demo
+
     @Property(str, notify=settingsChanged)
     def desktopNote(self):
         return self._desktop_note
@@ -802,7 +811,11 @@ class Room(QObject):
     @Slot()
     def switchToDesktop(self):
         """Next start into GNOME, and restart now."""
-        import subprocess
+        import shutil, subprocess
+        if shutil.which("gnome-session") is None:
+            self._desktop_note = "GNOME isn't installed any more — there's no desktop to switch to"
+            self.settingsChanged.emit()
+            return
         r = subprocess.run(["busctl", "call", "org.freedesktop.Accounts", f"/org/freedesktop/Accounts/User{os.getuid()}",
                             "org.freedesktop.Accounts.User", "SetSession", "s", "gnome"], capture_output=True, text=True, timeout=10)
         if r.returncode != 0 or self._session() != "gnome":

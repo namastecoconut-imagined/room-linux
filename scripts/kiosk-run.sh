@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs inside the "Room (panel only)" session: cage shows whatever window opens, full screen — Room. Room itself is
 # still the room.service you know (so room-update, logs and restarts work exactly as before).
-# No automatic restart: if Room stops and stays stopped for 20 s, this session ends and you're at the login screen,
-# where you can pick GNOME or Room again.
+# No automatic restart: if Room stops and stays stopped for 20 s, this session ends and you're at a text login on the
+# screen (greetd's) — SSH works as always.
 systemctl --user import-environment WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP 2>/dev/null
 dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_SESSION_TYPE XDG_CURRENT_DESKTOP 2>/dev/null
 systemctl --user restart room.service

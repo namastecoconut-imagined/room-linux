@@ -48,11 +48,11 @@ systemctl --user enable room.service >/dev/null
 
 echo "▸ Panel behaviour: no screen blanking, no lock screen, no on-screen keyboard popping up"
 if command -v gsettings >/dev/null; then
-  gsettings set org.gnome.desktop.session idle-delay 0 || true
-  gsettings set org.gnome.desktop.screensaver lock-enabled false || true
-  gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing' || true
-  gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled false || true
-  gsettings set org.gnome.desktop.notifications show-banners false || true
+  gsettings set org.gnome.desktop.session idle-delay 0 2>/dev/null || true
+  gsettings set org.gnome.desktop.screensaver lock-enabled false 2>/dev/null || true
+  gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-type 'nothing' 2>/dev/null || true
+  gsettings set org.gnome.desktop.a11y.applications screen-keyboard-enabled false 2>/dev/null || true
+  gsettings set org.gnome.desktop.notifications show-banners false 2>/dev/null || true
 fi
 
 bash "$HERE/scripts/airplay.sh"

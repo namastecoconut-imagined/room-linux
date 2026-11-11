@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Room without the GNOME desktop: the Surface starts straight into Room — cage (a tiny full-screen window host) and
-# Room, no GNOME shell, panels, search, notifications or animations. GNOME stays installed; nothing is uninstalled.
+# Room, no GNOME shell, panels, search, notifications or animations. (scripts/slim.py can then uninstall GNOME
+# altogether; without it, "off" means a text login on the screen instead of the desktop.)
 #
 # It starts through greetd, a tiny login manager made for kiosks, not GDM: GDM brought up its own login screen a few
 # seconds after signing in by itself, over Room — asking for the password, and going back to Room once given.
 #   room-kiosk on [now]    from the next start (or right now), the Surface boots straight into Room via greetd
-#   room-kiosk off [now]   back to GDM and the GNOME desktop from the next start (or right now)
+#   room-kiosk off [now]   back to GDM and the GNOME desktop from the next start (or right now) — or, with GNOME
+#                          uninstalled, a text login on the screen instead of Room
 #   room-kiosk             which one is set
 # Escape hatches: SSH always works; Ctrl+Alt+F3 gives a text login; and if Room stops for good, greetd shows a text
 # login on the screen — sign in, then room-kiosk off.
@@ -118,6 +120,7 @@ TOML
   command -v agreety >/dev/null || echo "  ! agreety (greetd's text login) isn't installed — if Room ever stops, use SSH or Ctrl+Alt+F3"
   echo "  boot display manager: $(basename "$(readlink -f /etc/systemd/system/display-manager.service)")"
 
+  if [ -d /etc/gdm ]; then
   echo "▸ (GDM keeps signing in by itself into Room too, for room-kiosk off and back)"
   if ! grep -q "^AutomaticLogin=$U" /etc/gdm/custom.conf 2>/dev/null; then
     sudo cp -n /etc/gdm/custom.conf /etc/gdm/custom.conf.before-room 2>/dev/null || true
@@ -137,10 +140,26 @@ open(p, "w").write(s)
 P
   fi
   set_session room-panel
+  fi
   echo "✓ Set. Restart the Surface and it comes up as just the panel (room-kiosk off to go back)."
   echo "  If it ever comes up to a black screen: Ctrl+Alt+F3, sign in, room-kiosk off, restart."
   ;;
 off)
+  if ! rpm -q gdm >/dev/null 2>&1; then
+    # GNOME isn't installed (scripts/slim.py): greetd stays, without signing in by itself — a text login on the screen
+    if [ -f /etc/greetd/config.toml ]; then
+      sudo python3 - <<'P'
+import re
+p = "/etc/greetd/config.toml"
+s = open(p).read()
+open(p, "w").write(re.sub(r"(?ms)^\[initial_session\].*?(?=^\[|\Z)", "", s).rstrip() + "\n")
+P
+    fi
+    if [ "${2:-}" = "now" ]; then sudo systemctl restart greetd.service; fi
+    echo "✓ A text login on the screen instead of Room, from the next start${2:+ (and now)} — GNOME isn't installed."
+    echo "  room-kiosk on brings Room back."
+    exit 0
+  fi
   sudo systemctl disable -q room-panel.service 2>/dev/null || true
   sudo systemctl disable -q greetd.service 2>/dev/null || true
   sudo systemctl enable -q gdm.service
@@ -152,7 +171,10 @@ off)
   echo "✓ Back to GNOME from the next start (signing in by itself stays on). Restart the Surface when you like."
   ;;
 *)
-  if systemctl is-enabled -q greetd.service 2>/dev/null; then echo "Starts into: Room only, via greetd (room-kiosk off for GNOME)"
+  if systemctl is-enabled -q greetd.service 2>/dev/null; then
+    if grep -q '^\[initial_session\]' /etc/greetd/config.toml 2>/dev/null; then
+      echo "Starts into: Room only, via greetd (room-kiosk off for $(rpm -q gdm >/dev/null 2>&1 && echo GNOME || echo 'a text login'))"
+    else echo "Starts into: a text login (room-kiosk on for Room)"; fi
   else s=$(session); echo "Starts into: ${s:-GNOME} (room-kiosk on for Room only)"; fi
   ;;
 esac

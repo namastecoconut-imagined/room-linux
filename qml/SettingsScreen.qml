@@ -65,7 +65,8 @@ Item {
     }
     SectionCap { x: 96; y: Theme.deadB1 + 248; text: "This panel" }
     Press {
-        visible: room.kiosk
+        id: toDesktop
+        visible: room.kiosk && room.desktop          // (gone once GNOME is uninstalled — nothing to switch to)
         x: 96; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
         onTapped: { confirm.kind = "desktop"; confirm.open = true }
         Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
@@ -78,7 +79,7 @@ Item {
         text: "In the GNOME desktop. For just the panel: room-kiosk on, then restart."
     }
     Press {
-        x: 366; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
+        x: toDesktop.visible || !room.kiosk ? 366 : 96; y: Theme.deadB1 + 280; width: 258; height: 112; pressScale: 0.985
         onTapped: { confirm.kind = "off"; confirm.open = true }
         Rectangle { anchors.fill: parent; radius: 22; color: Qt.rgba(1, 1, 1, 0.05) }
         T { x: 24; y: 24; text: "Shut down"; font.pixelSize: 22 }

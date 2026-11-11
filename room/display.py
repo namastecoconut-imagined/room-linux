@@ -37,7 +37,8 @@ class Display(QObject):
         bl = sorted(glob.glob("/sys/class/backlight/*"), key=lambda p: "intel" not in p)
         self.bl = bl[0] if bl else ""
         self.max = _read(self.bl + "/max_brightness", int) if self.bl else None
-        self.level = self._current() or self.manual
+        cur = self._current()
+        self.level = cur if cur and cur > 0.03 else self.manual      # (0: it was switched off — not a level to keep)
         self.lux = None
         self._lux_avg = None
         self.als = self._find_sensor()
@@ -48,6 +49,11 @@ class Display(QObject):
                 "canSet": bool(self.bl and self.max), "lux": round(self.lux) if self.lux is not None else -1}
 
     def start(self):
+        # set the backlight now, whatever it was left at: Room restarted while the screen was off (room/sleep.py turns
+        # the backlight to 0) came back believing it was on and never wrote a level — automatic only writes when the
+        # light changes — so the screen stayed dark, and "waking" it did nothing (it wasn't asleep)
+        if not self.blanked:
+            self._apply(self.level)
         if self.auto and self.als:
             self._tick()
         self.timer = QTimer(self); self.timer.timeout.connect(self._tick); self.timer.start(2000)

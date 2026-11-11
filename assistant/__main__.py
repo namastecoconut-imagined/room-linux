@@ -5,7 +5,8 @@
   If the answer is a question, it listens again for a few seconds without the wake word.
 
 Everything it does is logged ([assistant] lines: journalctl --user -u room-assistant). Settings in config.json:
-"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.7}.
+"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.7, "bargeIn": true,
+"bargeThreshold": 0.6}.
 """
 import json
 import os
@@ -50,6 +51,11 @@ class Assistant:
         self.duck = Duck(float(a.get("voiceFloor", 0.70)))
         self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False
+        # talking over Room: "Alexa" while it speaks stops it and listens to you ("bargeIn": false turns it off).
+        # Room's own voice doesn't wake the model — Kokoro saying ten typical answers scored 0.00–0.01, and saying
+        # "Alexa, turn off the lights" itself only 0.02 (it was trained on people) — so it listens to the raw mic then.
+        self.barge = a.get("bargeIn", True) is not False
+        self.barge_threshold = float(a.get("bargeThreshold", 0.6))
         if not self.sarvam_key:
             log("no sarvamKey in config.json — it can't understand speech")
         if not self.brain:
@@ -90,7 +96,10 @@ class Assistant:
         while True:
             more = self.turn(follow)
             turns += 1
-            if not more or self.cancelled or turns >= 4:
+            if more == "barge" and not self.cancelled and turns < 8:
+                follow = False                   # you said "Alexa" over Room: a new request, with the chime
+                continue
+            if not more or more == "barge" or self.cancelled or turns >= 4:
                 break
             follow = True
         self.duck.up()
@@ -180,19 +189,41 @@ class Assistant:
         self.brain.remember(text, spoken, did=did)
         card = out.get("card") if out.get("card") not in (None, "none") else ""
         if spoken and spoken.strip() != early["said"].strip():
-            while self.voice.busy and not self.cancelled:       # let the first line finish
-                time.sleep(0.05)
+            if self.speak_wait():                               # let the first line finish (or you cut in)
+                return "barge"
             self.voice.say(spoken)
         self.state(state="speaking" if spoken else "idle", stage="done", heard=text, reply=spoken or line,
                    line=line.lower() if line else "", card=card)
         time.sleep(0.2)
-        while self.voice.busy and not self.cancelled:
-            time.sleep(0.05)
+        if self.speak_wait():
+            return "barge"
         asked = spoken.strip().endswith("?")
         again = bool(out.get("follow_up", True)) and asked and not self.cancelled
         if not again:
             self.state(state="idle", stage="done", heard=text, reply=spoken or line, line=line.lower() if line else "", card=card)
         return again
+
+    def speak_wait(self) -> bool:
+        """Wait while Room speaks. With barge-in on, "Alexa" stops it: True if you cut in."""
+        if not self.barge:
+            while self.voice.busy and not self.cancelled:
+                time.sleep(0.05)
+            return False
+        import queue
+        w = self.ears.wake
+        w.reset()
+        while self.voice.busy and not self.cancelled:
+            try:
+                f = self.mic.q.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            sc = w.score(f)
+            if sc >= self.barge_threshold:
+                log(f"Alexa over Room's voice ({sc:.2f}) — stopping it, listening")
+                self.voice.stop()
+                w.reset(); self.ears.last_wake = time.time()
+                return True
+        return False
 
     def answer(self, words: str):
         """Something went wrong (no internet, no brain): said, and shown in the error colours (stage "error")."""

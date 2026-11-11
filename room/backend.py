@@ -345,7 +345,7 @@ class Room(QObject):
     def timing(self):
         """The standby rules' settings (seconds and hours), straight from config.json."""
         c = self.cfg
-        return {"homePlayingSec": int(c.get("homePlayingSec", 30)), "homeIdleSec": int(c.get("homeIdleSec", 300)),
+        return {"homePlayingSec": int(c.get("homePlayingSec", 300)), "homeIdleSec": int(c.get("homeIdleSec", 300)),
                 "musicSec": int(c.get("musicSec", 300)),
                 "idleReturnSec": int(c.get("idleReturnSec", 60)),
                 "menuStandbySec": int(c.get("menuStandbySec", 180)),

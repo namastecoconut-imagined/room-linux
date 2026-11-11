@@ -5,7 +5,7 @@ import QtQuick.Window
 // the window is, so it stays sharp and proportioned on any 3:2 screen.
 //
 // Standby (checked once a second), how long untouched before it fades in:
-//  • home, music playing: homePlayingSec (30 s) — straight to the music standby
+//  • home, music playing: homePlayingSec (5 min) — straight to the music standby
 //  • home, nothing playing: homeIdleSec (5 min)
 //  • the music player (or a sheet over it): musicSec (5 min)
 //  • a menu (room, clock, weather, reminders, settings): menuStandbySec (3 min), then home underneath

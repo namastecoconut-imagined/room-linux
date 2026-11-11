@@ -24,5 +24,9 @@ G=$(id -gn "${SUDO_USER:-$USER}")
 printf '# Room: the assistant boosts the CPU while it makes speech (assistant/boost.py)\nz /sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference 0664 root %s - -\n' "$G" \
   | sudo tee /etc/tmpfiles.d/room-boost.conf >/dev/null
 sudo systemd-tmpfiles --create /etc/tmpfiles.d/room-boost.conf
+# …and Room's tracker (scripts/watch.py) may read the processor's power meter, to log watts
+printf '# Room: its tracker (scripts/watch.py) reads the processor'"'"'s power meter\nz /sys/class/powercap/intel-rapl:*/energy_uj 0440 root %s - -\n' "$G" \
+  | sudo tee /etc/tmpfiles.d/room-power.conf >/dev/null
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/room-power.conf
 echo "▸ Speech boost: $(ls -l /sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference | awk '{print $1, $3, $4}')"
 echo "▸ Cool: $(tuned-adm active | sed 's/.*: //') · CPU $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null)"

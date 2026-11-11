@@ -99,6 +99,26 @@ for s in room-airplay room-spotify room-assistant; do
     systemctl --user add-wants pipewire.service $s.service >/dev/null 2>&1 || true
   fi
 done
+# Room's tracker: how hard the Surface works — CPU per program, power, temperatures — one line a minute to
+# ~/.local/state/room/watch.log (scripts/watch.py; 14 days kept). A service, so it carries on after every restart.
+T=~/.config/systemd/user/room-watch.service
+want="[Unit]
+Description=Room's tracker: CPU, power, temperatures, one line a minute (~/.local/state/room/watch.log)
+
+[Service]
+ExecStart=/usr/bin/python3 $HERE/scripts/watch.py
+Nice=10
+Restart=on-failure
+RestartSec=60
+
+[Install]
+WantedBy=default.target"
+if [ "$(cat "$T" 2>/dev/null)" != "$want" ]; then
+  mkdir -p "$(dirname "$T")" && printf '%s\n' "$want" > "$T"
+  systemctl --user daemon-reload
+  systemctl --user enable room-watch.service >/dev/null 2>&1 || true
+fi
+systemctl --user restart room-watch.service || true
 # the helper command
 mkdir -p ~/.local/bin && ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
 systemctl --user restart room.service

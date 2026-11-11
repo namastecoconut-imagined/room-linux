@@ -18,6 +18,21 @@ from .weather import Weather
 from . import demo
 
 
+# (checks) a question and Room's answer for each card the assistant's answers can show
+DEMO_ASK = {
+    "weather": ("What's it like outside?", "It's twenty seven and partly cloudy right now, with rain likely around four."),
+    "forecast": ("What's the weather tomorrow?", "Tomorrow's overcast, twenty nine at its warmest, and rain is likely in the afternoon."),
+    "air": ("How's the air today?", "It's moderate today, about eighty five. Fine for a walk, maybe not a run."),
+    "timer": ("Set a twelve minute timer for pasta", "Pasta timer, twelve minutes. Starting now."),
+    "music": ("Play something calm", "Here's Fidelio, by ansh."),
+    "schedule": ("What's on today?", "Dinner at ten tonight. Then the team standup on Tuesday at ten thirty."),
+    "alarm": ("Wake me up at seven", "Done. Your alarm's set for seven tomorrow morning."),
+    "lights": ("Dim the living room to thirty", "Living room's at thirty now."),
+    "none": ("Who made Fidelio?", "Fidelio is by ansh. It's from Late Night, the playlist that's on right now. "
+                                  "Want me to play more like it?"),
+}
+
+
 class Room(QObject):
     weatherChanged = Signal()
     eventsChanged = Signal()
@@ -666,14 +681,18 @@ class Room(QObject):
     @Property("QVariantMap", notify=voiceChanged)
     def voice(self):
         """For the screen: state (off · idle · listening · thinking · speaking), stage, heard, reply, line, card."""
-        if self.demo and os.environ.get("ROOM_DEMO_VOICE"):          # screens to check: listen · think · speak · miss · ready
-            st = os.environ["ROOM_DEMO_VOICE"]
-            q = "What's the weather going to be in Bali tomorrow?"
+        if self.demo and os.environ.get("ROOM_DEMO_VOICE"):          # screens to check: listen · follow · think · speak
+            st = os.environ["ROOM_DEMO_VOICE"]                          # · error · miss · ready; ROOM_DEMO_CARD: the answer
+            card = os.environ.get("ROOM_DEMO_CARD", "forecast")
+            q, a = DEMO_ASK.get(card, DEMO_ASK["forecast"])
             return {"listen": {"state": "listening", "stage": "wake", "heard": ""},
+                    "follow": {"state": "listening", "stage": "follow", "heard": ""},
                     "think": {"state": "thinking", "stage": "think", "heard": q},
-                    "speak": {"state": "speaking", "stage": "done", "heard": q,
-                              "reply": "Bali's looking warm tomorrow, around thirty one degrees, with a good chance of a "
-                                       "thunderstorm in the afternoon.", "line": "31° · storms after 2"},
+                    "speak": {"state": "speaking", "stage": "done", "heard": q, "reply": a, "line": a.lower(),
+                              "card": "" if card in ("lights", "none") else card,
+                              "lit": ["Living room"] if card == "lights" else []},
+                    "error": {"state": "speaking", "stage": "error", "heard": q,
+                              "reply": "Sorry, I couldn't reach my brain just now — try again in a moment."},
                     "miss": {"state": "idle", "stage": "miss", "heard": ""},
                     "ready": {"state": "idle", "stage": "idle"}}.get(st, {})
         return dict(self.voicelink.st)

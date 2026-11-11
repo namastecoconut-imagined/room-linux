@@ -57,7 +57,7 @@ Window {
         if (voiceBusy) { voiceUp = true; voiceHide.stop(); wake() }
         else if (voiceUp) voiceHide.restart()
     }
-    Timer { id: voiceHide; interval: room.voice.stage === "miss" ? 2600 : (room.voice.reply || room.voice.line) ? 4500 : 300; onTriggered: if (!win.voiceBusy) win.voiceUp = false }
+    Timer { id: voiceHide; interval: voiceO.holdMs; onTriggered: if (!win.voiceBusy) win.voiceUp = false }
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
@@ -121,6 +121,7 @@ Window {
         // Home, the player, standby and the Room screen: one scene (the redesign — things travel between them)
         Scene {
             id: scene
+            hush: win.voiceUp && voiceO.mode !== "gone"
             view: win.standbyOn ? "standby" : win.screen === "home" ? "home" : win.screen === "music" ? "player"
                   : win.screen === "room" ? "room" : win.screen === "clock" ? "clock" : win.screen === "weather" ? "weather"
                   : win.screen === "reminders" ? "reminders" : win.screen === "settings" ? "settings" : "other"
@@ -142,12 +143,15 @@ Window {
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
         VoiceOverlay {
+            id: voiceO
             active: win.voiceUp
             // the whole overlay fades out together (its words stayed on Home once it closed)
             opacity: active ? 1 : 0
             visible: opacity > 0
             Behavior on opacity { NumberAnimation { duration: active ? 180 : 450; easing.type: Easing.OutCubic } }
             onClose: { win.voiceUp = false }
+            onGo: (where, arg) => { if (where === "room") win.roomName = arg; win.screen = where }
+            onTouched: if (!win.voiceBusy) voiceHide.restart()
         }
         // (checks) where the touch screen doesn't respond
         Repeater {

@@ -20,6 +20,8 @@ Item {
     property bool dayTime: true
     property bool musicFace: false            // standby with the music (Main: only while it's actually playing)
     property string sheet: ""                 // an open sheet: scenes · speakers · library
+    property bool hush: false                 // the assistant is up: what's in the top band fades right back (to 8 %)
+    readonly property real hk: hush ? 0.08 : 1
     signal openPlayer()
     signal openRoom(string name)
     signal openClock()
@@ -233,7 +235,7 @@ Item {
         order: 2
         x: sc.pV ? 72 : 706; y: sc.pV ? 168 : 144
         width: sc.pV ? 674 : 388; height: sc.pV ? 674 : 388     // (not "height: width": that would chase the moving width and lag)
-        opacity: (sc.hV && sc.m) || sc.pV ? sc.kCover : 0
+        opacity: ((sc.hV && sc.m) || sc.pV ? sc.kCover : 0) * sc.hk
         // a new song's blur (not while a swipe carries the cover past its edges: the blur would clip it)
         layer.enabled: sc.kCover < 0.999 && !sc.swiping
         layer.effect: MultiEffect { blurEnabled: true; blur: 1 - sc.kCover; blurMax: 32 }
@@ -282,7 +284,7 @@ Item {
         x: sc.pV ? 790 : sc.sV ? 236 : 722; y: sc.pV ? 170 : sc.sV ? 722 : 556
         scale: sc.pV ? 2.2 : 1
         width: sc.pV ? 232 : sc.sV ? 560 : 376; height: tc.height
-        opacity: sc.hV || sc.pV || (sc.sV && sc.m) ? sc.kTitle : 0
+        opacity: (sc.hV || sc.pV || (sc.sV && sc.m) ? sc.kTitle : 0) * sc.hk
         layer.enabled: sc.kTitle < 0.999
         layer.effect: MultiEffect { blurEnabled: true; blur: 1 - sc.kTitle; blurMax: 32 }
         Column {
@@ -456,7 +458,7 @@ Item {
         x: sc.hV ? 40 : (sc.pV || sc.rV || sc.scV) ? 652 : sc.sV ? (sc.m ? 56 : 52) : 652
         y: sc.hV ? 120 : (sc.pV || sc.rV || sc.scV) ? 38 : sc.sV ? (sc.m ? 52 : 150) : 38
         scale: sc.hV ? 1 : (sc.pV || sc.rV || sc.scV) ? 0.2 : sc.sV ? (sc.m ? 0.38 : 1.28) : 0.2
-        opacity: sc.oV ? 0 : 1
+        opacity: (sc.oV ? 0 : 1) * sc.hk
         width: clockT.implicitWidth; height: clockT.implicitHeight
         Serif {
             id: clockT
@@ -470,7 +472,7 @@ Item {
         id: info
         order: 11
         x: 48; y: 392; width: 560; height: 360
-        opacity: sc.hV ? 1 : 0
+        opacity: (sc.hV ? 1 : 0) * sc.hk
         GlanceList { items: sc.glance }
     }
     Mover {
@@ -496,7 +498,7 @@ Item {
         id: nav
         order: 13
         x: 44; y: 34
-        opacity: sc.hV ? 1 : 0
+        opacity: (sc.hV ? 1 : 0) * sc.hk
         width: navR.width; height: 44
         Row {
             id: navR
@@ -513,7 +515,7 @@ Item {
         id: ctl
         order: 14
         x: 1332 - 640; y: 34        // a fixed box, its row kept to the right edge (a width that follows the row would
-        opacity: sc.hV || sc.pV ? 1 : 0     // drag x behind it, easing, every time a label changed)
+        opacity: (sc.hV || sc.pV ? 1 : 0) * sc.hk     // drag x behind it, easing, every time a label changed)
         width: 640; height: 44
         Row {
             id: ctlR
@@ -542,7 +544,7 @@ Item {
         id: back
         order: 15
         x: 36; y: 34
-        opacity: sc.pV || sc.rV || sc.scV ? 1 : 0
+        opacity: (sc.pV || sc.rV || sc.scV ? 1 : 0) * sc.hk
         width: 120; height: 44
         Tap {
             anchors.fill: parent
@@ -559,14 +561,14 @@ Item {
         id: crumb
         order: 15
         x: 150; y: 34; width: 300; height: 44
-        opacity: sc.scV ? 1 : 0
+        opacity: (sc.scV ? 1 : 0) * sc.hk
         Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : sc.remV ? "Reminders" : sc.setV ? "Settings" : "") }
     }
     Mover {
         id: scrTop
         order: 16
         x: 1332 - 640; y: 34; width: 640; height: 44
-        opacity: sc.scV ? 1 : 0
+        opacity: (sc.scV ? 1 : 0) * sc.hk
         Row {
             anchors.right: parent.right; spacing: 12; height: 44
             Btn { visible: sc.cV; text: "+ New alarm"; ink: "white"; onTapped: clockV.newAlarm() }
@@ -582,7 +584,7 @@ Item {
         id: roomTop
         order: 16
         x: 1332 - 640; y: 34
-        opacity: sc.rV ? 1 : 0
+        opacity: (sc.rV ? 1 : 0) * sc.hk
         width: 640; height: 44
         Row {
             id: rtR
@@ -597,7 +599,7 @@ Item {
         order: 17
         x: 0; y: sc.rV ? 0 : 24
         width: 1368; height: 912
-        opacity: sc.rV ? 1 : 0
+        opacity: (sc.rV ? 1 : 0) * sc.hk
         property alias light: rview.light
         RoomView { id: rview; r: sc.curRoom }
     }
@@ -671,7 +673,7 @@ Item {
         id: words
         order: 22 + sc.rooms.length
         x: 0; y: 0; width: 1368; height: 912
-        opacity: sc.sV && sc.m ? sc.kWords : 0
+        opacity: (sc.sV && sc.m ? sc.kWords : 0) * sc.hk
         StandbyWords { onTicked: bg.advance(); artist: sc.sArtist.toLowerCase(); title: sc.sTitle.toLowerCase(); album: sc.sAlbum.toLowerCase(); running: words.visible }
     }
     Mover {
@@ -679,7 +681,7 @@ Item {
         order: 23 + sc.rooms.length
         x: sc.m ? 1324 - 600 : 56; y: sc.m ? 54 : 520
         width: 600; height: 60
-        opacity: sc.sV ? 1 : 0
+        opacity: (sc.sV ? 1 : 0) * sc.hk
         Column {
             width: parent.width
             Mono { width: parent.width; height: 28; verticalAlignment: Text.AlignVCenter; horizontalAlignment: sc.m ? Text.AlignRight : Text.AlignLeft; text: Qt.formatDate(sc.date, "dddd, d MMMM") }
@@ -743,10 +745,15 @@ Item {
     Vignette {}
 
     // ================================================================= the screens (pass 2)
-    ClockView { id: clockV; shown: sc.cV; now: sc.now }
-    WeatherView { shown: sc.wV }
-    RemindersView { id: remV_; shown: sc.remV }
-    SettingsView { shown: sc.setV }
+    Item {
+        anchors.fill: parent
+        opacity: sc.hk
+        Behavior on opacity { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
+        ClockView { id: clockV; shown: sc.cV; now: sc.now }
+        WeatherView { shown: sc.wV }
+        RemindersView { id: remV_; shown: sc.remV }
+        SettingsView { shown: sc.setV }
+    }
 
     // ================================================================= the sheets
     Sheet {

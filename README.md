@@ -61,6 +61,8 @@ journalctl --user -u room -f                                          # live log
 | `qml/RemindersView.qml` | the Reminders screen: two columns (tap to tick, hold to delete), the add sheet |
 | `qml/SettingsView.qml` | the Settings screen: brightness, Bluetooth, web browser / desktop / shut down (asks first) |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
+| `qml/VoiceOverlay.qml` + `shaders/horizon.frag` | the assistant over the top band: the light line, your words, the answer, buttons under the line |
+| `qml/VoiceCard.qml` · `qml/Words.qml` | the card beside an answer (weather, forecast, air, timer, music, schedule, alarm, lights) · words that come in one by one |
 | `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
 | `room/mic.py` | how loud the room is (screen wake; while music plays, the background's swell) |

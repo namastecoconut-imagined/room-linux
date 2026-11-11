@@ -16,6 +16,8 @@ import os
 from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
+from .wiz import norm_mac
+
 SOCK = os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", "room-assistant.sock")
 
 
@@ -28,7 +30,8 @@ class VoiceLink(QObject):
         self.peer: QLocalSocket | None = None
         self.buf = b""
         self.level = 0.0
-        self.st = {"state": "off", "stage": "idle", "heard": "", "reply": "", "line": "", "card": "", "follow": False}
+        # lit: the rooms whose lights the last answer changed (Room's own note, for the screen's lights card)
+        self.st = {"state": "off", "stage": "idle", "heard": "", "reply": "", "line": "", "card": "", "follow": False, "lit": []}
         self.server = QLocalServer(self)
         self.server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
         self.server.newConnection.connect(self._accept)
@@ -85,6 +88,8 @@ class VoiceLink(QObject):
             self.changed.emit()
             return
         if t == "state":
+            if m.get("state") == "listening":
+                self.st["lit"] = []                     # a new question
             for k in self.st:
                 if k in m:
                     self.st[k] = m[k]
@@ -150,6 +155,11 @@ class VoiceLink(QObject):
             try:
                 if k == "lights":
                     ids = a.get("light_ids") or []
+                    want = {norm_mac(i) for i in ids}
+                    for room in r.lights.rooms:
+                        if room.get("name") not in self.st["lit"] and \
+                                any(norm_mac(d.get("mac", "")) in want for d in room.get("devices", [])):
+                            self.st["lit"].append(room.get("name"))
                     plain = a.get("brightness") is None and a.get("kelvin") is None and a.get("rgb") is None
                     if a.get("on") is False:
                         n = r.lights.set_lamps(ids, on=False)

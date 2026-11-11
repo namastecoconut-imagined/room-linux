@@ -266,7 +266,10 @@ Window {
     // screen off (room/sleep.py: a quiet room on standby, or the power button): black, backlight off; a touch
     // anywhere brings standby back (and does nothing else)
     readonly property bool asleep: room.asleep
-    onAsleepChanged: if (asleep && !standbyOn) enterStandby()
+    // screen off (power button, or a quiet room): standby underneath, and counted as idle — with a touch a moment
+    // before, the once-a-second check found "not idle long enough", left standby, and that woke the screen again a
+    // second after the power button turned it off (standby flashed, then Home)
+    onAsleepChanged: if (asleep) { lastTouch = 0; if (!standbyOn) enterStandby() }
     Rectangle {
         anchors.fill: parent; color: "black"; visible: win.asleep
         MouseArea { anchors.fill: parent; onPressed: room.wakeScreen() }

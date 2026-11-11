@@ -250,6 +250,12 @@ class Things(QObject):
             sid = "snooze-" + self.alert["id"]
             self.timers.append({"id": sid, "label": "Snooze", "total": 540.0, "ends": time.time() + 540, "snooze": True})
             self.changed.emit()
+        elif self.alert.get("kind") == "reminder":       # a reminder comes back in 10 minutes
+            for r in self.reminders:
+                if r["id"] == self.alert.get("id"):
+                    r["due"] = time.time() + 600
+                    r["fired"] = False
+            self._save()
         self.alert = {}
         self._ring_until = 0
         self.alertChanged.emit()

@@ -55,8 +55,10 @@ def fill_things(t):
                    {"id": "r5", "text": "Renew car insurance", "due": 0, "done": True}]
     t._save = lambda: t.changed.emit()     # sample data isn't written to disk
     if os.environ.get("ROOM_DEMO_ALERT"):
-        t.alert = {"kind": os.environ["ROOM_DEMO_ALERT"], "id": "t1", "title": "Time's up" if os.environ["ROOM_DEMO_ALERT"] == "timer" else "7:00 am",
-                   "sub": "Pasta" if os.environ["ROOM_DEMO_ALERT"] == "timer" else "Alarm", "at": time.time()}
+        k = os.environ["ROOM_DEMO_ALERT"]
+        t.alert = {"kind": k, "id": "r1" if k == "reminder" else "t1",
+                   "title": "Time's up" if k == "timer" else "Water the plants" if k == "reminder" else "7:00 am",
+                   "sub": "Pasta" if k == "timer" else "Reminder" if k == "reminder" else "Alarm", "at": time.time()}
 
 
 BLUETOOTH = [

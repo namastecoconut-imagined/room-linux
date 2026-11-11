@@ -58,6 +58,7 @@ journalctl --user -u room -f                                          # live log
 | `qml/RoomView.qml` · `qml/Sheet.qml` | one room's controls · the scenes, speakers and library sheets |
 | `qml/ClockView.qml` | the Clock screen: next alarm, timers, alarms, the alarm editor sheet |
 | `qml/WeatherView.qml` | the Weather screen: now, the rain to expect, the next 12 hours as one line, three days |
+| `qml/RemindersView.qml` | the Reminders screen: two columns (tap to tick, hold to delete), the add sheet |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |

@@ -35,7 +35,8 @@ Item {
     readonly property bool oV: view === "other"
     readonly property bool cV: view === "clock"
     readonly property bool wV: view === "weather"
-    readonly property bool scV: cV || wV              // the redesigned screens (pass 2 so far)
+    readonly property bool remV: view === "reminders"
+    readonly property bool scV: cV || wV || remV      // the redesigned screens (pass 2 so far)
     readonly property bool menu: rV || oV
 
     // ---------------------------------------------------------------- what's playing
@@ -558,7 +559,7 @@ Item {
         order: 15
         x: 150; y: 34; width: 300; height: 44
         opacity: sc.scV ? 1 : 0
-        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : "") }
+        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : sc.remV ? "Reminders" : "") }
     }
     Mover {
         id: scrTop
@@ -568,6 +569,7 @@ Item {
         Row {
             anchors.right: parent.right; spacing: 12; height: 44
             Btn { visible: sc.cV; text: "+ New alarm"; ink: "white"; onTapped: clockV.newAlarm() }
+            Btn { visible: sc.remV; text: "+ Add a reminder"; ink: "white"; onTapped: remV_.add() }
             Mono { visible: sc.wV && !!(room.weather || {}).updated; anchors.verticalCenter: parent.verticalCenter; rightPadding: 8
                    color: Theme.w62; text: "Updated " + ((room.weather || {}).updated || "") }
         }
@@ -733,9 +735,14 @@ Item {
     }
     readonly property rect coverRect: Qt.rect(sbCover.x, sbCover.y, sbCover.width, sbCover.height)
 
+    // the design's vignette: soft dark edges, a shade behind the clock — over Home, the player, standby and a room,
+    // under the screens' own content (as in room-motion.html, where the screens are laid over it)
+    Vignette {}
+
     // ================================================================= the screens (pass 2)
     ClockView { id: clockV; shown: sc.cV; now: sc.now }
     WeatherView { shown: sc.wV }
+    RemindersView { id: remV_; shown: sc.remV }
 
     // ================================================================= the sheets
     Sheet {

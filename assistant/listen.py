@@ -329,7 +329,11 @@ class Listener:
     """wait_wake() blocks until "Alexa"; record() then returns your request's audio (or None if you said nothing).
     on_wake / on_done are called as it goes (music down / back up, the screen, a chime)."""
     ONSET = 5.0             # after "Alexa": how long it waits for you to start
-    END_QUIET = 1.0         # once you've started: this much silence and you've finished
+    END_QUIET = 1.4         # once you've started: this much silence and you've finished (1.0 cut people off when they
+                            # paused mid-sentence — "set a timer for… ten minutes"; "assistant": {"endQuiet": …})
+    STILL_SPEECH = 0.35     # once you've started, a frame this likely to be speech still counts as you talking (Silero's
+                            # own advice: start at 0.5, carry on down to ~0.35) — soft or trailing words between
+                            # louder ones no longer read as silence
     MAX = 15.0
     PRE = 0.15              # audio kept from just before the request starts (not the "Alexa" before it)
     TAIL = 0.25             # the end of "Alexa" itself is still in the first moment: not the start of a request
@@ -402,7 +406,7 @@ class Listener:
             p = self.vad.prob(f)
             if self.on_level:
                 self.on_level(self.voice_level(f, p))
-            if p >= 0.5 and t > self.TAIL:
+            if (p >= 0.5 or (started is not None and p >= self.STILL_SPEECH)) and t > self.TAIL:
                 if started is None:
                     started = max(0.0, t - FRAME / RATE - self.PRE)
                 quiet = 0.0

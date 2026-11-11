@@ -51,6 +51,10 @@ class Room(QObject):
         self.musicChanged.connect(self._note_track)
         self._out_volume = None   # the volume of the speaker the music plays on (the slider, while it plays on Room)
         self._sink = "@DEFAULT_AUDIO_SINK@"   # that speaker: a Bluetooth one (its PipeWire id) or the Surface (the default)
+        # volume changes reach the speaker at most ~8 a second (the latest one wins): sliding the phone's volume sends
+        # a burst of steps — 8 in 4 s, the pattern that once tipped PipeWire over — and each was its own wpctl
+        self._vol_want, self._vol_applied = None, 0.0
+        self._vol_apply = QTimer(self); self._vol_apply.setSingleShot(True); self._vol_apply.timeout.connect(self._apply_sink)
         self.wx.changed.connect(self.weatherChanged)
         self.calendar.changed.connect(self.eventsChanged)
         self.lights.changed.connect(self.roomsChanged)
@@ -515,13 +519,29 @@ class Room(QObject):
         else:
             self.spotify.set_volume(v)
 
+    GAP = 0.12                     # seconds between volume changes sent to the speaker (≤ ~8 a second)
+
     def _set_sink(self, v):
-        import subprocess
         v = max(0, min(100, int(v)))
-        subprocess.Popen(["wpctl", "set-volume", self._sink, f"{v / 100:.2f}"], stderr=subprocess.DEVNULL)
+        self._vol_want = v
         if v != self._out_volume:
             self._out_volume = v
             self.musicChanged.emit()
+        if self._vol_apply.isActive():
+            return                     # a change is already queued: it'll send this latest value
+        wait = self.GAP - (time.monotonic() - self._vol_applied)
+        if wait <= 0:
+            self._apply_sink()         # the first change goes straight out — it feels instant
+        else:
+            self._vol_apply.start(max(1, int(wait * 1000)))
+
+    def _apply_sink(self):
+        import subprocess
+        v = self._vol_want
+        if v is None:
+            return
+        self._vol_applied = time.monotonic()
+        subprocess.Popen(["wpctl", "set-volume", self._sink, f"{v / 100:.2f}"], stderr=subprocess.DEVNULL)
         if time.time() - getattr(self, "_vol_said", 0) > 3:
             self._vol_said = time.time()
             print(f"[room] volume: {v} on {'the Bluetooth speaker' if self._sink[0] != '@' else 'the Surface'}", flush=True)

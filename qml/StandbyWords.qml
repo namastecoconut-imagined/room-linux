@@ -17,12 +17,14 @@ Item {
 
     property real t: 0
     property real acc: 0
+    signal ticked()                  // each step (the background keeps time with it on music standby)
     FrameAnimation {                 // 30 a second (every other frame): smooth for slow movement, half the drawing
         running: w.running && w.visible
         onTriggered: {
             w.acc += Math.min(0.1, frameTime)
             if (currentFrame % 2) return
             w.t += w.acc; w.acc = 0
+            w.ticked()
         }
     }
 

@@ -109,25 +109,30 @@ ShaderEffect {
     Behavior on mv { NumberAnimation { duration: 2200 } }
     property real t: 0
     property real last: 0
+    // its own clock — or, on music standby, the drifting words' (30 a second, every other frame): two clocks out of
+    // step would have doubled the redrawing, and the background's 12 a second there looked steppy next to the words
+    property bool external: false
+    function advance() {
+        var now = Date.now() / 1000
+        var dt = f.last > 0 ? Math.min(0.25, now - f.last) : 0
+        f.last = now
+        f.t += dt
+        f.ph = (f.ph + f.pace * dt / Math.max(10, f.pal.period || 30)) % 1000
+        var w = f.pace * dt * 30 / Math.max(10, f.pal.period || 30)                    // the swirl: a lively cover turns it faster
+        f.rotP = f.turn(f.rotP, w / 9)
+        f.orbX = Qt.vector4d(f.turn(f.orbX.x, w / 6), f.turn(f.orbX.y, w / 6.8), f.turn(f.orbX.z, w / 7.6), f.turn(f.orbX.w, w / 8.4))
+        f.orbY = Qt.vector4d(f.turn(f.orbY.x, w / 7.5), f.turn(f.orbY.y, w / 8.1), f.turn(f.orbY.z, w / 8.7), f.turn(f.orbY.w, w / 9.3))
+        f.brP = Qt.vector4d(f.turn(f.brP.x, w / 5), f.turn(f.brP.y, w / 5.9), f.turn(f.brP.z, w / 6.8), f.turn(f.brP.w, w / 7.7))
+        // the swell eases away when the music stops (or the mic is off: the level stops arriving)
+        if (!room.micOn || !f.playing) f.sound *= 0.8
+    }
     Timer {
         interval: Math.round(1000 / f.fps); repeat: true
-        running: f.active && f.visible
-        onTriggered: {
-            var now = Date.now() / 1000
-            var dt = f.last > 0 ? Math.min(0.25, now - f.last) : 0
-            f.last = now
-            f.t += dt
-            f.ph = (f.ph + f.pace * dt / Math.max(10, f.pal.period || 30)) % 1000
-            var w = f.pace * dt * 30 / Math.max(10, f.pal.period || 30)                    // the swirl: a lively cover turns it faster
-            f.rotP = f.turn(f.rotP, w / 9)
-            f.orbX = Qt.vector4d(f.turn(f.orbX.x, w / 6), f.turn(f.orbX.y, w / 6.8), f.turn(f.orbX.z, w / 7.6), f.turn(f.orbX.w, w / 8.4))
-            f.orbY = Qt.vector4d(f.turn(f.orbY.x, w / 7.5), f.turn(f.orbY.y, w / 8.1), f.turn(f.orbY.z, w / 8.7), f.turn(f.orbY.w, w / 9.3))
-            f.brP = Qt.vector4d(f.turn(f.brP.x, w / 5), f.turn(f.brP.y, w / 5.9), f.turn(f.brP.z, w / 6.8), f.turn(f.brP.w, w / 7.7))
-            // the swell eases away when the music stops (or the mic is off: the level stops arriving)
-            if (!room.micOn || !f.playing) f.sound *= 0.8
-        }
+        running: f.active && f.visible && !f.external
+        onTriggered: f.advance()
         onRunningChanged: f.last = 0
     }
+    onExternalChanged: last = 0
 
     // ---------------------------------------------------------------- the room's sound
     property real sound: 0

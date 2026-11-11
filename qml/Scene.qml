@@ -186,6 +186,7 @@ Item {
         pop: sc.sV ? 1.8 : 1.45
         dim: sc.sV ? 0.35 + 0.5 * sc.lift : sc.pV ? Math.max(0.1, sc.lift) : sc.oV ? 0.3 : sc.lift
         fps: sc.sV ? (sc.night ? 8 : sc.dayTime ? 12 : 10) : 20
+        external: sc.sV && sc.musicFace && words.opacity > 0.002      // music standby: in step with the words (30 a second)
         glassRect: card.opacity > 0.01 ? Qt.rect(card.x, card.y, card.width, card.height) : Qt.rect(0, 0, 0, 0)
     }
 
@@ -641,7 +642,7 @@ Item {
         order: 22 + sc.rooms.length
         x: 0; y: 0; width: 1368; height: 912
         opacity: sc.sV && sc.m ? sc.kWords : 0
-        StandbyWords { artist: sc.sArtist.toLowerCase(); title: sc.sTitle.toLowerCase(); album: sc.sAlbum.toLowerCase(); running: words.visible }
+        StandbyWords { onTicked: bg.advance(); artist: sc.sArtist.toLowerCase(); title: sc.sTitle.toLowerCase(); album: sc.sAlbum.toLowerCase(); running: words.visible }
     }
     Mover {
         id: sbTop

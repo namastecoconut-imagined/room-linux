@@ -27,7 +27,7 @@ from PySide6.QtGui import QImage
 
 from .config import STATE_DIR
 from .spotify import colours
-from .art import wash
+from .art import field, wash
 
 PIPE = os.environ.get("ROOM_AIRPLAY_PIPE", "/tmp/shairport-sync-metadata")
 ITEM = re.compile(rb"<item><type>([0-9a-f]{8})</type><code>([0-9a-f]{8})</code><length>(\d+)</length>"
@@ -57,6 +57,7 @@ class AirPlay(QObject):
         self.art_url = ""
         self.rgb, self.rgb2 = [60, 56, 52], [20, 18, 16]
         self.wash = ""
+        self.field = {}
         self.duration = 0.0
         self.position = 0.0
         self.at = 0.0
@@ -191,6 +192,7 @@ class AirPlay(QObject):
                     self.art_url = path.as_uri()
                     self.rgb, self.rgb2 = colours(img)
                     self.wash, self.rgb = wash(img)
+                    self.field = field(img)
             return True
         return False
 
@@ -258,6 +260,7 @@ class AirPlay(QObject):
             "duration": self.duration, "position": self.position, "at": self.at,
             "device": "AirPlay" + (f" · {self.source}" if self.source else ""),
             "volume": self.volume, "art": self.art_url, "rgb": self.rgb, "rgb2": self.rgb2, "wash": self.wash,
+            "field": self.field,
             "error": "", "source": "airplay",
         }
 

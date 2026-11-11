@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QImage
 
 from . import net
 from .config import State
-from .art import wash
+from .art import field, wash
 
 API = "https://api.spotify.com/v1"
 
@@ -275,7 +275,8 @@ class Spotify(QObject):
             return
         imgs = (item.get("album") or {}).get("images") or (item.get("images") or [])
         url = min(imgs, key=lambda i: abs((i.get("width") or 640) - 640))["url"] if imgs else ""
-        self.art = {"id": tid, "url": url, "rgb": self.art["rgb"], "rgb2": self.art["rgb2"], "wash": self.art.get("wash", "")}
+        self.art = {"id": tid, "url": url, "rgb": self.art["rgb"], "rgb2": self.art["rgb2"], "wash": self.art.get("wash", ""),
+                    "field": self.art.get("field", {})}
         self._refresh_around()
         self._refresh_liked(item.get("id"))
         small = min(imgs, key=lambda i: abs((i.get("width") or 64) - 64))["url"] if imgs else ""
@@ -288,6 +289,7 @@ class Spotify(QObject):
                     return
                 self.art["rgb"], self.art["rgb2"] = colours(img)
                 self.art["wash"], self.art["rgb"] = wash(img)
+                self.art["field"] = field(img)
                 self.changed.emit()
             net.request("GET", small, got)
 
@@ -314,6 +316,7 @@ class Spotify(QObject):
             "rgb": self.art["rgb"],
             "rgb2": self.art["rgb2"],
             "wash": self.art.get("wash", ""),
+            "field": self.art.get("field", {}),
             "error": self.error,
             "source": "spotify",
             "liked": self.liked,

@@ -195,8 +195,8 @@ class Room(QObject):
                     from . import art
                     img = QImage(os.environ["ROOM_DEMO_ART"])
                     w, rgb = art.wash(img)
-                    self._demo_art = ("file://" + os.path.abspath(os.environ["ROOM_DEMO_ART"]), w, rgb)
-                m["art"], m["wash"], m["rgb"] = self._demo_art
+                    self._demo_art = ("file://" + os.path.abspath(os.environ["ROOM_DEMO_ART"]), w, rgb, art.field(img))
+                m["art"], m["wash"], m["rgb"], m["field"] = self._demo_art
             if os.environ.get("ROOM_DEMO_EMPTY") == "1":
                 m["nextUp"] = []
             if os.environ.get("ROOM_DEMO_IDLE") == "1":       # nothing playing (the home card's shortcuts)
@@ -225,6 +225,7 @@ class Room(QObject):
                       f" → {'same song: queue, progress and seek from Spotify' if same else 'not the same song'}", flush=True)
         m.setdefault("nextUp", [])
         m.setdefault("canSeek", m.get("source") != "airplay")
+        m["hereDevice"] = (self.spotify.home or "").lower()      # this panel's own Spotify Connect name (Play on)
         if m.get("source") == "airplay":
             m["playlists"] = self.spotify.playlists
         if self._plays_here():
@@ -334,7 +335,7 @@ class Room(QObject):
 
     @Property(str, constant=True)
     def here(self):
-        return self.cfg.get("here", "")
+        return self.cfg.get("here", "") or ("Living room" if self.demo else "")
 
     @Property(str, notify=statusChanged)
     def status(self):
@@ -443,7 +444,22 @@ class Room(QObject):
     @Slot(str)
     def toggleLamp(self, mac): self.lights.toggle_lamp(mac)
 
-    ROOM_SCENES = {"Relax": (40, 2400), "Read": (90, 4000), "Movie": (15, 2200), "Night": (8, 2200)}
+    # the Room screen's scenes (the redesign: Relax 45 % candle, Read 90 % neutral, Movie 15 % candle, Night 5 % candle —
+    # the bulbs go no lower than 10 %)
+    ROOM_SCENES = {"Relax": (45, 2200), "Read": (90, 4000), "Movie": (15, 2200), "Night": (5, 2200)}
+
+    @Slot(str, int)
+    def setLampLevel(self, mac, level):
+        """One lamp's brightness (the Room screen's lamp lines); 0 switches it off."""
+        if level <= 0:
+            self.lights.set_lamps([mac], on=False)
+        else:
+            self.lights.set_lamps([mac], on=True, level=level)
+
+    @Slot(str)
+    def roomOff(self, name):
+        """A room's lights off (its brightness line dragged right down)."""
+        self.lights.set_room(name, on=False)
 
     @Slot(str, str)
     def roomScene(self, name, scene):

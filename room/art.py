@@ -1,4 +1,6 @@
-"""The player's background, made the iPhone panel's way (SpotifyClient.wash): the cover shrunk to 6 × 4 pixels, each
+"""Two readings of a cover. field(): what the screen's background is made of (the redesign's "Field") — its four main
+colours, where each sits and how much of the cover it fills, how vivid and contrasty it is, and which way its light
+falls. wash(): the older player's background, made the iPhone panel's way (SpotifyClient.wash): the cover shrunk to 6 × 4 pixels, each
 pixel a little more saturated and pulled dark enough for white text, then stretched smoothly over the whole screen —
 the cover's own colours as soft light, not a blur of the picture. Also picks the accent: the most colourful pixel
 that isn't nearly black or white (it colours the glow behind the cover)."""
@@ -43,3 +45,49 @@ def wash(img: QImage) -> tuple[str, list[int]]:
     while len(_written) > 4:
         _written.pop(0).unlink(missing_ok=True)
     return path.as_uri(), best
+
+
+def field(img: QImage) -> dict:
+    """The cover read for the background (design: room-motion.html, analyse()). At 40 × 40: four colours by k-means
+    (8 rounds, started from pixels at 0, ⅓, ⅔ and the end), each with where it sits (its pixels' centre, 0…1) and its
+    share; sorted biggest share first. Also vividness (mean saturation), contrast (spread of brightness) and the light
+    direction (from the dark parts' centre to the bright parts' centre) — they set how fast and far the colours drift."""
+    n = 40
+    small = img.scaled(n, n, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation) \
+               .convertToFormat(QImage.Format.Format_RGB32)
+    px = []
+    for i in range(n * n):
+        c = QColor(small.pixel(i % n, i // n))
+        px.append((c.red(), c.green(), c.blue(), (i % n) / n, (i // n) / n))
+    N = len(px)
+    C = [dict(r=px[int(q * (N - 1))][0], g=px[int(q * (N - 1))][1], b=px[int(q * (N - 1))][2]) for q in (0, .33, .66, .99)]
+    for _ in range(8):
+        acc = [[0, 0, 0, 0.0, 0.0, 0] for _ in C]
+        for r, g, b, x, y in px:
+            bi, bd = 0, 1e18
+            for i, c in enumerate(C):
+                d = (r - c["r"]) ** 2 + (g - c["g"]) ** 2 + (b - c["b"]) ** 2
+                if d < bd:
+                    bd, bi = d, i
+            a = acc[bi]; a[0] += r; a[1] += g; a[2] += b; a[3] += x; a[4] += y; a[5] += 1
+        C = [dict(r=a[0] / a[5], g=a[1] / a[5], b=a[2] / a[5], x=a[3] / a[5], y=a[4] / a[5], share=a[5] / N) if a[5]
+             else C[i] for i, a in enumerate(acc)]
+    C.sort(key=lambda c: -c.get("share", 0))
+    lum = [.2126 * r + .7152 * g + .0722 * b for r, g, b, _, _ in px]
+    sat = sum((max(r, g, b) - min(r, g, b)) / max(r, g, b) if max(r, g, b) else 0 for r, g, b, _, _ in px) / N
+    mean = sum(lum) / N
+    con = (sum((l - mean) ** 2 for l in lum) / N) ** 0.5 / 128
+    bx = by = dx = dy = bw = dw = 0.0
+    for (r, g, b, x, y), l in zip(px, lum):
+        w = l / 255
+        bx += x * w; by += y * w; bw += w; dx += x * (1 - w); dy += y * (1 - w); dw += 1 - w
+    vx = (bx / bw - dx / dw) if bw and dw else 0
+    vy = (by / bw - dy / dw) if bw and dw else 0
+    vl = (vx * vx + vy * vy) ** 0.5 or 1
+    energy = max(0.0, min(1.2, sat * .7 + con * .9))
+    return {"cols": [[int(c["r"]), int(c["g"]), int(c["b"])] for c in C],
+            "pos": [[round(c.get("x", .5), 3), round(c.get("y", .5), 3)] for c in C],
+            "share": [round(c.get("share", .2), 3) for c in C],
+            "lum": round(mean / 255, 3), "sat": round(sat, 3), "con": round(con, 3),
+            "dir": [round(vx / vl, 3), round(vy / vl, 3)],
+            "period": round(max(14.0, min(46.0, 46 - 30 * energy)), 1), "amp": round(max(60.0, min(220.0, 60 + 180 * con)))}

@@ -81,7 +81,7 @@ Window {
 
     Timer { interval: win.screen === "music" && !win.standbyOn ? 250 : 1000; running: true; repeat: true; onTriggered: win.now = Date.now() / 1000 }
     // standby fully up: nothing underneath it is drawn (it was all still being rendered behind the black)
-    readonly property bool covered: standbyOn && standby.opacity >= 1
+    readonly property bool covered: false
     // the once-a-second tick
     Timer {
         interval: 1000; running: true; repeat: true
@@ -105,6 +105,8 @@ Window {
     Component.onCompleted: room.setScreenState(standbyOn, standbyOn && lateNight)
 
     Rectangle { anchors.fill: parent; color: "black" }
+    // screen pixels per stage pixel (2 on the Surface): pictures drawn into layers use it to stay sharp
+    Binding { target: Theme; property: "px"; value: stage.scale }
 
     Item {
         id: stage
@@ -116,23 +118,25 @@ Window {
         // label, a hairline — sits on the same pixels for hours. ±6 px while in use (unnoticeable), ±28 px on standby.
         transform: Translate { x: win.shiftX; y: win.shiftY }
 
-        Home {
-            now: visible ? win.now : 0
-            opacity: win.screen === "home" ? 1 : 0
-            visible: opacity > 0 && !win.covered
-            Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-            onOpenMusic: win.screen = "music"
+        // Home, the player, standby and the Room screen: one scene (the redesign — things travel between them)
+        Scene {
+            id: scene
+            view: win.standbyOn ? "standby" : win.screen === "home" ? "home" : win.screen === "music" ? "player"
+                  : win.screen === "room" ? "room" : "other"
+            roomName: win.roomName
+            now: win.now
+            night: win.lateNight
+            dayTime: win.dayTime
+            musicFace: win.musicFace
+            sheet: startScreen === "musiclib" ? "library" : startScreen === "musicspk" ? "speakers" : startScreen === "scenes" ? "scenes" : ""
+            onSheetChanged: win.sheetOpen = sheet !== ""
+            onOpenPlayer: win.screen = "music"
             onOpenRoom: (name) => { win.roomName = name; win.screen = "room" }
             onOpenClock: win.screen = "clock"
             onOpenWeather: win.screen = "weather"
             onOpenReminders: win.screen = "reminders"
             onOpenSettings: win.screen = "settings"
-        }
-        RoomScreen {
-            name: win.roomName
-            opacity: win.screen === "room" ? 1 : 0; visible: opacity > 0 && !win.covered
-            Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
-            onBack: win.screen = "home"
+            onGoHome: win.screen = "home"
         }
         ClockScreen {
             now: visible ? win.now : 0
@@ -155,44 +159,8 @@ Window {
             Behavior on opacity { NumberAnimation { duration: 300; easing.type: Easing.InOutQuad } }
             onBack: win.screen = "home"
         }
-        MusicPlayer {
-            now: visible ? win.now : 0
-            opacity: win.screen === "music" ? 1 : 0
-            visible: opacity > 0 && !win.covered
-            Behavior on opacity { NumberAnimation { duration: 350; easing.type: Easing.InOutQuad } }
-            onBack: win.screen = "home"
-            onPickingChanged: win.sheetOpen = picking || library
-            onLibraryChanged: win.sheetOpen = picking || library
-        }
-        // standby fades in over 0.9 s (ease-out) and back out over 0.9 s when woken, as on the phone;
-        // the plain and music faces crossfade over 0.8 s
-        Item {
-            id: standby
-            anchors.fill: parent
-            opacity: win.standbyOn ? 1 : 0
-            visible: opacity > 0
-            Behavior on opacity { NumberAnimation { duration: 900; easing.type: Easing.OutCubic } }
-            Rectangle { anchors.fill: parent; color: "black" }
-            Standby {
-                id: plainFace
-                now: visible ? win.now : 0
-                night: win.lateNight
-                dayTime: win.dayTime
-                active: win.standbyOn
-                opacity: win.musicFace ? 0 : 1
-                visible: opacity > 0 && standby.visible
-                Behavior on opacity { NumberAnimation { duration: 800 } }
-            }
-            MusicStandby {
-                id: musicFace
-                now: visible ? win.now : 0
-                night: win.lateNight
-                dayTime: win.dayTime
-                opacity: win.musicFace ? 1 : 0
-                visible: opacity > 0 && standby.visible
-                Behavior on opacity { NumberAnimation { duration: 800 } }
-            }
-        }
+        // the redesign's vignette: soft dark edges, a shade behind the clock (over the screens, under the alerts)
+        Vignette {}
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
         VoiceOverlay {
@@ -248,7 +216,7 @@ Window {
             var s = stage.scale, slop = 72 * s       // 30 phone points
             if (held < 40 || Math.abs(e.x - p0.x) > slop || Math.abs(e.y - p0.y) > slop) return
             var p = stage.mapFromItem(win.contentItem, e.x, e.y)
-            var c = musicFace.coverRect
+            var c = scene.coverRect
             var onCover = win.musicFace && p.x > c.x - 30 && p.x < c.x + c.width + 30 && p.y > c.y - 30 && p.y < c.y + c.height + 30
             win.wake()
             if (onCover) win.screen = "music"

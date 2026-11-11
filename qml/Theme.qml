@@ -16,6 +16,22 @@ QtObject {
     readonly property color rain: "#7fb4ff"
     // Helvetica Neue when it's installed (it's the panel's face); Inter Tight, which ships with Room, otherwise
     readonly property string face: Qt.fontFamilies().indexOf("Helvetica Neue") >= 0 ? "Helvetica Neue" : "Inter Tight"
+    // ---- the redesign (room-motion.html / HANDOFF.md): type, colours, motion
+    readonly property string serif: "Instrument Serif"     // the clock, big numbers, room names, standby titles
+    readonly property string mono: "IBM Plex Mono"         // nav, labels, small details — uppercase, 0.08em apart
+    readonly property color w62: Qt.rgba(1, 1, 1, 0.62)
+    readonly property color w42: Qt.rgba(1, 1, 1, 0.42)
+    readonly property color timer: "#ffd2a3"
+    readonly property color timer2: "#ffe3c4"
+    readonly property color rainC: "#9cc4ff"
+    readonly property color onWhite: "#1a120c"             // text on a solid white button
+    readonly property var ease: [0.22, 1, 0.36, 1, 1, 1]   // cubic-bezier(.22, 1, .36, 1): every move
+    readonly property int moveMs: 850
+    readonly property int fadeMs: 700
+    property real px: 1                                     // screen pixels per stage pixel (2 on the Surface)
+    // a room's short name for the Home list: "Aviral's bedroom" → "Aviral"
+    function shortName(n) { var m = /^(\S+)['’]s (bed)?room$/i.exec(n || ""); return m ? m[1] : (n || "") }
+
     readonly property real stageW: 1368
     readonly property real stageH: 912
     // This Surface's touch screen doesn't respond across a wide band of it (a fault in the digitiser, found with touch

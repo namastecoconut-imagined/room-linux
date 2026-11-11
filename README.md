@@ -52,21 +52,21 @@ journalctl --user -u room -f                                          # live log
 
 | | |
 |---|---|
-| `qml/Home.qml` | home: glass cards over the song's moving colours — dot clock, next, music, lights |
-| `qml/Standby.qml` + `shaders/standby.frag` | breathing dot field and morning glow (GPU shader), dot clock |
-| `qml/MusicStandby.qml` | music standby, the Zune way: moving colours, giant drifting words |
-| `qml/ColourWash.qml` · `qml/Glass.qml` | the song's colours as a moving background · frosted cards |
+| `qml/Scene.qml` | Home, the player, standby and a room as one scene: each piece glides to where the view puts it |
+| `qml/Field.qml` + `shaders/field.frag` | the background: four soft lights in the cover's colours, drifting, swelling with sound (GPU shader) |
+| `qml/StandbyWords.qml` | music standby's giant drifting words, blurred sideways |
+| `qml/RoomView.qml` · `qml/Sheet.qml` | one room's controls · the scenes, speakers and library sheets |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `qml/DotText.qml` | the 5×7 dot numerals; dots glide to their new places each minute |
 | `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
-| `room/mic.py` | how loud the room is (screen wake, standby ripple, music beat) |
+| `room/mic.py` | how loud the room is (screen wake, the background's swell and wave) |
 | `room/wiz.py` | WiZ bulbs (UDP 38899) |
 | `room/spotify.py` | Spotify Web API (shares the iPhone panel's login) |
 | `room/weather.py` · `room/calendar.py` | Open-Meteo, Google Calendar iCal |
 
 Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
-`pyside6-qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o shaders/standby.frag.qsb shaders/standby.frag`
+`pyside6-qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o shaders/field.frag.qsb shaders/field.frag`
 
 ## The voice assistant
 
@@ -76,7 +76,7 @@ Its own program in `assistant/` (its own service, `room-assistant`; see `assista
 ## Room's sound
 
 `room/mic.py` measures how loud the room is (the default mic, through pw-record) — loudness only, nothing is recognised
-or kept. It brings the screen back at a sound, ripples the standby dots and gives the music screen its beat.
+or kept. It brings the screen back at a sound, and the background's lights swell with it (a sudden sound sends a wave).
 `"roomMic": false` in config.json turns it off. `room/output.py` keeps the Surface's own speakers at full underneath
 the volume slider and puts music streams that were left turned down back to full when Room starts.
 

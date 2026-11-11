@@ -8,10 +8,17 @@ Metadata pipe items look like:
 type/code are 4-char codes in hex: core/minm = title, core/asar = artist, core/asal = album, ssnc/PICT = cover,
 ssnc/pbeg|pend = session begin/end, ssnc/prsm = resumed, ssnc/pfls|paus = paused, ssnc/prgr = "start/now/end" in
 RTP frames (44.1 kHz), ssnc/pvol = volume, ssnc/snam = the sending device's name.
+
+Where the song is: AirPlay 2 senders don't send prgr. They send their Now Playing info instead (POST /command,
+"updateMRNowPlayingInfo"), which shairport-sync passes on whole as ssnc/copl, a binary plist: ElapsedTime (s),
+Timestamp (when that was true, UTC), PlaybackRate (1 playing, 0 paused) and Duration. That gives the true position
+for any app — YouTube Music, Apple Music, podcasts — where before Room could only count up from when the title came.
 """
 import base64
+import datetime
 import errno
 import os
+import plistlib
 import re
 import time
 
@@ -149,6 +156,8 @@ class AirPlay(QObject):
             except ValueError:
                 pass
             return True
+        if c == "copl":
+            return self._now_playing(d)
         if c == "pvol":
             try:   # "airplay_volume,volume,lowest,highest" — airplay_volume is −30…0 (−144 = muted)
                 av = float(s().split(",")[0])
@@ -179,6 +188,45 @@ class AirPlay(QObject):
                     self.wash, self.rgb = wash(img)
             return True
         return False
+
+    def _now_playing(self, d: bytes) -> bool:
+        """The sender's Now Playing info (see the top): the song's true position, length and play/pause."""
+        try:
+            pl = plistlib.loads(d)
+        except Exception:
+            return False
+        if not isinstance(pl, dict) or pl.get("type") != "updateMRNowPlayingInfo":
+            return False
+        npi = ((pl.get("params") or {}).get("params")) or {}
+        if not isinstance(npi, dict):
+            return False
+        k = lambda name: npi.get("kMRMediaRemoteNowPlayingInfo" + name)
+        dur, el, rate, ts = k("Duration"), k("ElapsedTime"), k("PlaybackRate"), k("Timestamp")
+        changed = False
+        if isinstance(dur, (int, float)) and dur > 0:
+            self.duration = float(dur); changed = True
+        if isinstance(el, (int, float)):
+            pos = float(el)
+            playing = rate > 0 if isinstance(rate, (int, float)) else self.playing
+            if playing and isinstance(ts, datetime.datetime):
+                # elapsed was true at the Timestamp (UTC): move it on to now — unless the clocks disagree wildly
+                now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+                late = (now - ts).total_seconds()
+                if 0 <= late < 30:
+                    pos += late * float(rate)
+            if self.duration:
+                pos = min(pos, self.duration)
+            self.position, self.at = max(0.0, pos), time.time()
+            self.playing = playing
+            if playing:
+                self.active = True
+            changed = True
+        elif isinstance(rate, (int, float)):
+            if self.playing and rate == 0:
+                self.position += time.time() - self.at
+            self.playing, self.at = rate > 0, time.time()
+            changed = True
+        return changed
 
     @property
     def showing(self) -> bool:

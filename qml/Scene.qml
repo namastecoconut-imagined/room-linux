@@ -296,11 +296,13 @@ Item {
         x: sc.pV ? 792 : 722; y: sc.pV ? 660 : 632
         width: 360; height: sc.pV ? 44 : 30
         opacity: (sc.hV || sc.pV) && sc.live ? 1 : 0
-        readonly property real room_: sc.pV && sc.live && sc.spotify ? spk.width + 28 : 0     // what the volume leaves it
+        // what the volume leaves it, beside it in the player: the speaker button (Spotify), or just "AirPlay" (the two
+        // overlapped when AirPlay was playing)
+        readonly property real room_: sc.pV && sc.live ? spk.width + 28 : 0
         Tap {
             id: spk
             enabled: sc.pV && sc.spotify
-            width: Math.min(260, spkL.implicitWidth + (sc.pV ? 36 : 0)); height: parent.height
+            width: Math.min(260, spkL.implicitWidth + (sc.pV && sc.spotify ? 36 : 0)); height: parent.height
             onTapped: { room.refreshDevices(); sc.sheet = "speakers" }
             Rectangle {
                 anchors.fill: parent; radius: 8; color: "transparent"
@@ -408,7 +410,7 @@ Item {
         Column {
             id: upc
             Mono { color: Theme.w62; text: "Up next"; height: 34; verticalAlignment: Text.AlignVCenter }
-            Repeater { model: (sc.music.nextUp || []).slice(0, 2); Mono { width: 460; height: 34; verticalAlignment: Text.AlignVCenter; text: modelData.title } }
+            Repeater { model: (sc.music.nextUp || []).slice(0, 2); Mono { width: 520; height: 34; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight; text: modelData.title } }
         }
     }
     Mover {

@@ -20,7 +20,7 @@ class Sleep(QObject):
 
     QUIET_FOR = 300.0          # seconds of a quiet room (on standby) before the screen goes off
     ABOVE = 8.0                # dB over the room's background that counts as someone there (was 12: lowered to wake more readily)
-    LOUDEST_QUIET = -48.0      # dBFS: anything quieter than this is never "someone there" (the noise-suppressed mic
+    LOUDEST_QUIET = -48.0      # dBFS: anything quieter than this is never "someone there" (the noise-suppressed mic, used until 11 Nov,
                                # gives near-digital silence in a still room, so the background alone read ~ −100 dB
                                # and every tiny tick counted as a sound — the screen never went off)
     NEED = 2                   # …and it has to last: two readings in a row (~0.6 s), not one click

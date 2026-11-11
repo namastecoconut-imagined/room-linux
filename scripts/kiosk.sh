@@ -2,15 +2,13 @@
 # Room without the GNOME desktop: the Surface starts straight into Room — cage (a tiny full-screen window host) and
 # Room, no GNOME shell, panels, search, notifications or animations. GNOME stays installed; nothing is uninstalled.
 #
-# It starts as a system service on the first screen (room-panel.service), not through GDM's automatic sign-in: GDM
-# brought up its own login screen a few seconds after signing in by itself, over Room — asking for the password, and
-# going back to Room once given. With the service, GDM isn't started at all in kiosk mode (room-kiosk off brings it
-# back), and if Room ever stops for good, GDM's login screen comes up so you can pick GNOME.
-#   room-kiosk on    from the next start, the Surface boots straight into Room
-#   room-kiosk off   back to the normal GNOME desktop from the next start
-#   room-kiosk       which one is set
-# Escape hatch: Ctrl+Alt+F3 gives a text login at any time; and if Room stops, you land on the login screen, where
-# the gear button lets you pick "GNOME".
+# It starts through greetd, a tiny login manager made for kiosks, not GDM: GDM brought up its own login screen a few
+# seconds after signing in by itself, over Room — asking for the password, and going back to Room once given.
+#   room-kiosk on [now]    from the next start (or right now), the Surface boots straight into Room via greetd
+#   room-kiosk off [now]   back to GDM and the GNOME desktop from the next start (or right now)
+#   room-kiosk             which one is set
+# Escape hatches: SSH always works; Ctrl+Alt+F3 gives a text login; and if Room stops for good, greetd shows a text
+# login on the screen — sign in, then room-kiosk off.
 set -e
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 U="$(id -un)"
@@ -78,52 +76,49 @@ DesktopNames=Room
 EOF
   chmod +x "$HERE/scripts/kiosk-run.sh"
 
-  echo "▸ Start straight into Room (a service on the first screen — no login screen)"
-  sudo tee /etc/pam.d/room-panel >/dev/null <<'PAM'
-# Room's kiosk session (scripts/kiosk.sh): a logind session on seat0 for cage — no password, no keyring
-account  required pam_unix.so
-session  required pam_loginuid.so
-session  optional pam_keyinit.so force revoke
-session  required pam_unix.so
-session  required pam_systemd.so
-PAM
-  sudo tee /etc/systemd/system/room-panel.service >/dev/null <<UNIT
-[Unit]
-Description=Room panel (kiosk: cage on the first screen, no desktop)
-After=systemd-user-sessions.service plymouth-quit-wait.service dbus.socket systemd-logind.service getty@tty1.service
-Wants=dbus.socket systemd-logind.service
-Conflicts=getty@tty1.service gdm.service
-ConditionPathExists=/dev/tty0
+  echo "▸ Start straight into Room with greetd (no login screen)"
+  # greetd: a tiny login manager made for kiosks. At boot it signs in by itself and runs the Room session above;
+  # if Room ever stops for good, it shows a plain text login on the screen (sign in, then room-kiosk off for GNOME).
+  # It replaces GDM, which brought up its own login screen over Room a few seconds after signing in by itself.
+  rpm -q greetd >/dev/null 2>&1 || sudo dnf install -y -q greetd
+  G=$(getent passwd greetd >/dev/null && echo greetd || echo greeter)
+  sudo tee /etc/greetd/config.toml >/dev/null <<TOML
+# Room's kiosk (scripts/kiosk.sh): sign in by itself into the Room session; a text login if it ever ends
+[terminal]
+vt = 1
 
-[Service]
-Type=simple
-User=$U
-WorkingDirectory=$HOME
-PAMName=room-panel
-TTYPath=/dev/tty1
-TTYReset=yes
-TTYVHangup=yes
-TTYVTDisallocate=yes
-StandardInput=tty-fail
-StandardOutput=journal
-StandardError=journal
-UtmpIdentifier=tty1
-UtmpMode=user
-Environment=XDG_SESSION_TYPE=wayland XDG_SESSION_CLASS=user XDG_SEAT=seat0 XDG_VTNR=1
-ExecStart=/usr/local/bin/room-panel-session
-# Room stopped and the panel session ended: the normal login screen, to pick GNOME (or Room) there
-ExecStopPost=-/usr/bin/systemctl start --no-block gdm.service
-Restart=no
+[default_session]
+command = "agreety --cmd /bin/bash"
+user = "$G"
 
-[Install]
-WantedBy=graphical.target
-UNIT
+[initial_session]
+command = "/usr/local/bin/room-panel-session"
+user = "$U"
+TOML
+  # (an earlier try ran the session as its own system service — it never got a working screen; gone)
+  if [ -f /etc/systemd/system/room-panel.service ]; then
+    sudo systemctl disable -q room-panel.service 2>/dev/null || true
+    sudo rm -f /etc/systemd/system/room-panel.service /etc/pam.d/room-panel
+  fi
   sudo systemctl daemon-reload
-  sudo systemctl disable -q gdm.service
-  sudo systemctl enable -q room-panel.service
+  if [ "${2:-}" = "now" ]; then
+    # switch live, without restarting — SSH keeps working; room-kiosk off brings GDM back the same way
+    sudo systemctl stop gdm.service 2>/dev/null || true
+    sudo systemctl start greetd.service
+    echo "  greetd is running now — Room should be on the screen in a few seconds"
+  fi
+  sudo systemctl disable -q gdm.service 2>/dev/null || true
+  sudo systemctl enable -q greetd.service 2>/dev/null || true
+  # it has to be THE display manager for the boot to start it (its unit is usually an alias of display-manager)
+  if [ "$(readlink -f /etc/systemd/system/display-manager.service 2>/dev/null)" != "$(systemctl show -p FragmentPath --value greetd.service)" ]; then
+    sudo ln -sf "$(systemctl show -p FragmentPath --value greetd.service)" /etc/systemd/system/display-manager.service
+    sudo systemctl daemon-reload
+  fi
   sudo systemctl set-default -q graphical.target
+  command -v agreety >/dev/null || echo "  ! agreety (greetd's text login) isn't installed — if Room ever stops, use SSH or Ctrl+Alt+F3"
+  echo "  boot display manager: $(basename "$(readlink -f /etc/systemd/system/display-manager.service)")"
 
-  echo "▸ (and GDM's own automatic sign-in into Room, for when GDM is started by hand)"
+  echo "▸ (GDM keeps signing in by itself into Room too, for room-kiosk off and back)"
   if ! grep -q "^AutomaticLogin=$U" /etc/gdm/custom.conf 2>/dev/null; then
     sudo cp -n /etc/gdm/custom.conf /etc/gdm/custom.conf.before-room 2>/dev/null || true
     sudo python3 - "$U" <<'P'
@@ -147,12 +142,17 @@ P
   ;;
 off)
   sudo systemctl disable -q room-panel.service 2>/dev/null || true
+  sudo systemctl disable -q greetd.service 2>/dev/null || true
   sudo systemctl enable -q gdm.service
+  if [ "${2:-}" = "now" ]; then
+    sudo systemctl stop greetd.service 2>/dev/null || true
+    sudo systemctl start gdm.service
+  fi
   set_session gnome
   echo "✓ Back to GNOME from the next start (signing in by itself stays on). Restart the Surface when you like."
   ;;
 *)
-  if systemctl is-enabled -q room-panel.service 2>/dev/null; then echo "Starts into: Room only (room-kiosk off for GNOME)"
+  if systemctl is-enabled -q greetd.service 2>/dev/null; then echo "Starts into: Room only, via greetd (room-kiosk off for GNOME)"
   else s=$(session); echo "Starts into: ${s:-GNOME} (room-kiosk on for Room only)"; fi
   ;;
 esac

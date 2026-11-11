@@ -63,9 +63,11 @@ float breathe(int i) {                       // and each grows and shrinks a lit
 
 vec3 light(vec3 under, vec2 p, int i, vec4 b, vec4 c) {
     if (b.w <= 0.0 || b.z <= 0.0) return under;
-    float r = b.z * 0.5 * breathe(i) * (1.0 + 0.1 * sound);
-    float f = 1.0 - length(p - place(i, b)) / r;         // closest-side radial: full at the centre, nothing at the edge
+    float r = b.z * 0.5 * 1.12 * breathe(i) * (1.0 + 0.1 * sound);
+    float f = 1.0 - length(p - place(i, b)) / r;         // full at the centre, nothing at the edge…
     if (f <= 0.0) return under;
+    f = f * f * (3.0 - 2.0 * f);                         // …eased at both ends: no visible rim, no bright point
+                                                         // (a straight fade showed its edge once the lights had contrast)
     // pushed away from the base so the lights read against it as they move (a cover whose colours sit close
     // together otherwise gives one flat wash)
     vec3 col = clamp(base.rgb + (c.rgb - base.rgb) * pop, 0.0, 1.0);

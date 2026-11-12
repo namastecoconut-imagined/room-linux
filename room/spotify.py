@@ -124,6 +124,14 @@ class Spotify(QObject):
             def back(status, data):
                 if status == 401 and self.token == tok:
                     self.token, self.expiry = None, 0.0      # turned down: log in again on the next call
+                if method != "GET" and (status == 0 or status >= 300):     # a command Spotify didn't carry out: say why
+                    why = ""
+                    try:
+                        why = (json.loads(data or b"{}").get("error") or {}).get("message", "")
+                    except Exception:
+                        pass
+                    print(f"[room] spotify: {method} {path.split('?')[0]} didn't work — {status or 'no answer'}"
+                          + (f" · {why}" if why else ""), flush=True)
                 if done:
                     done(status, data)
             net.request(method, API + path, back, h, json.dumps(body).encode() if body is not None else None)

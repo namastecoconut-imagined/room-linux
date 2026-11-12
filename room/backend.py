@@ -764,6 +764,8 @@ class Room(QObject):
     def seek(self, s):
         """Spotify seeks (also when it's Spotify on the phone being AirPlayed here); AirPlay itself has no seek."""
         if self.music.get("canSeek"):
+            print(f"[room] seek → {int(s) // 60}:{int(s) % 60:02d}, through Spotify"
+                  + (" (the phone's, behind AirPlay)" if self.airplay.showing else ""), flush=True)
             self.spotify.seek(s)
             if self.airplay.showing:          # show the new place straight away; the phone confirms it shortly
                 self.airplay.position, self.airplay.at = float(s), time.time()

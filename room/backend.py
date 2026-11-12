@@ -764,7 +764,6 @@ class Room(QObject):
     def seek(self, s):
         """Room's own Spotify seeks. Nothing over AirPlay seeks from here — not even Spotify on the phone."""
         if self.music.get("canSeek") and self.music.get("source") != "airplay":
-            print(f"[room] seek → {int(s) // 60}:{int(s) % 60:02d}, through Spotify", flush=True)
             self.spotify.seek(s)
 
     # ---------------------------------------------------------------- Settings: screen, Bluetooth, the desktop

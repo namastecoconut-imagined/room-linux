@@ -73,6 +73,7 @@ class Room(QObject):
         # volume changes reach the speaker at most ~8 a second (the latest one wins): sliding the phone's volume sends
         # a burst of steps — 8 in 4 s, the pattern that once tipped PipeWire over — and each was its own wpctl
         self._vol_want, self._vol_applied = None, 0.0
+        self._btn: dict = {}      # each button: (which way the press that owns it came, when it was last heard) — Room.button
         # the phone's AirPlay volume IS the speaker's: phone at 70 % → the speaker at 70, every click a full step, like
         # a HomePod. (From 11 Nov the speaker stayed put when a session started and the phone moved it in half steps
         # from there — no jump, but the two numbers drifted apart: the phone at 70 had the speaker at 30. Matching
@@ -148,6 +149,11 @@ class Room(QObject):
         self.output.on_airplay_audio = lambda: setattr(self.airplay, "audio_at", time.time())
         self.output.start()
         self.airplay.changed.connect(self.output.poke)
+        # the Surface's buttons, from the hardware: they work whatever window is in front (the web browser too)
+        from .buttons import Buttons
+        self.buttons = Buttons()
+        self.buttons.pressed.connect(lambda kind, held: self.button(kind, "hardware", held))
+        self.buttons.start()
         # One thing plays at a time, as on any speaker: AirPlay starting pauses the Surface's own Spotify, and the
         # Surface's Spotify starting pauses AirPlay (the phone pauses too). Both used to play over each other, with
         # the screen showing only the newer one.
@@ -724,6 +730,21 @@ class Room(QObject):
 
     def power_button(self):
         self.sleep.power_button()
+
+    def button(self, kind: str, src: str, held: bool = False):
+        """A press of the Surface's buttons ("up", "down", "power"), from the hardware (room/buttons.py — whatever
+        window is in front) or as a key in Room's window (also a keyboard's volume keys). While Room is in front the
+        same press arrives both ways, so whichever comes first owns that press, and the holding down that follows,
+        until it's been quiet for 0.4 s — one step a press, not two."""
+        now = time.monotonic()
+        owner, last = self._btn.get(kind, (None, 0.0))
+        if owner not in (None, src) and now - last < 0.4:
+            return
+        self._btn[kind] = (src, now)
+        if kind == "power":
+            self.power_button()
+        else:
+            self.volume_step(6 if kind == "up" else -6)
 
     def volume_step(self, delta: int):
         """The Surface's volume buttons: the music's volume while something's playing, else the speaker's."""

@@ -75,17 +75,18 @@ class Pointer(QObject):
                     self.eating = False
                 return True
         # the Surface's buttons (in the panel-only session nothing else hears them): power → screen off / on,
-        # volume up / down → the music (or the speaker) ±6 %
+        # volume up / down → the music (or the speaker) ±6 %. Also read from the hardware (room/buttons.py), for while
+        # another window is in front; Room.button keeps one of the two.
         if self.room is not None and t == QEvent.Type.KeyPress and not ev.isAutoRepeat():
             k = ev.key()
             if k in (Qt.Key.Key_PowerOff, Qt.Key.Key_PowerDown, Qt.Key.Key_Sleep, Qt.Key.Key_Suspend, Qt.Key.Key_Standby):
-                self.room.power_button()
+                self.room.button("power", "window")
                 return True
             if k in (Qt.Key.Key_VolumeUp, Qt.Key.Key_VolumeDown):
-                self.room.volume_step(6 if k == Qt.Key.Key_VolumeUp else -6)
+                self.room.button("up" if k == Qt.Key.Key_VolumeUp else "down", "window")
                 return True
         elif self.room is not None and t == QEvent.Type.KeyPress and ev.key() in (Qt.Key.Key_VolumeUp, Qt.Key.Key_VolumeDown):
-            self.room.volume_step(6 if ev.key() == Qt.Key.Key_VolumeUp else -6)      # held: keeps going
+            self.room.button("up" if ev.key() == Qt.Key.Key_VolumeUp else "down", "window", True)   # held: keeps going
             return True
         if self.room is not None and t in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel,
                                            QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate, QEvent.Type.KeyPress):

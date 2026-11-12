@@ -60,6 +60,7 @@ bash "$HERE/scripts/spotify-connect.sh"
 bash "$HERE/scripts/assistant.sh"
 bash "$HERE/scripts/no-suspend.sh"
 bash "$HERE/scripts/cool.sh"
+bash "$HERE/scripts/buttons.sh"          # the volume and power buttons, whatever window is in front
 
 echo "▸ Sound"
 # a Bluetooth speaker stays a speaker: never switched to its low-quality "headset" mode when something listens

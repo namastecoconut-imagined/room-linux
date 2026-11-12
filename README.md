@@ -99,6 +99,8 @@ exercises every pixel. A tap stops it.
 
 - Power button: screen off; a sound or a touch brings it back. Hold it to power off.
 - Volume buttons: the music's volume while something plays, else the speaker's.
+- Both work whatever is in front (the web browser too): Room reads them from the hardware, once
+  `scripts/buttons.sh` has run (`undo` takes it back).
 - On standby, after 5 quiet minutes the backlight goes fully off — never while music plays on the Surface or through
   it (its speakers, or a speaker it sends to; not Spotify on the phone), and music starting there brings it back. While it's off, a small sound brings it back: anything slightly over the room's background, like a
   snap of the fingers. `"wakeAbove"` in config.json sets how far over, in dB (10 unless set; lower wakes on smaller

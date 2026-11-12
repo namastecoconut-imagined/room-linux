@@ -7,12 +7,13 @@
 # nothing that was there before is touched.
 set -uo pipefail
 CLEAN=$([ "${1:-}" = clean ] && echo 1 || echo 0)
+HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
 
 # ---------------------------------------------------------------- the list
 # packages installed for an experiment (the dnf command line that installed each)
 PACKAGES=(
   "libcamera-tools"     # 12 Nov · the camera tests (cam)
-  "v4l-utils"           # 12 Nov · the IR camera tests (media-ctl, v4l2-ctl)
+  "v4l-utils"           # 12 Nov · the IR camera tests and gestures (media-ctl, v4l2-ctl)
   "i2c-tools"           # 12 Nov · the IR lights test (i2ctransfer, for ir-capture.sh lit)
 )
 # files (and folders) an experiment wrote in your home folder
@@ -23,16 +24,25 @@ FILES=(
   "$HOME/room-ir-lit.jpg"         # 12 Nov · ir-capture.sh lit
   "$HOME/.cache/room-experiments" # 12 Nov · py-spy, for assistant-profile.sh (a folder)
 )
-# services an experiment added (none so far)
+# services an experiment added to your user (none)
 SERVICES=()
-# Not on the Surface — on the Mac, delete by hand when done: ~/Downloads/room-camera-front.jpg, ~/Downloads/room-ir.jpg,
-# ~/Downloads/room-ir-lit.jpg, ~/Downloads/RoomPanel/Kasero.otf (the copy for installing the font; the font itself
-# lives in ~/.config/room/fonts).
-# In the repo, the experiment's scripts (camera-test.sh, ir-check.sh, ir-capture.sh, ir-gestures.sh and .py,
-# assistant-profile.sh) go in a commit when an experiment ends without becoming a feature. Gone by themselves at
-# the next restart: the IR
-# camera's pipeline link and the i2c-dev kernel module (from ir-capture.sh and ir-gestures.sh); the IR lights'
-# sensor settings go when each capture stops, and ir-gestures.sh puts the exposure and gain back as it ends.
+# system-wide: the IR-lights helper (scripts/irlight.sh, 12 Nov, for gestures — reverted): its socket, its service,
+# the helper itself and the i2c-dev module at start
+SYSTEM_UNITS=("room-irlight.socket")
+SYSTEM_FILES=(
+  "/etc/systemd/system/room-irlight.socket"
+  "/etc/systemd/system/room-irlight@.service"
+  "/usr/local/libexec/room-irlight"
+  "/etc/modules-load.d/room-irlight.conf"
+)
+# Python packages added to Room's own environment (~/room/.venv) for an experiment — removed only while Room's
+# requirements.lock doesn't list them
+ROOM_PIP=("numpy")                # 12 Nov · gestures (reverted)
+# Not on the Surface — on the Mac: ~/Downloads/room-camera-front.jpg, ~/Downloads/room-ir.jpg, ~/Downloads/room-ir-lit.jpg
+# (the camera and IR photos), and ~/Downloads/RoomPanel/Kasero.otf (the copy for installing the font; the font itself
+# lives in ~/.config/room/fonts — keep that).
+# The camera, IR and gesture scripts left the repo when that experiment ended (12 Nov). Gone by themselves at the
+# next restart: the IR camera's pipeline link and the i2c-dev kernel module.
 
 # ---------------------------------------------------------------- packages
 echo "== Packages"
@@ -55,9 +65,35 @@ for f in "${FILES[@]}"; do
 done
 
 echo "== Services"
-[ ${#SERVICES[@]} -eq 0 ] && echo "  · none added"
+[ ${#SERVICES[@]} -eq 0 ] && echo "  · none added to your user"
 for s in "${SERVICES[@]}"; do
   if [ "$CLEAN" = 1 ]; then systemctl --user disable --now "$s" 2>/dev/null; rm -f "$HOME/.config/systemd/user/$s"; echo "  ✓ $s removed"
   else systemctl --user is-enabled "$s" >/dev/null 2>&1 && echo "  • $s" || echo "  · $s — not there"; fi
+done
+
+echo "== System (the IR-lights helper)"
+there=0
+for f in "${SYSTEM_FILES[@]}"; do [ -e "$f" ] && there=1; done
+if [ $there = 0 ]; then
+  echo "  · not there"
+elif [ "$CLEAN" = 1 ]; then
+  for u in "${SYSTEM_UNITS[@]}"; do sudo systemctl disable --now "$u" >/dev/null 2>&1 || true; done
+  for f in "${SYSTEM_FILES[@]}"; do [ -e "$f" ] && sudo rm -f -- "$f" && echo "  ✓ $f removed"; done
+  sudo systemctl daemon-reload
+else
+  for f in "${SYSTEM_FILES[@]}"; do [ -e "$f" ] && echo "  • $f"; done
+fi
+
+echo "== Room's Python"
+for p in "${ROOM_PIP[@]}"; do
+  if [ ! -x "$HERE/.venv/bin/python" ] || ! "$HERE/.venv/bin/python" -c "import $p" 2>/dev/null; then
+    echo "  · $p — not there"
+  elif grep -qi "^$p[=<>]" "$HERE/requirements.lock" 2>/dev/null; then
+    echo "  · $p — Room needs it now (requirements.lock); left alone"
+  elif [ "$CLEAN" = 1 ]; then
+    "$HERE/.venv/bin/pip" uninstall -q -y "$p" && echo "  ✓ $p removed"
+  else
+    echo "  • $p"
+  fi
 done
 [ "$CLEAN" = 1 ] || echo; [ "$CLEAN" = 1 ] || echo "  (bash ~/room/scripts/experiments.sh clean removes the • ones)"

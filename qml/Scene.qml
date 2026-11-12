@@ -248,6 +248,22 @@ Item {
         width: lb.implicitWidth + 16; height: 44
         Mono { id: lb; anchors.centerIn: parent; color: b.ink }
     }
+    // Settings, top right: the icon and the word in an outlined pill, and a touch area well past it — up to the
+    // screen's top edge, out to its right edge and down to just above the band that doesn't feel touch (the corner
+    // was easy to miss with a 40 px icon alone)
+    component SetBtn: Press {
+        pressScale: 0.95
+        width: setR.implicitWidth + 32; height: 44
+        reachLeft: 6; reachRight: 44; reachTop: 40; reachBottom: 40          // (a little past the edges: the picture drifts ±6 px)
+        onTapped: sc.openSettings()
+        Rectangle { anchors.fill: parent; radius: 9; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.24) }
+        Row {
+            id: setR
+            anchors.centerIn: parent; spacing: 9
+            Icon { anchors.verticalCenter: parent.verticalCenter; name: "set"; size: 18; color: "white" }
+            Mono { anchors.verticalCenter: parent.verticalCenter; text: "Settings"; color: "white" }
+        }
+    }
 
     // ================================================================= Home's song card (it grows into the player)
     Mover {
@@ -592,11 +608,7 @@ Item {
                 voice: listening ? room.voiceLevel : 0
                 onTapped: room.listen()
             }
-            Tap {
-                width: 40; height: 44
-                onTapped: sc.openSettings()
-                Icon { anchors.centerIn: parent; name: "set"; size: 22; color: "white" }
-            }
+            SetBtn {}
         }
     }
     // the player and the Room screen: ‹ Home
@@ -651,7 +663,7 @@ Item {
             anchors.right: parent.right
             spacing: 12; height: 44
             Btn { text: sc.curRoom && sc.curRoom.on > 0 ? "Turn off" : "Turn on"; ink: "white"; onTapped: room.toggleRoom(sc.roomName) }
-            Tap { width: 40; height: 44; onTapped: sc.openSettings(); Icon { anchors.centerIn: parent; name: "set"; size: 22; color: "white" } }
+            SetBtn {}
         }
     }
     Mover {

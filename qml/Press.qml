@@ -12,6 +12,11 @@ Item {
     property int holdMs: 900                // how long a press is before it's a hold
     property alias pressed: ma.pressed
     property real dip: 1
+    // how far the touch area reaches past what's drawn, per edge (a small button near a weak part of the screen)
+    property real reachLeft: 0
+    property real reachRight: 0
+    property real reachTop: 0
+    property real reachBottom: 0
     scale: dip
 
     component Spring: NumberAnimation { target: p; property: "dip"; to: 1; duration: 340; easing.type: Easing.OutBack; easing.overshoot: 2.2 }
@@ -40,6 +45,8 @@ Item {
     MouseArea {
         id: ma
         anchors.fill: parent
+        anchors.leftMargin: -p.reachLeft; anchors.rightMargin: -p.reachRight
+        anchors.topMargin: -p.reachTop; anchors.bottomMargin: -p.reachBottom
         pressAndHoldInterval: p.holdMs
         property real t0: 0
         onPressed: (e) => {

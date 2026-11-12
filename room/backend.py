@@ -5,6 +5,7 @@ import time
 from PySide6.QtCore import Property, QObject, Qt, QTimer, Signal, Slot
 
 from .airplay import AirPlay
+from .eyes import Eyes
 from .bluetooth import Bluetooth
 from .wifi import Wifi
 from .display import Display
@@ -50,6 +51,8 @@ class Room(QObject):
     browserChanged = Signal()
     _sinkFound = Signal()                # (from the speaker lookup's thread)
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
+    gestureShown = Signal(str)           # a hand gesture did this: next · previous · pause · play (the sign on screen)
+    eyesChanged = Signal()               # the IR camera started or stopped watching for gestures
 
     def __init__(self, cfg: dict):
         super().__init__()
@@ -63,6 +66,10 @@ class Room(QObject):
         self.spotify = Spotify(cfg.get("spotify"))
         self.airplay = AirPlay()
         self.airplay.changed.connect(self.musicChanged)
+        self.eyes = Eyes(cfg.get("gestures"))           # hand gestures (room/eyes.py); started in start()
+        self.eyes.gesture.connect(self._gesture)
+        self.eyes.watchingChanged.connect(self.eyesChanged)
+        self._played_at = self._eyes_at = 0.0
         # what played before, whatever the source — the left side of the cover flow
         self._history: list[dict] = []
         self._settle = QTimer(self); self._settle.setSingleShot(True); self._settle.setInterval(1500)
@@ -124,6 +131,8 @@ class Room(QObject):
             elif os.environ.get("ROOM_DEMO_WIFI") == "wrong":
                 self.wifi.note = "Couldn't join — wrong password?"
             self.settingsChanged.emit()
+            if os.environ.get("ROOM_DEMO_GESTURE"):           # (checks) the gesture sign, and the camera's light
+                QTimer.singleShot(1200, lambda: self.gestureShown.emit(os.environ["ROOM_DEMO_GESTURE"]))
             return
         self._display.start()
         self.bt.refresh()
@@ -185,6 +194,11 @@ class Room(QObject):
         self._sink_timer = QTimer(self); self._sink_timer.timeout.connect(self._find_sink); self._sink_timer.start(15000)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
+        # hand gestures for the music (room/eyes.py): the IR camera watches only while music is playing or paused
+        self.musicChanged.connect(self._eyes_check)
+        self._eyes_timer = QTimer(self); self._eyes_timer.timeout.connect(lambda: self._eyes_check(True))
+        self._eyes_timer.start(30000)
+        QTimer.singleShot(5000, lambda: self._eyes_check(True))
         if self.mic:
             self.mic.start()
         self.voicelink.start()
@@ -549,6 +563,36 @@ class Room(QObject):
     @Slot()
     def playPause(self):
         (self.airplay if self.airplay.showing else self.spotify).play_pause()
+
+    # ---------------------------------------------------------------- hand gestures (room/eyes.py)
+    @Property(bool, notify=eyesChanged)
+    def watching(self):
+        """The IR camera is on, watching for a hand (the small light at the top of the screen)."""
+        return self.eyes.watching or (self.demo and bool(os.environ.get("ROOM_DEMO_GESTURE")))
+
+    def _eyes_check(self, timer=False):
+        """Watch while music is playing, or was paused in the last 15 min (so a palm can start it again)."""
+        now = time.time()
+        if not timer and now - self._eyes_at < 1.0:
+            return
+        self._eyes_at = now
+        m = self.music
+        if m.get("exists") and m.get("playing"):
+            self._played_at = now
+        self.eyes.want(bool(m.get("exists")) and (bool(m.get("playing")) or now - self._played_at < 900))
+
+    @Slot(str, str)
+    def _gesture(self, kind, seen):
+        was = bool(self.music.get("playing"))
+        print(f"[room] gesture: {kind} ({seen})", flush=True)
+        if kind == "next":
+            self.next()
+        elif kind == "previous":
+            self.previous()
+        else:
+            self.playPause()
+            kind = "pause" if was else "play"
+        self.gestureShown.emit(kind)
 
     @Slot()
     def next(self):

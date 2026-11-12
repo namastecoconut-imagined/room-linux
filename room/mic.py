@@ -22,7 +22,8 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 class RoomMic(QObject):
     level = Signal(float)      # ~20 a second: loudness, RMS 0…1 (the standby ripple, the beat)
-    heard = Signal(float)      # ~3 a second: the average over that stretch (the screen's wake-on-sound)
+    heard = Signal(float)      # ~3 a second: the average over that stretch (the room's background; someone talking)
+    loudest = Signal(float)    # …and with it, the loudest 50 ms in that stretch (a snap or a knock — the screen's wake)
 
     RATE = 16000
     PIECE = 800                # samples: 50 ms
@@ -33,6 +34,7 @@ class RoomMic(QObject):
         self.stopping = False
         self._now = 0.0
         self._sum, self._n = 0.0, 0
+        self._peak = 0.0
         self._tick = QTimer(self); self._tick.timeout.connect(self._out)
         self._slow = 0
 
@@ -81,6 +83,8 @@ class RoomMic(QObject):
                     rms = math.sqrt(sum(x * x for x in a[::2]) / (len(a) // 2)) / 32768
                     self._now = rms
                     self._sum += rms; self._n += 1
+                    if rms > self._peak:
+                        self._peak = rms
             except Exception as e:
                 print(f"[room] sound level: {e!r}", flush=True)
             if self.proc and self.proc.poll() is None:
@@ -94,4 +98,6 @@ class RoomMic(QObject):
         if self._slow >= 6 and self._n:
             self._slow = 0
             avg, self._sum, self._n = self._sum / self._n, 0.0, 0
+            peak, self._peak = self._peak, 0.0
             self.heard.emit(avg)
+            self.loudest.emit(peak)

@@ -93,7 +93,7 @@ class Room(QObject):
         self._display = Display()
         self._display.changed.connect(self.settingsChanged)
         from .sleep import Sleep
-        self.sleep = Sleep(self._display, self._needs_screen)
+        self.sleep = Sleep(self._display, self._needs_screen, cfg.get("wakeAbove"))
         self.sleep.changed.connect(self.asleepChanged)
         # music starting brings the screen back; stopping starts the 5 quiet minutes again (playing keeps it on: busy)
         self._music_on = False
@@ -116,6 +116,7 @@ class Room(QObject):
         if self.mic:
             self.mic.level.connect(self._sound_level)
             self.mic.heard.connect(self.sleep.hear)
+            self.mic.loudest.connect(self.sleep.loudest)
 
     def start(self):
         self._things.start()

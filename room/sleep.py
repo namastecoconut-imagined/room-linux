@@ -2,9 +2,13 @@
 
 On standby, once the room has been quiet for 5 minutes (no sound above the room's own background, no touch, nothing
 playing, no alarm), the backlight goes off and nothing is drawn. While music plays it never goes off by itself, and
-music starting brings it back (music stopping starts the 5 minutes again). A clear voice brings the standby screen back — a
-sound 16 dB over the room's usual hum that keeps up for most of ~2 s — and so does "Alexa", a touch, an alarm or a
-timer. Rustles, ticks, a cough or a door don't. The power button does the same by hand: off now, on again.
+music starting brings it back (music stopping starts the 5 minutes again).
+
+While it's off, a small sound brings it back: anything slightly over the room's background — a snap of the fingers,
+a knock, a word. "wakeAbove" in config.json is how far over, in dB (10 if it isn't set; lower wakes on smaller
+sounds). It's judged on the loudest 50 ms of every third of a second, so a sound as short as a snap counts; the log
+says once a minute how loud the loudest sound was, to set it by. "Alexa", a touch, an alarm, a timer and the power
+button bring it back too; the power button also switches it off by hand.
 
 The background is learnt as it goes: it follows quiet stretches down quickly and rises only slowly, so a fan or the
 fridge becomes "silence" while a voice still stands out. The loudness comes from room/mic.py (loudness only —
@@ -31,11 +35,19 @@ class Sleep(QObject):
     # …and it has to last: 4 of the last 6 readings (~3 a second, so ~2 s) — speech has gaps between words, a click
     # or a bump is one reading
     NEED, OF = 4, 6
+    # …while the screen is off, much less will do: one 50 ms stretch this many dB over the background ("wakeAbove")
+    WAKE_ABOVE = 10.0
 
-    def __init__(self, display, busy):
+    def __init__(self, display, busy, wake_above=None):
         super().__init__()
         self.display = display
         self.busy = busy           # () → True while something needs the screen (music, an alarm)
+        try:
+            self.wake_above = float(wake_above) if wake_above is not None else self.WAKE_ABOVE
+        except (TypeError, ValueError):
+            self.wake_above = self.WAKE_ABOVE
+        self.loudest_over = None   # while off: the loudest sound this minute, dB over the room (for the log)
+        self.loudest_at = time.monotonic()
         self.asleep = False
         self.standby = False
         self.floor = None          # the room's background level, dB
@@ -60,6 +72,22 @@ class Sleep(QObject):
             if self.asleep and time.monotonic() > self.hush_until:
                 self.wake(f"sound, {db:.0f} dB against a {self.floor:.0f} dB room")
                 self.recent.clear()
+
+    def loudest(self, rms: float):
+        """The loudest 50 ms of the last third of a second. While the screen is off: slightly over the room wakes it."""
+        if not self.asleep or self.floor is None:
+            return
+        now = time.monotonic()
+        db = 20 * math.log10(max(rms, 1e-6))
+        over = db - self.floor
+        if self.loudest_over is None or over > self.loudest_over:
+            self.loudest_over = over
+        if now - self.loudest_at >= 60:
+            print(f"[room] screen off: the loudest sound this minute was {self.loudest_over:.0f} dB over a "
+                  f"{self.floor:.0f} dB room (wakes at {self.wake_above:g})", flush=True)
+            self.loudest_over, self.loudest_at = None, now
+        if over >= self.wake_above and db > self.LOUDEST_QUIET and now > self.hush_until:
+            self.wake(f"a sound, {over:.0f} dB over a {self.floor:.0f} dB room")
 
     def music(self, playing: bool):
         """Music started: the screen comes back (and stays on while it plays — busy). Stopped: the 5 quiet minutes
@@ -113,6 +141,7 @@ class Sleep(QObject):
             return
         self.asleep = True
         self.hush_until = time.monotonic() + 3
+        self.loudest_over, self.loudest_at = None, time.monotonic()
         self.display.blank(True)
         print(f"[room] screen off ({why})", flush=True)
         self.changed.emit()

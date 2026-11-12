@@ -95,6 +95,9 @@ class Room(QObject):
         from .sleep import Sleep
         self.sleep = Sleep(self._display, self._needs_screen)
         self.sleep.changed.connect(self.asleepChanged)
+        # music starting brings the screen back; stopping starts the 5 quiet minutes again (playing keeps it on: busy)
+        self._music_on = False
+        self.musicChanged.connect(self._music_for_screen)
         self.alertChanged.connect(lambda: self.alert and self.alert.get("kind") and self.sleep.wake("alert"))
         self.bt = Bluetooth()
         self.bt.changed.connect(self.settingsChanged)
@@ -696,6 +699,13 @@ class Room(QObject):
     @Slot()
     def cancelVoice(self):
         self.voicelink.cancel()
+
+    def _music_for_screen(self):
+        on = bool(self.music.get("playing"))
+        if on != self._music_on:
+            self._music_on = on
+            print(f"[room] music {'started' if on else 'stopped'}", flush=True)
+            self.sleep.music(on)
 
     @Property(bool, notify=asleepChanged)
     def asleep(self):

@@ -1,7 +1,8 @@
 """The screen goes properly off when nobody's around, and comes back the moment the room hears something.
 
 On standby, once the room has been quiet for 5 minutes (no sound above the room's own background, no touch, nothing
-playing, no alarm), the backlight goes off and nothing is drawn. A clear voice brings the standby screen back — a
+playing, no alarm), the backlight goes off and nothing is drawn. While music plays it never goes off by itself, and
+music starting brings it back (music stopping starts the 5 minutes again). A clear voice brings the standby screen back — a
 sound 16 dB over the room's usual hum that keeps up for most of ~2 s — and so does "Alexa", a touch, an alarm or a
 timer. Rustles, ticks, a cough or a door don't. The power button does the same by hand: off now, on again.
 
@@ -59,6 +60,13 @@ class Sleep(QObject):
             if self.asleep and time.monotonic() > self.hush_until:
                 self.wake(f"sound, {db:.0f} dB against a {self.floor:.0f} dB room")
                 self.recent.clear()
+
+    def music(self, playing: bool):
+        """Music started: the screen comes back (and stays on while it plays — busy). Stopped: the 5 quiet minutes
+        count from now, not from whenever the room last heard something over the music."""
+        if playing:
+            self.wake("music started")
+        self.input_at = time.monotonic()
 
     def touched(self):
         self.input_at = time.monotonic()

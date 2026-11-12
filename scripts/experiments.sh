@@ -13,19 +13,23 @@ CLEAN=$([ "${1:-}" = clean ] && echo 1 || echo 0)
 PACKAGES=(
   "libcamera-tools"     # 12 Nov · the camera tests (cam)
   "v4l-utils"           # 12 Nov · the IR camera tests (media-ctl, v4l2-ctl)
+  "i2c-tools"           # 12 Nov · the IR lights test (i2ctransfer, for ir-capture.sh lit)
 )
 # files an experiment wrote in your home folder
 FILES=(
   "$HOME/room-camera-front.jpg"   # 12 Nov · camera-test.sh
   "$HOME/room-camera-back.jpg"    # 12 Nov · camera-test.sh back
   "$HOME/room-ir.jpg"             # 12 Nov · ir-capture.sh
+  "$HOME/room-ir-lit.jpg"         # 12 Nov · ir-capture.sh lit
 )
 # services an experiment added (none so far)
 SERVICES=()
 # Not on the Surface — on the Mac, delete by hand when done: ~/Downloads/room-camera-front.jpg, ~/Downloads/room-ir.jpg,
-# ~/Downloads/RoomPanel/Kasero.otf (the copy for installing the font; the font itself lives in ~/.config/room/fonts).
+# ~/Downloads/room-ir-lit.jpg, ~/Downloads/RoomPanel/Kasero.otf (the copy for installing the font; the font itself
+# lives in ~/.config/room/fonts).
 # In the repo, the experiment's scripts (camera-test.sh, ir-check.sh, ir-capture.sh) go in a commit when an
-# experiment ends without becoming a feature. The IR camera's pipeline link (ir-capture.sh) resets at every start.
+# experiment ends without becoming a feature. Gone by themselves at the next restart: the IR camera's pipeline link
+# and the i2c-dev kernel module (both from ir-capture.sh); the IR lights' sensor settings go when each capture stops.
 
 # ---------------------------------------------------------------- packages
 echo "== Packages"

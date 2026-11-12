@@ -133,8 +133,12 @@ def main():
     code = app.exec()
     if room.mic:
         room.mic.stop()   # the sound-level reader goes with Room
-    del engine          # tear the screens down before the object they read from
-    sys.exit(code)
+    # and then just end. Tearing the screens and Python down piece by piece crashed (a segfault on every restart —
+    # room-update, a stop — with a core dump and some 300 lines in the journal each time): Room's worker threads
+    # (Wi-Fi, Bluetooth, Spotify…) were still reporting into objects already gone. Nothing is left to save — Room
+    # writes everything (alarms, reminders, settings) the moment it changes.
+    sys.stdout.flush(); sys.stderr.flush()
+    os._exit(code)
 
 
 if __name__ == "__main__":

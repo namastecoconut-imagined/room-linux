@@ -29,15 +29,15 @@ STILL = 0.05               # "nearly still": wanders less than 5 % of the pictur
 COOLDOWN = 0.6             # after a gesture, the next one waits this long
 
 # what to do, for how long, and what it should catch
-STEPS = [
-    ("Get ready: face the Surface, a forearm's length away (30–50 cm). Hands down.", 5, None),
-    ("Keep still, hands down — it's learning what the room looks like", 4, "still"),
-    ("Swipe RIGHT to LEFT across the screen, 3 times (one every second or so)", 9, "←"),
-    ("Swipe LEFT to RIGHT, 3 times", 9, "→"),
-    ("Hold your palm up, facing the screen, still — until it says ✋", 6, "✋"),
-    ("Step back 2 metres or more and wave both arms. This one should NOT count", 8, "far"),
+STEPS = [   # what to say, how long, what it should catch, and how long at its start doesn't count (getting into place)
+    ("Get ready: face the Surface, a forearm's length away (30–50 cm). Hands down.", 5, None, 0),
+    ("Keep still, hands down — it's learning what the room looks like", 4, "still", 0),
+    ("Swipe RIGHT to LEFT across the screen, 3 times (one every second or so)", 9, "←", 0),
+    ("Swipe LEFT to RIGHT, 3 times", 9, "→", 0),
+    ("Hold your palm up, facing the screen, still — until it says ✋", 6, "✋", 0),
+    ("Hands down and step back 2 metres or more (you have 3 s), then wave both arms. This should NOT count", 11, "far", 3),
 ]
-TOTAL = sum(s for _, s, _ in STEPS)
+TOTAL = sum(st[1] for st in STEPS)
 
 # every 4th pixel, read straight out of the packing: pixel c is at bit (c // 25) * 256 + (c % 25) * 10 of its row
 _cols = np.arange(0, W, 4)
@@ -79,14 +79,16 @@ results = []
 
 def begin(i, t):
     global step, step_at, seen, stats
-    step, step_at, seen, stats = i, t, collections.Counter(), {"peak": 0.0, "area": 0.0}
-    text, secs, _ = STEPS[i]
+    step, step_at, seen, stats = i, t, collections.Counter(), {"peak": 0.0, "area": 0.0, "seen": 0, "sweep": 0.0}
+    text, secs = STEPS[i][:2]
     out(f"\n  ▸ {i} of {len(STEPS) - 1} · {text}  ({secs} s)" if i else f"  ▸ {text}  ({secs} s)")
 
 
 def finish(t):
-    _, _, want = STEPS[step]
+    want = STEPS[step][2]
     pk, ar = stats["peak"], stats["area"]
+    how = (f" · brightest hand {pk:.0f} (counts above {NEAR:.0f}), largest {ar * 100:.0f} %"
+           f" · seen {stats['seen'] / max(1.0, n / max(t, 1.0)):.1f} s")
     if want is None:
         return
     if want == "still":
@@ -96,15 +98,15 @@ def finish(t):
         line = f"    caught {want} {seen[want]} of 3"
         if seen[other]:
             line += f" · and {seen[other]} the other way" + (" — the picture may be mirrored" if seen[other] > seen[want] else "")
-        line += f" · brightest hand {pk:.0f}, largest {ar * 100:.0f} %"
+        line += how + f" · widest sweep {stats['sweep'] * 100:.0f} % (a swipe needs {SWIPE * 100:.0f})"
         results.append(f"{want} {seen[want]} of 3" + (f" ({seen[other]} reversed)" if seen[other] else ""))
     elif want == "✋":
-        line = ("    ✓ caught" if seen["✋"] else "    ✗ not caught") + f" · brightest hand {pk:.0f}, largest {ar * 100:.0f} %"
+        line = ("    ✓ caught" if seen["✋"] else "    ✗ not caught") + how
         results.append("✋ " + ("caught" if seen["✋"] else "missed"))
     else:
-        n = sum(seen.values())
-        line = ("    ✓ nothing counted" if not n else f"    ✗ counted {n} time{'s' * (n > 1)}") + f" · brightest {pk:.0f}"
-        results.append("far away: " + ("ignored" if not n else f"counted {n}"))
+        k = sum(seen.values())
+        line = ("    ✓ nothing counted" if not k else f"    ✗ counted {k} time{'s' * (k > 1)}") + f" · brightest {pk:.0f} (counts above {NEAR:.0f})"
+        results.append("far away: " + ("ignored" if not k else f"counted {k}"))
     out(line)
 
 
@@ -122,13 +124,13 @@ while (raw := read_frame()) is not None:
     now = time.monotonic()
     start = start if start is not None else now
     t = now - start
-    while step + 1 < len(STEPS) and t >= sum(s for _, s, _ in STEPS[:step + 1]):
+    while step + 1 < len(STEPS) and t >= sum(st[1] for st in STEPS[:step + 1]):
         if step >= 0:
             finish(t)
         begin(step + 1, t)
-        track.clear(); held = False
+        track.clear()       # (not "held": a palm still up from the last step isn't a new hold)
     if step >= 0 and t >= TOTAL:
-        finish(t)
+        finish(t); step = -2
         break
     t_end = t
     left = max(1, math.ceil(step_at + STEPS[step][1] - t))
@@ -157,10 +159,12 @@ while (raw := read_frame()) is not None:
         else:
             bg += np.where(mask, 0, 0.01 * (near - bg))
         area = float(mask.mean())
-        if STEPS[step][2] not in (None, "still"):
+        live = STEPS[step][2] not in (None, "still") and t - step_at >= STEPS[step][3]
+        if live:
             stats["peak"] = max(stats["peak"], float(np.percentile(fg, 99.5)))
             stats["area"] = max(stats["area"], area)
-        if area >= MIN_AREA and STEPS[step][2] not in (None, "still"):
+            stats["seen"] += area >= MIN_AREA
+        if area >= MIN_AREA and live:
             ys, xs = np.nonzero(mask)
             x, y = xs.mean() / mask.shape[1], ys.mean() / mask.shape[0]
             if MIRROR:
@@ -176,6 +180,7 @@ while (raw := read_frame()) is not None:
         if track and t >= quiet_until and area >= MIN_AREA:
             t0, x0, y0, _ = track[0]
             dx, dy = x - x0, y - y0
+            stats["sweep"] = max(stats["sweep"], abs(dx))
             xs_, ys_, ar = [p[1] for p in track], [p[2] for p in track], [p[3] for p in track]
             got = None
             if abs(dx) >= SWIPE and abs(dx) >= 1.5 * abs(dy):
@@ -193,6 +198,8 @@ while (raw := read_frame()) is not None:
     prev = f
     n += 1
 
+if step >= 0:                               # the camera stopped first: still say how the last step went
+    finish(t_end)
 while sys.stdin.buffer.readinto(view):      # let the camera finish its last frames
     pass
 out()

@@ -3,8 +3,8 @@
 # countdown (keep still, swipe each way, hold your palm, wave from far away), each gesture as it catches it, and how
 # every step went.
 #   bash ~/room/scripts/ir-gestures.sh               (Ctrl-C stops it early)
-#   bash ~/room/scripts/ir-gestures.sh near=100      how much brighter than the room counts as "a hand" (default 150 of 1023)
-# More options: gain=N (the sensor's amplification, default 32; its lowest is 16) · mirror (if ← and → come out the
+#   bash ~/room/scripts/ir-gestures.sh near=200      how much brighter than the room counts as "a hand" (default 300 of 1023)
+# More options: gain=N (the sensor's amplification, in 16ths: default 96 = 6×; its lowest is 16 = 1×) · mirror (if ← and → come out the
 # wrong way round). The IR lights run gently while it does: a flash of about 1.5 ms on every other frame (Windows'
 # face login flashes about three times as long), and only for as long as this runs. The sensor forgets the light
 # settings when the stream stops,
@@ -12,12 +12,12 @@
 # password (the lights are switched on by writing to the sensor directly, as in ir-capture.sh lit).
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-NEAR=150; GAIN=32; MIRROR=0
+NEAR=300; GAIN=96; MIRROR=0
 EXPOSURE=100                  # in lines (about 15 µs each): a short exposure, and the flash lasts as long
 for a in "$@"; do
   case "$a" in
     near=*) NEAR=${a#near=} ;; gain=*) GAIN=${a#gain=} ;; mirror) MIRROR=1 ;;
-    *) echo "  bash ~/room/scripts/ir-gestures.sh [near=150] [gain=32] [mirror]"; exit 1 ;;
+    *) echo "  bash ~/room/scripts/ir-gestures.sh [near=300] [gain=96] [mirror]"; exit 1 ;;
   esac
 done
 command -v media-ctl >/dev/null || { echo "  First: sudo dnf install -y v4l-utils"; exit 1; }
@@ -59,7 +59,7 @@ media-ctl -d "$M" -V "\"$CSI\":1 [fmt:Y10_1X10/${W}x${H}]" 2>/dev/null || true
 v4l2-ctl -d "$VID" --set-fmt-video="width=$W,height=$H,pixelformat=ip3y"
 BPL=$(v4l2-ctl -d "$VID" --get-fmt-video | sed -n 's/.*Bytes per Line *: *\([0-9]*\).*/\1/p')
 
-# a short exposure (the flash lasts as long) and some amplification instead; put back afterwards
+# a short exposure (the flash lasts as long) and amplification instead: that costs no light; put back afterwards
 ctl() { v4l2-ctl -d "$SUB" --get-ctrl "$1" | sed 's/.*: *//'; }
 EX0=$(ctl exposure); GA0=$(ctl analogue_gain)
 PIPE=""; T=$(mktemp -d)
@@ -80,7 +80,7 @@ FPS=$(awk -v r="$RATE" -v l=$(( W + HB )) -v f=$(( H + VB )) 'BEGIN { printf "%.
 echo "▸ $FPS frames a second · flash $FLASH_MS ms ($EXPOSURE lines; exposure was $EX0) · gain $GAIN (was $GA0) ·"
 echo "  a hand: $NEAR brighter than the room. Follow the steps below as they come."
 echo
-( v4l2-ctl -d "$VID" --stream-mmap=4 --stream-count=$(( 45 * FPS )) --stream-to=- 2>"$T/v4l2.log" \
+( v4l2-ctl -d "$VID" --stream-mmap=4 --stream-count=$(( 48 * FPS )) --stream-to=- 2>"$T/v4l2.log" \
     | "$HERE/assistant/.venv/bin/python" "$HERE/scripts/ir-gestures.py" "$W" "$H" "$BPL" "$NEAR" "$MIRROR" "$FLASH_MS" ) &
 PIPE=$!
 strobe_on || echo "  (carrying on without the lights)"

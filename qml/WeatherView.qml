@@ -62,7 +62,7 @@ Item {
     Rise {
         order: 2
         visible: wv.ok
-        x: 1324 - 460; y: 150; width: 460; height: 220
+        x: 1324 - 540; y: 150; width: 540; height: 220       // wide enough for "Likely around 12 pm," on one line in Kasero
         readonly property bool soon: wv.rainAt >= 0
         readonly property bool tmr: !soon && wv.tomorrow && (wv.tomorrow.p || 0) >= 50
         Mono {

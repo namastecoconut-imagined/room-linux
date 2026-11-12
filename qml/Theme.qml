@@ -17,7 +17,9 @@ QtObject {
     // Helvetica Neue when it's installed (it's the panel's face); Inter Tight, which ships with Room, otherwise
     readonly property string face: Qt.fontFamilies().indexOf("Helvetica Neue") >= 0 ? "Helvetica Neue" : "Inter Tight"
     // ---- the redesign (room-motion.html / HANDOFF.md): type, colours, motion
-    readonly property string serif: "Instrument Serif"     // the clock, big numbers, room names, standby titles
+    // the clock, big numbers, room names, standby titles, Alexa's words: Kasero when it's installed (a licensed font,
+    // kept in ~/.config/room/fonts, not in the repo), Instrument Serif, which ships with Room, otherwise
+    readonly property string serif: Qt.fontFamilies().indexOf("Kasero") >= 0 ? "Kasero" : "Instrument Serif"
     readonly property string mono: "IBM Plex Mono"         // nav, labels, small details — uppercase, 0.08em apart
     readonly property color w62: Qt.rgba(1, 1, 1, 0.62)
     readonly property color w42: Qt.rgba(1, 1, 1, 0.42)

@@ -121,8 +121,14 @@ def main():
     # let Python see Ctrl-C while Qt is running
     t = QTimer(); t.start(2000); t.timeout.connect(lambda: None)
 
-    for f in (ROOT / "assets" / "fonts").glob("*.ttf"):
-        QFontDatabase.addApplicationFont(str(f))
+    # Room's own fonts, then any licensed ones kept beside config.json, outside the repo (it's public, so a paid
+    # font can't ship in it): ~/.config/room/fonts/ — Kasero there becomes the display serif (see Theme.serif)
+    for d in (ROOT / "assets" / "fonts", config.CONFIG_DIR / "fonts"):
+        for f in sorted([*d.glob("*.ttf"), *d.glob("*.otf")]) if d.is_dir() else []:
+            if QFontDatabase.addApplicationFont(str(f)) < 0:
+                print(f"[room] font: couldn't load {f.name}", flush=True)
+    print("[room] display serif: " + ("Kasero" if "Kasero" in QFontDatabase.families()
+                                       else "Instrument Serif (Kasero isn't in ~/.config/room/fonts)"), flush=True)
 
     cfg = config.load()
     room = Room(cfg)

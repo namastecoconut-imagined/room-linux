@@ -47,7 +47,7 @@ Item {
     // how to add one: ask
     Rise {
         order: 1
-        x: 1324 - 560; y: 126; width: 560; height: 300
+        x: 1324 - 640; y: 126; width: 640; height: 300       // each example on one line, even in Kasero (a wide face)
         Column {
             width: parent.width; spacing: 10
             Mono { width: parent.width; horizontalAlignment: Text.AlignRight; color: Theme.w62; text: "To add one, ask Alexa" }
@@ -56,7 +56,7 @@ Item {
                 Serif {
                     width: parent.width; horizontalAlignment: Text.AlignRight; wrapMode: Text.WordWrap
                     css: false; height: implicitHeight
-                    text: modelData; font.pixelSize: 38; lineHeight: 1.05
+                    text: modelData; font.pixelSize: 34; lineHeight: 1.05
                 }
             }
             Item { width: 1; height: 4 }

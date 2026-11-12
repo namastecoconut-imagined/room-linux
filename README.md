@@ -8,6 +8,8 @@ The Room panel as a native Qt Quick app. The screens are drawn on the GPU, and t
 2. **Battery.** In the Surface UEFI (hold volume-up while powering on), turn on **Battery Limit**. This caps the charge at 50% so the battery doesn't swell while the Surface is always plugged in.
 3. **Config.** Copy `config.json` from the Mac (`Downloads/RoomPanel/config.json`) to `~/.config/room/config.json`
    (with `"anthropicKey"` and `"sarvamKey"` for the assistant). Keys live only there, never in this repo.
+   **Display font:** the clock, big numbers and Alexa's words are set in Kasero when `~/.config/room/fonts/Kasero.otf`
+   is there. It's a licensed font, so it isn't in this public repo; without it Room uses Instrument Serif, which ships here.
 4. **Room — everything, in one go:**
    ```bash
    git clone https://github.com/namastecoconut-imagined/room-linux ~/room && bash ~/room/scripts/install.sh

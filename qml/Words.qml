@@ -98,7 +98,7 @@ Item {
             visible: !over
             font.family: Theme.serif; font.pixelSize: ws.cur
             color: ws.color
-            renderType: Text.QtRendering
+            renderType: Text.CurveRendering        // Kasero's hairlines hold up (see Serif.qml)
             opacity: 0
             transform: Translate { y: wd.centreY + wd.off }
             Behavior on x { enabled: wd.placed; NumberAnimation { duration: 480; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }

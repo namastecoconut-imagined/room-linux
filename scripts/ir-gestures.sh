@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# ir-gestures — tries hand gestures with the IR camera. It walks you through it, about 40 s: what to do now with a
-# countdown (keep still, swipe each way, hold your palm, wave from far away), each gesture as it catches it, and how
-# every step went.
+# ir-gestures — tries hand gestures with the IR camera. It walks you through it at your pace: each step (keep still,
+# swipe each way, hold your palm, wave from far away) says what to do and waits for Enter, counts you in, watches for
+# a few seconds — ● whenever it sees your hand, a line for each gesture — then says how it went.
 #   bash ~/room/scripts/ir-gestures.sh               (Ctrl-C stops it early)
 #   bash ~/room/scripts/ir-gestures.sh near=200      how much brighter than the room counts as "a hand" (default 300 of 1023)
 # More options: gain=N (the sensor's amplification, in 16ths: default 96 = 6×; its lowest is 16 = 1×) · mirror (if ← and → come out the
@@ -78,12 +78,15 @@ FLASH_MS=$(awk -v e="$EXPOSURE" -v l=$(( W + HB )) -v r="$RATE" 'BEGIN { printf 
 FPS=$(awk -v r="$RATE" -v l=$(( W + HB )) -v f=$(( H + VB )) 'BEGIN { printf "%.0f", r / (l * f) }')
 
 echo "▸ $FPS frames a second · flash $FLASH_MS ms ($EXPOSURE lines; exposure was $EX0) · gain $GAIN (was $GA0) ·"
-echo "  a hand: $NEAR brighter than the room. Follow the steps below as they come."
+echo "  a hand: $NEAR brighter than the room. Each step waits for you to press Enter."
 echo
-( v4l2-ctl -d "$VID" --stream-mmap=4 --stream-count=$(( 48 * FPS )) --stream-to=- 2>"$T/v4l2.log" \
+# (the walk-through's own result decides: when it finishes first, the camera's end is just the pipe closing on it)
+( set +o pipefail
+  v4l2-ctl -d "$VID" --stream-mmap=4 --stream-count=$(( 180 * FPS )) --stream-to=- 2>"$T/v4l2.log" \
     | "$HERE/assistant/.venv/bin/python" "$HERE/scripts/ir-gestures.py" "$W" "$H" "$BPL" "$NEAR" "$MIRROR" "$FLASH_MS" ) &
 PIPE=$!
 strobe_on || echo "  (carrying on without the lights)"
-wait "$PIPE" || { rc=$?; PIPE=""; echo "  stopped (code $rc):"; tail -3 "$T/v4l2.log"; exit 1; }
+rc=0; wait "$PIPE" || rc=$?
 PIPE=""
+[ $rc = 0 ] || { echo "  stopped (code $rc) — the camera said:"; tail -3 "$T/v4l2.log" | sed 's/^/    /'; exit 1; }
 echo "  exposure and gain back to $EX0 and $GA0 · the lights went off with the stream"

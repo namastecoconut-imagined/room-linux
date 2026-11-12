@@ -103,8 +103,21 @@ def main():
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Room")
     app.setOrganizationName("Imagined")
-    signal.signal(signal.SIGINT, lambda *_: app.quit())
-    signal.signal(signal.SIGTERM, lambda *_: app.quit())
+    # told to stop (systemd, room-update, Ctrl-C): stop the mic reader and end right here. Letting Qt wind down first
+    # crashed on every stop on the Surface (a segfault and a core dump each time): the screen's render thread and
+    # Room's worker threads were still running as things were torn down. Room writes everything (alarms, reminders,
+    # settings) the moment it changes, so there's nothing left to save.
+    held = {}
+
+    def stop_now(*_):
+        try:
+            if held.get("room") and held["room"].mic:
+                held["room"].mic.stop()
+        finally:
+            sys.stdout.flush(); sys.stderr.flush()
+            os._exit(0)
+    signal.signal(signal.SIGINT, stop_now)
+    signal.signal(signal.SIGTERM, stop_now)
     # let Python see Ctrl-C while Qt is running
     t = QTimer(); t.start(2000); t.timeout.connect(lambda: None)
 
@@ -127,6 +140,7 @@ def main():
         sys.exit(1)
     win = engine.rootObjects()[0]
     pointer = Pointer(app)  # noqa: F841
+    held["room"] = room
     pointer.room = room
 
     room.start()

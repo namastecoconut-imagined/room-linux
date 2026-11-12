@@ -27,9 +27,10 @@ SERVICES=()
 # Not on the Surface — on the Mac, delete by hand when done: ~/Downloads/room-camera-front.jpg, ~/Downloads/room-ir.jpg,
 # ~/Downloads/room-ir-lit.jpg, ~/Downloads/RoomPanel/Kasero.otf (the copy for installing the font; the font itself
 # lives in ~/.config/room/fonts).
-# In the repo, the experiment's scripts (camera-test.sh, ir-check.sh, ir-capture.sh) go in a commit when an
-# experiment ends without becoming a feature. Gone by themselves at the next restart: the IR camera's pipeline link
-# and the i2c-dev kernel module (both from ir-capture.sh); the IR lights' sensor settings go when each capture stops.
+# In the repo, the experiment's scripts (camera-test.sh, ir-check.sh, ir-capture.sh, ir-gestures.sh and .py) go in
+# a commit when an experiment ends without becoming a feature. Gone by themselves at the next restart: the IR
+# camera's pipeline link and the i2c-dev kernel module (from ir-capture.sh and ir-gestures.sh); the IR lights'
+# sensor settings go when each capture stops, and ir-gestures.sh puts the exposure and gain back as it ends.
 
 # ---------------------------------------------------------------- packages
 echo "== Packages"

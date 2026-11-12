@@ -1,14 +1,15 @@
 """The screen goes properly off when nobody's around, and comes back the moment the room hears something.
 
 On standby, once the room has been quiet for 5 minutes (no sound above the room's own background, no touch, nothing
-playing, no alarm), the backlight goes off and nothing is drawn. Any sound clearly above the
-background (a voice, a door, footsteps — 8 dB over the room's usual hum) brings the standby screen back; so does a
-touch, an alarm or a timer. The power button does the same by hand: off now, on again.
+playing, no alarm), the backlight goes off and nothing is drawn. A clear voice brings the standby screen back — a
+sound 16 dB over the room's usual hum that keeps up for most of ~2 s — and so does "Alexa", a touch, an alarm or a
+timer. Rustles, ticks, a cough or a door don't. The power button does the same by hand: off now, on again.
 
 The background is learnt as it goes: it follows quiet stretches down quickly and rises only slowly, so a fan or the
 fridge becomes "silence" while a voice still stands out. The loudness comes from room/mic.py (loudness only —
 nothing is recognised or kept).
 """
+import collections
 import math
 import time
 
@@ -19,11 +20,16 @@ class Sleep(QObject):
     changed = Signal()
 
     QUIET_FOR = 300.0          # seconds of a quiet room (on standby) before the screen goes off
-    ABOVE = 8.0                # dB over the room's background that counts as someone there (was 12: lowered to wake more readily)
+    # dB over the room's background that counts as someone there. 12, then 8 (11 Nov, to wake on footsteps) — but on
+    # the raw mic every small sound passed 8: the screen woke and stayed on all night (wakes logged at 8–18 dB over a
+    # −45 dB room). Now 16, and it has to last (below): a voice across the room, not a rustle.
+    ABOVE = 16.0
     LOUDEST_QUIET = -48.0      # dBFS: anything quieter than this is never "someone there" (the noise-suppressed mic, used until 11 Nov,
                                # gives near-digital silence in a still room, so the background alone read ~ −100 dB
                                # and every tiny tick counted as a sound — the screen never went off)
-    NEED = 2                   # …and it has to last: two readings in a row (~0.6 s), not one click
+    # …and it has to last: 4 of the last 6 readings (~3 a second, so ~2 s) — speech has gaps between words, a click
+    # or a bump is one reading
+    NEED, OF = 4, 6
 
     def __init__(self, display, busy):
         super().__init__()
@@ -34,7 +40,7 @@ class Sleep(QObject):
         self.floor = None          # the room's background level, dB
         self.sound_at = time.monotonic()
         self.input_at = time.monotonic()
-        self.loud = 0
+        self.recent = collections.deque(maxlen=self.OF)      # the last few readings: over the line or not
         self.last_power = 0.0
         self.hush_until = 0.0        # just switched off: its own click isn't a reason to come back
         self.why_not = ""
@@ -47,14 +53,12 @@ class Sleep(QObject):
             self.floor = db if self.floor is None else self.floor + (db - self.floor) * 0.3
         else:
             self.floor += (db - self.floor) * 0.002          # creeps up slowly (~3 min to follow a new hum)
-        if db > max(self.floor + self.ABOVE, self.LOUDEST_QUIET):
-            self.loud += 1
-            if self.loud >= self.NEED:
-                self.sound_at = time.monotonic()
-                if self.asleep and time.monotonic() > self.hush_until:
-                    self.wake(f"sound, {db:.0f} dB over a {self.floor:.0f} dB room")
-        else:
-            self.loud = 0
+        self.recent.append(db > max(self.floor + self.ABOVE, self.LOUDEST_QUIET))
+        if sum(self.recent) >= self.NEED:
+            self.sound_at = time.monotonic()
+            if self.asleep and time.monotonic() > self.hush_until:
+                self.wake(f"sound, {db:.0f} dB against a {self.floor:.0f} dB room")
+                self.recent.clear()
 
     def touched(self):
         self.input_at = time.monotonic()

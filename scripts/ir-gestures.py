@@ -32,8 +32,9 @@ COOLDOWN = 0.6             # after a gesture, the next one waits this long
 STEPS = [   # what to say, how long, what it should catch, and how long at its start doesn't count (getting into place)
     ("Get ready: face the Surface, a forearm's length away (30–50 cm). Hands down.", 5, None, 0),
     ("Keep still, hands down — it's learning what the room looks like", 4, "still", 0),
-    ("Swipe RIGHT to LEFT across the screen, 3 times (one every second or so)", 9, "←", 0),
-    ("Swipe LEFT to RIGHT, 3 times", 9, "→", 0),
+    ("Swipe RIGHT to LEFT through the air in front of the camera (the top edge of the screen): level with it,\n"
+     "      a hand's length out, not along the glass. 3 times, one every second or so. ● shows when it sees your hand", 9, "←", 0),
+    ("Swipe LEFT to RIGHT, the same way, 3 times", 9, "→", 0),
     ("Hold your palm up, facing the screen, still — until it says ✋", 6, "✋", 0),
     ("Hands down and step back 2 metres or more (you have 3 s), then wave both arms. This should NOT count", 11, "far", 3),
 ]
@@ -118,7 +119,7 @@ prev = bg = None
 n = lit_frames = 0
 held = False
 quiet_until = gone_at = 0.0
-flash_gain, countdown, t_end = [], -1, 0.0
+flash_gain, countdown, t_end, shown = [], -1, 0.0, None
 
 while (raw := read_frame()) is not None:
     now = time.monotonic()
@@ -134,9 +135,10 @@ while (raw := read_frame()) is not None:
         break
     t_end = t
     left = max(1, math.ceil(step_at + STEPS[step][1] - t))
-    if left != countdown:
-        countdown = left
-        out(f"    {left} s", end="")
+    inview = bool(track) and STEPS[step][2] not in (None, "still")
+    if left != countdown or inview != shown:
+        countdown, shown = left, inview
+        out(f"    {left} s" + ("   ● your hand" if inview else ""), end="")
 
     f = small(raw)
     means.append((n, float(f.mean())))

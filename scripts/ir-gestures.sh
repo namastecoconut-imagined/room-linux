@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# ir-gestures — tries hand gestures with the IR camera: a live readout, every swipe or hold it sees, and a summary.
-#   bash ~/room/scripts/ir-gestures.sh                  a minute (Ctrl-C stops it early)
-#   bash ~/room/scripts/ir-gestures.sh 30 near=200      30 s, and how bright counts as "a hand" (default 300 of 1023)
+# ir-gestures — tries hand gestures with the IR camera. It walks you through it, about 40 s: what to do now with a
+# countdown (keep still, swipe each way, hold your palm, wave from far away), each gesture as it catches it, and how
+# every step went.
+#   bash ~/room/scripts/ir-gestures.sh               (Ctrl-C stops it early)
+#   bash ~/room/scripts/ir-gestures.sh near=100      how much brighter than the room counts as "a hand" (default 150 of 1023)
 # More options: gain=N (the sensor's amplification, default 32; its lowest is 16) · mirror (if ← and → come out the
 # wrong way round). The IR lights run gently while it does: a flash of about 1.5 ms on every other frame (Windows'
 # face login flashes about three times as long), and only for as long as this runs. The sensor forgets the light
@@ -10,12 +12,12 @@
 # password (the lights are switched on by writing to the sensor directly, as in ir-capture.sh lit).
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
-SECS=60; NEAR=300; GAIN=32; MIRROR=0
+NEAR=150; GAIN=32; MIRROR=0
 EXPOSURE=100                  # in lines (about 15 µs each): a short exposure, and the flash lasts as long
 for a in "$@"; do
   case "$a" in
-    [0-9]*) SECS=$a ;; near=*) NEAR=${a#near=} ;; gain=*) GAIN=${a#gain=} ;; mirror) MIRROR=1 ;;
-    *) echo "  bash ~/room/scripts/ir-gestures.sh [seconds] [near=300] [gain=32] [mirror]"; exit 1 ;;
+    near=*) NEAR=${a#near=} ;; gain=*) GAIN=${a#gain=} ;; mirror) MIRROR=1 ;;
+    *) echo "  bash ~/room/scripts/ir-gestures.sh [near=150] [gain=32] [mirror]"; exit 1 ;;
   esac
 done
 command -v media-ctl >/dev/null || { echo "  First: sudo dnf install -y v4l-utils"; exit 1; }
@@ -75,12 +77,10 @@ RATE=$(ctl pixel_rate 2>/dev/null || true); HB=$(ctl horizontal_blanking); VB=$(
 FLASH_MS=$(awk -v e="$EXPOSURE" -v l=$(( W + HB )) -v r="$RATE" 'BEGIN { printf "%.1f", e * l / r * 1000 }')
 FPS=$(awk -v r="$RATE" -v l=$(( W + HB )) -v f=$(( H + VB )) 'BEGIN { printf "%.0f", r / (l * f) }')
 
-echo "▸ $SECS s at $FPS frames a second · exposure and flash $EXPOSURE lines = $FLASH_MS ms (was $EX0 lines) ·"
-echo "  gain $GAIN (was $GA0) · a hand counts above $NEAR"
-echo "  About a forearm's length from the screen (30–50 cm): swipe right to left a few times, then left to right,"
-echo "  then hold your palm still for a second. Then step back and wave from further away: that shouldn't count."
+echo "▸ $FPS frames a second · flash $FLASH_MS ms ($EXPOSURE lines; exposure was $EX0) · gain $GAIN (was $GA0) ·"
+echo "  a hand: $NEAR brighter than the room. Follow the steps below as they come."
 echo
-( v4l2-ctl -d "$VID" --stream-mmap=4 --stream-count=$(( SECS * FPS )) --stream-to=- 2>"$T/v4l2.log" \
+( v4l2-ctl -d "$VID" --stream-mmap=4 --stream-count=$(( 45 * FPS )) --stream-to=- 2>"$T/v4l2.log" \
     | "$HERE/assistant/.venv/bin/python" "$HERE/scripts/ir-gestures.py" "$W" "$H" "$BPL" "$NEAR" "$MIRROR" "$FLASH_MS" ) &
 PIPE=$!
 strobe_on || echo "  (carrying on without the lights)"

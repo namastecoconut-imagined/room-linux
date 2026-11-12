@@ -410,27 +410,8 @@ Item {
         }
         Item {
             y: 18; width: parent.width; height: 16
-            opacity: noSeek.shown ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: 160 } }
             Mono { size: 12; color: Theme.w62; text: sc.mmss(seek.shown * (sc.music.duration || 0)) }
             Mono { anchors.right: parent.right; size: 12; color: Theme.w62; text: "-" + sc.mmss((1 - seek.shown) * (sc.music.duration || 0)) }
-        }
-        // AirPlay from an app other than Spotify (YouTube Music, Apple Music) can't be moved from here — AirPlay has no
-        // "jump to" (shairport-sync says it can't seek; its old DACP playingtime was tried, and the phone ignored it).
-        // A touch on the line says so, for 3 s where the times are, instead of doing nothing.
-        Mono {
-            y: 18; width: parent.width; horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-            size: 12; color: "white"; text: prog.width >= 400 ? "AirPlay can't move the song · use your phone" : "Move the song on your phone"
-            opacity: noSeek.shown ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 160 } }
-        }
-        MouseArea {
-            id: noSeek
-            property bool shown: false
-            y: -24; width: parent.width; height: 50          // where the line takes touches when it can seek
-            enabled: !seek.enabled && !sc.sV && prog.opacity > 0
-            onPressed: { shown = true; noSeekOff.restart() }
-            Timer { id: noSeekOff; interval: 3000; onTriggered: noSeek.shown = false }
         }
     }
     Mover {

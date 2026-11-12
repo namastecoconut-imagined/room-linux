@@ -315,7 +315,7 @@ Item {
         wake: 2
         x: sc.pV ? 790 : sc.sV ? 236 : 722; y: sc.pV ? 170 : sc.sV ? 722 : 556
         scale: sc.pV ? 2.2 : 1
-        width: sc.pV ? 232 : sc.sV ? 560 : 376; height: tc.height
+        width: sc.pV ? 232 : sc.sV ? 560 : 312; height: tc.height       // (Home: room for the arrow beside it)
         opacity: (sc.hV || sc.pV || (sc.sV && sc.m) ? sc.kTitle : 0) * sc.hk
         layer.enabled: sc.kTitle < 0.999
         layer.effect: MultiEffect { blurEnabled: true; blur: 1 - sc.kTitle; blurMax: 32 }
@@ -325,6 +325,25 @@ Item {
             // 30 px on 36 px lines (line-height 1.2), the type centred in each line as the design has it
             T { width: parent.width; height: 36; verticalAlignment: Text.AlignVCenter; text: sc.live || sc.sV ? sc.sTitle : "Nothing playing"; font.pixelSize: 30; color: "white" }
             T { width: parent.width; height: 36; verticalAlignment: Text.AlignVCenter; text: sc.live || sc.sV ? sc.sArtist : "Pick up where you left off"; font.pixelSize: 30; color: Theme.w62 }
+        }
+    }
+    // Home: an arrow beside the title that opens the player. The cover above sits where the screen doesn't answer
+    // touch (y 118–500), so tapping it did nothing; this says where to tap instead (the title opens it too)
+    Mover {
+        id: openArrow
+        order: 3
+        wake: 2
+        x: 1110 - 18 - 52; y: 556 + 36 - 26; width: 52; height: 52
+        opacity: (sc.hV && sc.live ? 1 : 0) * sc.hk
+        Tap {
+            anchors.fill: parent
+            onTapped: sc.openPlayer()
+            Rectangle {
+                anchors.fill: parent; radius: width / 2
+                color: Qt.rgba(1, 1, 1, 0.14)
+                border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.3)
+            }
+            Icon { anchors.centerIn: parent; name: "open"; size: 24; color: "white" }
         }
     }
     // where it's playing: on Home just the words (a target that small isn't worth aiming at); in the player a proper

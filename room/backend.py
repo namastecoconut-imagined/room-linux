@@ -5,7 +5,24 @@ import time
 from PySide6.QtCore import Property, QObject, Qt, QTimer, Signal, Slot
 
 from .airplay import AirPlay
-from .eyes import Eyes
+try:                    # hand gestures must never stop Room starting
+    from .eyes import Eyes
+except Exception as _e:     # noqa: BLE001
+    print(f"[room] gestures: off — {_e!r}", flush=True)
+
+    class Eyes:                                   # (stands in: never watches)
+        watching = False
+
+        def __init__(self, *a):
+            from PySide6.QtCore import QObject, Signal
+            class _S(QObject):
+                gesture = Signal(str, str)
+                watchingChanged = Signal()
+            self._s = _S()
+            self.gesture, self.watchingChanged = self._s.gesture, self._s.watchingChanged
+
+        def want(self, on):
+            pass
 from .bluetooth import Bluetooth
 from .wifi import Wifi
 from .display import Display

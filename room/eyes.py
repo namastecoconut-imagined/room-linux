@@ -26,8 +26,12 @@ import subprocess
 import threading
 import time
 
-import numpy as np
 from PySide6.QtCore import QObject, Signal
+
+try:                        # (Room's own Python has it from requirements; without it, gestures stay off — Room runs)
+    import numpy as np
+except Exception:           # noqa: BLE001
+    np = None
 
 W, H = 640, 480
 EXPOSURE = 100              # lines: the exposure, and the flash lasts as long
@@ -137,6 +141,10 @@ class Eyes(QObject):
 
     # ---- on and off (from the main thread; Backend asks every time the music changes, and every 30 s)
     def want(self, on: bool):
+        if np is None:
+            if on:
+                self._once("numpy", "off — numpy isn't installed for Room (room-update installs it)")
+            return
         on = bool(on) and self.enabled and time.time() >= self._rest_until
         s = self._session
         running = bool(s and s["thread"].is_alive() and not s["stop"].is_set())

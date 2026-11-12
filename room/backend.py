@@ -711,6 +711,17 @@ class Room(QObject):
                     "ready": {"state": "idle", "stage": "idle"}}.get(st, {})
         return dict(self.voicelink.st)
 
+    @Slot(float, str)
+    def noteFrames(self, fps, where):
+        """How often the screen was drawn over the last 10 s (Main), for health.sh: ~/.local/state/room/frames."""
+        try:
+            from .config import STATE_DIR
+            STATE_DIR.mkdir(parents=True, exist_ok=True)
+            (STATE_DIR / "frames").write_text(f"drawing {fps:.1f} frames a second · {where} "
+                                              f"(the 10 s to {time.strftime('%H:%M:%S')})\n")
+        except OSError:
+            pass
+
     @Slot()
     def listen(self):
         self.voicelink.listen()

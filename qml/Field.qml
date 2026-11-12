@@ -120,6 +120,7 @@ ShaderEffect {
     // its own clock — or, on music standby, the drifting words' (30 a second, every other frame): two clocks out of
     // step would have doubled the redrawing, and the background's 12 a second there looked steppy next to the words
     property bool external: false
+    signal ticked()                     // after each step (the song's progress line keeps time with it)
     function advance() {
         var now = Date.now() / 1000
         var dt = f.last > 0 ? Math.min(0.25, now - f.last) : 0
@@ -133,6 +134,7 @@ ShaderEffect {
         f.brP = Qt.vector4d(f.turn(f.brP.x, w / 5), f.turn(f.brP.y, w / 5.9), f.turn(f.brP.z, w / 6.8), f.turn(f.brP.w, w / 7.7))
         // the swell eases away when the music stops (or the mic is off: the level stops arriving)
         if (!room.micOn || !f.playing) f.sound *= 0.8
+        f.ticked()
     }
     Timer {
         interval: Math.round(1000 / f.fps); repeat: true

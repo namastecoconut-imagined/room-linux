@@ -1,7 +1,8 @@
 #version 440
 // The redesign's background, "Field" (room-motion.html): the screen takes its colour from the album cover.
 // A base fill, then four soft lights — one per main colour of the cover, where that colour sits on the cover, as big
-// as its share — drifting along the cover's light direction; film grain over them (13 %, overlay); then a dimmer.
+// as its share — drifting along the cover's light direction; film grain over them (13 %, overlay); then a dimmer and
+// the vignette.
 // While music plays, the room's sound swells the lights (≤ 10 %) and brightens them (≤ 16 %). Inside the glass card the grain is gone and the colours a little richer (the card's
 // frosted glass blurs what's behind it). Everything is worked out in stage pixels (the 1368 × 912 stage).
 layout(location = 0) in vec2 qt_TexCoord0;
@@ -112,5 +113,12 @@ void main() {
     col = mix(col, ov, grainA * (1.0 - inGlass));
     // the dimmer
     col = mix(col, dimC.rgb, dimA);
+    // the design's vignette (it was its own layer drawn over the screen — a second full-screen pass each frame): soft
+    // dark edges — an ellipse 130 % × 110 % of the screen, a little right of and above the middle, clear to 55 % and
+    // 42 % black at its rim — and a shade down the left behind the clock (22 % at the edge, gone by 38 % of the width)
+    vec2 q = (p - vec2(0.55 * 1368.0, 0.40 * 912.0)) / vec2(1.3 * 1368.0, 1.1 * 912.0);
+    float v1 = clamp((length(q) - 0.55) / 0.45, 0.0, 1.0) * 0.42;
+    float v2 = clamp(1.0 - p.x / (0.38 * 1368.0), 0.0, 1.0) * 0.22;
+    col *= (1.0 - v1) * (1.0 - v2);
     fragColor = vec4(col, 1.0) * qt_Opacity;
 }

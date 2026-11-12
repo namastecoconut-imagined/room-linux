@@ -62,16 +62,13 @@ Item {
     // the song's place: after a seek, hold the new place until the player reports it (Spotify takes a second or two)
     property real seekTo: -1
     property real seekAt: 0
-    // the song's place moves smoothly: while it's on screen and playing, its clock ticks 20 times a second (in step
-    // with the background, which redraws that often anyway — so no extra drawing), not once a second in jumps
+    // the song's place moves smoothly: while it's on screen and playing, its clock moves on with each step of the
+    // background (which redraws the screen anyway) — not once a second in jumps, and not on a clock of its own: two
+    // clocks out of step had the screen redrawn twice as often
     property real fineNow: 0
-    Timer {
-        id: fine
-        interval: 50; repeat: true
-        running: sc.visible && sc.music.playing === true && prog.opacity > 0
-        onTriggered: sc.fineNow = Date.now() / 1000
-    }
-    readonly property real tNow: fine.running && fineNow > 0 ? fineNow : now
+    readonly property bool fine: sc.visible && sc.music.playing === true && prog.opacity > 0
+    Connections { target: bg; enabled: sc.fine; function onTicked() { sc.fineNow = Date.now() / 1000 } }
+    readonly property real tNow: fine && fineNow > 0 && now - fineNow < 2 ? fineNow : now      // (the background paused: the plain clock)
     readonly property real livePos: exists ? Math.min(music.duration || 0, (music.position || 0) + (music.playing ? tNow - music.at : 0)) : 0
     readonly property real pos: seekTo >= 0 && tNow - seekAt < 4 && Math.abs(livePos - (seekTo + (music.playing ? tNow - seekAt : 0))) > 2
                                 ? Math.min(music.duration || 0, seekTo + (music.playing ? tNow - seekAt : 0)) : livePos
@@ -786,9 +783,6 @@ Item {
     }
     readonly property rect coverRect: Qt.rect(sbCover.x, sbCover.y, sbCover.width, sbCover.height)
 
-    // the design's vignette: soft dark edges, a shade behind the clock — over Home, the player, standby and a room,
-    // under the screens' own content (as in room-motion.html, where the screens are laid over it)
-    Vignette {}
 
     // ================================================================= the screens (pass 2)
     Item {

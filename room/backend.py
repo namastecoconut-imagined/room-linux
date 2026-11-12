@@ -95,7 +95,8 @@ class Room(QObject):
         from .sleep import Sleep
         self.sleep = Sleep(self._display, self._needs_screen, cfg.get("wakeAbove"))
         self.sleep.changed.connect(self.asleepChanged)
-        # music starting brings the screen back; stopping starts the 5 quiet minutes again (playing keeps it on: busy)
+        # music starting on the Surface brings the screen back; stopping starts the 5 quiet minutes again (playing keeps
+        # it on: busy). Music on the phone or anywhere else doesn't count.
         self._music_on = False
         self.musicChanged.connect(self._music_for_screen)
         self.alertChanged.connect(lambda: self.alert and self.alert.get("kind") and self.sleep.wake("alert"))
@@ -647,8 +648,8 @@ class Room(QObject):
         """'' when nothing needs the screen, else why (it's logged)."""
         if self.browserOpen:
             return "the web browser is open"
-        if self.music.get("playing"):
-            return "music playing"
+        if self._music_here():
+            return "music playing on the Surface"
         if self.alert and self.alert.get("kind"):
             return "an alarm or timer is showing"
         if self.voice.get("state") in ("listening", "thinking", "speaking"):
@@ -701,8 +702,13 @@ class Room(QObject):
     def cancelVoice(self):
         self.voicelink.cancel()
 
+    def _music_here(self) -> bool:
+        """Music playing on the Surface or through it (its speakers, or a speaker it sends to): AirPlay, or Room's own
+        Spotify — not Spotify playing on the phone or anywhere else, which the panel shows too."""
+        return bool(self.music.get("playing")) and self._plays_here()
+
     def _music_for_screen(self):
-        on = bool(self.music.get("playing"))
+        on = self._music_here()
         if on != self._music_on:
             self._music_on = on
             print(f"[room] music {'started' if on else 'stopped'}", flush=True)

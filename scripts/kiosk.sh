@@ -42,6 +42,12 @@ on)
     | sudo tee /etc/systemd/logind.conf.d/room-panel.conf >/dev/null
   sudo systemctl kill -s HUP systemd-logind 2>/dev/null || true
 
+  echo "▸ The system log kept to 200 MB"
+  # it grew to 670 MB on the panel (kept across restarts); a small disk that's always on doesn't need more
+  sudo mkdir -p /etc/systemd/journald.conf.d
+  printf '[Journal]\nSystemMaxUse=200M\n' | sudo tee /etc/systemd/journald.conf.d/room.conf >/dev/null
+  sudo systemctl restart systemd-journald 2>/dev/null || true
+
   bash "$(dirname "$(readlink -f "$0")")/no-suspend.sh"
 
   echo "▸ Wi-Fi passwords where the system can reach them without the desktop"

@@ -14,6 +14,11 @@ ShaderEffect {
     id: f
     x: -40; y: -40; width: 1368 + 80; height: 912 + 80        // past the edges: the burn-in drift never shows one
     blending: false
+    // drawn at the design's size (1368 × 912 and its margins) and scaled up, not at the Surface's 2736 × 1824: a
+    // quarter of the work for the graphics chip (at full size it drew ~5 W). It's all soft light, and its grain is a
+    // design pixel each, so it looks the same — scaled up without smoothing, to keep the grain crisp.
+    layer.enabled: true
+    layer.smooth: false
 
     property var cover: ({})            // a cover's reading (music.field)
     property string mode: "music"       // music · idle · room · weather

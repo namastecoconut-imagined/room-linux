@@ -15,20 +15,22 @@ PACKAGES=(
   "v4l-utils"           # 12 Nov · the IR camera tests (media-ctl, v4l2-ctl)
   "i2c-tools"           # 12 Nov · the IR lights test (i2ctransfer, for ir-capture.sh lit)
 )
-# files an experiment wrote in your home folder
+# files (and folders) an experiment wrote in your home folder
 FILES=(
   "$HOME/room-camera-front.jpg"   # 12 Nov · camera-test.sh
   "$HOME/room-camera-back.jpg"    # 12 Nov · camera-test.sh back
   "$HOME/room-ir.jpg"             # 12 Nov · ir-capture.sh
   "$HOME/room-ir-lit.jpg"         # 12 Nov · ir-capture.sh lit
+  "$HOME/.cache/room-experiments" # 12 Nov · py-spy, for assistant-profile.sh (a folder)
 )
 # services an experiment added (none so far)
 SERVICES=()
 # Not on the Surface — on the Mac, delete by hand when done: ~/Downloads/room-camera-front.jpg, ~/Downloads/room-ir.jpg,
 # ~/Downloads/room-ir-lit.jpg, ~/Downloads/RoomPanel/Kasero.otf (the copy for installing the font; the font itself
 # lives in ~/.config/room/fonts).
-# In the repo, the experiment's scripts (camera-test.sh, ir-check.sh, ir-capture.sh, ir-gestures.sh and .py) go in
-# a commit when an experiment ends without becoming a feature. Gone by themselves at the next restart: the IR
+# In the repo, the experiment's scripts (camera-test.sh, ir-check.sh, ir-capture.sh, ir-gestures.sh and .py,
+# assistant-profile.sh) go in a commit when an experiment ends without becoming a feature. Gone by themselves at
+# the next restart: the IR
 # camera's pipeline link and the i2c-dev kernel module (from ir-capture.sh and ir-gestures.sh); the IR lights'
 # sensor settings go when each capture stops, and ir-gestures.sh puts the exposure and gain back as it ends.
 
@@ -49,7 +51,7 @@ done
 echo "== Files"
 for f in "${FILES[@]}"; do
   [ -e "$f" ] || { echo "  · $(basename "$f") — not there"; continue; }
-  if [ "$CLEAN" = 1 ]; then rm -f "$f" && echo "  ✓ $(basename "$f") removed"; else echo "  • $f"; fi
+  if [ "$CLEAN" = 1 ]; then rm -rf -- "$f" && echo "  ✓ $(basename "$f") removed"; else echo "  • $f"; fi
 done
 
 echo "== Services"

@@ -31,7 +31,7 @@ Item {
     readonly property bool error: stage === "error"
     readonly property var lit: v.lit || []
     readonly property bool forReminder: v.about === "reminder"     // the Reminders screen's + Add a reminder
-    readonly property string cardKind: replying && !error ? (v.card || (v.reminded ? "reminder" : lit.length ? "lights" : "")) : ""
+    readonly property string cardKind: replying && !error ? (v.reminded ? "reminder" : v.card || (lit.length ? "lights" : "")) : ""
     // how long it stays once Room's finished
     readonly property int holdMs: mode === "miss" ? 2600 : replying ? (cardKind !== "" ? 14000 : 8000) : 300
 

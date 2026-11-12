@@ -144,6 +144,8 @@ Item {
     readonly property var things: room.things
     readonly property var timers: (things.timers || []).filter(function (t) { return !t.done })
     readonly property var due: (things.reminders || []).filter(function (r) { return !r.done && (r.today || r.dueNow) })
+    // none due today: the rest still to do (soonest first, then those with no time)
+    readonly property var openRem: (things.reminders || []).filter(function (r) { return !r.done })
     readonly property var nextAlarm: things.nextAlarm || ({})
     readonly property var ev: room.events || []
     readonly property var rooms: room.rooms || []
@@ -166,6 +168,7 @@ Item {
         if (ev.length) f.push({ k: "next", label: "Next · " + ev[0].when, val: ev[0].title, sub: ev.length > 1 ? "Then " + ev[1].title + ", " + ev[1].when : (ev[0].extra || "") })
         if (alarmText) f.push({ k: "alarm", label: "Alarm", val: alarmText, sub: nextAlarm.in ? "In " + nextAlarm.in : "" })
         if (due.length) f.push({ k: "rem", label: "Reminders", val: due.length + " today", sub: due[0].text + (dueTime(due[0]) ? " · " + dueTime(due[0]) : "") })
+        else if (openRem.length) f.push({ k: "rem", label: "Reminders", val: openRem.length + " to do", sub: openRem[0].text + (openRem[0].when ? " · " + openRem[0].when : "") })
         if (rooms.length) f.push({ k: "lights", label: "Lights", val: lit.length ? lit.length + (lit.length === 1 ? " room on" : " rooms on") : "All off",
                                    sub: lit.map(function (r) { return Theme.shortName(r.name) + " " + r.level }).join(" · ") })
         return f
@@ -178,7 +181,8 @@ Item {
             else if (f.k === "wx") g.push({ k: "wx", text: f.val })
             else if (f.k === "next") g.push({ k: "next", text: "Next · " + f.val + " " + ev[0].when })
             else if (f.k === "alarm") g.push({ k: "alarm", text: "Alarm · " + f.val })
-            else if (f.k === "rem") g.push({ k: "rem", text: due.length + (due.length === 1 ? " reminder today" : " reminders today") })
+            else if (f.k === "rem") g.push({ k: "rem", text: due.length ? due.length + (due.length === 1 ? " reminder today" : " reminders today")
+                                                                        : "Reminder · " + openRem[0].text + (openRem[0].when ? " · " + openRem[0].when : "") })
         })
         return g
     }

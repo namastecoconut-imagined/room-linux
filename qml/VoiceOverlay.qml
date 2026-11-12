@@ -15,6 +15,7 @@ Item {
     id: vo
     width: Theme.stageW; height: Theme.stageH
     property bool active: false
+    property Item backdrop: null            // what's behind (the scene): blurred under the veil, more the lower it is
     signal close()
     signal go(string where, string arg)     // open a screen (weather · clock · music · room)
     signal touched()                        // a button was used: stay a while longer
@@ -75,6 +76,58 @@ Item {
     MouseArea {             // round the buttons: a near miss does nothing (rather than closing it, or pressing Home)
         x: -60; y: 540; width: vo.width + 120; height: 150
         enabled: vo.mode !== "gone"
+    }
+    // what's behind, blurred: a linear blur — none under the dark top of the veil, softening from just above the line
+    // and fully blurred from below the buttons to the bottom (two strengths, each faded in down the screen, so the
+    // blur grows smoothly rather than in steps). Only the part below y 280 is taken: above it the veil hides all.
+    Item {
+        id: haze
+        x: -60; y: 280; width: vo.width + 120; height: vo.height - 280 + 60     // (past the edges: the picture drifts)
+        opacity: vo.mode === "gone" ? 0 : 1
+        Behavior on opacity { NumberAnimation { duration: 700; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
+        visible: vo.backdrop !== null && opacity > 0.002
+        ShaderEffectSource {
+            id: behind
+            anchors.fill: parent
+            sourceItem: vo.backdrop
+            sourceRect: Qt.rect(haze.x, haze.y, haze.width, haze.height)
+            live: haze.visible
+            hideSource: false
+            visible: false
+        }
+        // a ramp down the screen (stage y from → to), for each strength's mask
+        component Ramp: Item {
+            property real from: 0
+            property real to: 1
+            anchors.fill: parent; visible: false; layer.enabled: true
+            Rectangle {
+                anchors.fill: parent
+                gradient: Gradient {
+                    GradientStop { position: Math.max(0, (from - haze.y) / haze.height); color: Qt.rgba(1, 1, 1, 0) }
+                    GradientStop { position: Math.min(1, (to - haze.y) / haze.height); color: Qt.rgba(1, 1, 1, 1) }
+                }
+            }
+        }
+        Ramp { id: softRamp; from: 330; to: 500 }
+        Ramp { id: deepRamp; from: 470; to: 680 }
+        MultiEffect {
+            anchors.fill: parent; source: behind; autoPaddingEnabled: false
+            blurEnabled: true; blur: 0.5; blurMax: 32
+            maskEnabled: true; maskSource: softRamp; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0     // (a smooth ramp, not a step)
+        }
+        MultiEffect {
+            anchors.fill: parent; source: behind; autoPaddingEnabled: false
+            blurEnabled: true; blur: 1.0; blurMax: 64
+            maskEnabled: true; maskSource: deepRamp; maskThresholdMin: 0.5; maskSpreadAtMin: 1.0
+        }
+        // and a little darker towards the bottom, so what's blurred there stays quiet
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: (600 - haze.y) / haze.height; color: Qt.rgba(6 / 255, 4 / 255, 3 / 255, 0) }
+                GradientStop { position: 1; color: Qt.rgba(6 / 255, 4 / 255, 3 / 255, 0.35) }
+            }
+        }
     }
     Rectangle {
         x: -60; y: -60; width: vo.width + 120; height: 690 + 60

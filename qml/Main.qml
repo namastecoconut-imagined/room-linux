@@ -145,6 +145,7 @@ Window {
         VoiceOverlay {
             id: voiceO
             active: win.voiceUp
+            backdrop: scene
             // the whole overlay fades out together (its words stayed on Home once it closed)
             opacity: active ? 1 : 0
             visible: opacity > 0

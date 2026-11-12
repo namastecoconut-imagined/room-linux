@@ -888,6 +888,9 @@ class Room(QObject):
             print(f"[room] web browser: couldn't open Firefox ({e})", flush=True)
             return
         print("[room] web browser: opened", flush=True)
+        if getattr(self, "output", None):           # its sound goes where the music goes (room/output.py)
+            self.output.browser_open = True
+            self.output.poke()
         self._browser_check.start(2000)
         self.browserChanged.emit()
 
@@ -925,6 +928,8 @@ class Room(QObject):
         if self._browser is not None and self._browser.poll() is not None:
             self._browser_size()                     # (a profile made on Firefox's very first start)
             print("[room] web browser: closed", flush=True)
+            if getattr(self, "output", None):
+                self.output.browser_open = False
             self._browser = None
             self._browser_check.stop()
             self.browserChanged.emit()

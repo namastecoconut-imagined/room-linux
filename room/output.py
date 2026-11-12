@@ -5,9 +5,11 @@ and the realtime load it put on PipeWire got it killed. Music mostly goes to the
 own. The Surface's speakers play raw.)
 
 AirPlay always goes to the Bluetooth speaker when one is connected (whatever the default output is), and back to the
-Surface's speakers when it isn't ("airplayToBluetooth": false turns that off). Checked the moment AirPlay starts or
-changes (Room is told by the AirPlay reader), and every 20 s otherwise — the PipeWire listing it reads is too heavy to
-run every few seconds on a battery.
+Surface's speakers when it isn't ("airplayToBluetooth": false turns that off) — and so do the Surface's own Spotify
+speaker and the web browser Room opens (Firefox: a video there plays where the music does, so the volume buttons,
+which follow the Bluetooth speaker, work on it). Checked the moment AirPlay starts or changes (Room is told by the
+AirPlay reader), every 3 s while the browser is open, and every 20 s otherwise — the PipeWire listing it reads is too
+heavy to run every few seconds all day on a battery.
 
 At start (and every few minutes) the levels underneath are put right: the Surface's own speakers at full — PipeWire's
 level for the raw speakers and the chip's Speaker control (Master a few dB under full — see levels()); the volume slider works on the output in front of
@@ -28,6 +30,7 @@ class Output:
         self.poked = threading.Event()
         self.headroom = abs(float(cfg.get("speakerHeadroomDb", 4)))
         self.on_airplay_audio = None   # called (from this thread) when AirPlay's sound is seen flowing
+        self.browser_open = False      # Room's Firefox is open: look every 3 s, so its sound moves over quickly
 
     def poke(self):
         """Something changed (AirPlay started, a speaker came or went): look now, and again over the next few seconds
@@ -55,11 +58,11 @@ class Output:
                 self.burst -= 1
                 time.sleep(1.5)
             else:
-                self.poked.wait(20)
+                self.poked.wait(3 if self.browser_open else 20)
             self.poked.clear()
 
     def airplay(self, nodes):
-        """Music (AirPlay, and the Surface's own Spotify speaker) → the Bluetooth speaker when one's connected.
+        """Music (AirPlay, the Surface's own Spotify speaker, Room's Firefox) → the Bluetooth speaker when one's connected.
         Checked against where each stream is *actually* playing (PipeWire's links), not against what was set last:
         a speaker that drops and reconnects, or a stream PipeWire moved back to the Surface, used to stay on the
         Surface's speakers for good because Room thought it had already sent it over."""
@@ -81,19 +84,20 @@ class Output:
                 continue
             who = " ".join(str(p.get(k, "")) for k in ("application.name", "node.name", "application.process.binary")).lower()
             spot = "soloist" in who or "spotify" in who
-            if "airplay" not in who and "shairport" not in who and not spot:
+            fox = "firefox" in who          # the web browser (Settings → Web browser): a video plays where music does
+            if "airplay" not in who and "shairport" not in who and not spot and not fox:
                 continue                    # (Soloist: the Surface's own Spotify speaker, same rule as AirPlay)
             sid = n["id"]
             if (n.get("info") or {}).get("state") != "running":
                 continue                    # paused / idle: nothing to move (it's checked again when it plays)
-            if not spot and self.on_airplay_audio:
+            if not spot and not fox and self.on_airplay_audio:
                 self.on_airplay_audio()     # AirPlay's sound is flowing: it's the music source, whatever metadata says
-            if sid not in self.moved and not spot:
+            if sid not in self.moved and not spot and not fox:
                 # a new AirPlay stream starts at full (not Spotify's: its loudness is Spotify's volume): PipeWire may have kept a lower level for this app from an
                 # old duck that was never undone (how AirPlay got quiet)
                 subprocess.run(["wpctl", "set-volume", str(sid), "1.0"], timeout=3,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            name = "Spotify" if spot else "AirPlay"
+            name = "Spotify" if spot else "Firefox" if fox else "AirPlay"
             if bt:
                 if bt_id in links.get(sid, set()):
                     self.moved[sid] = bt

@@ -16,14 +16,19 @@ Item {
     property bool running: true
 
     property real t: 0
-    property real acc: 0
+    property double last: 0
     signal ticked()                  // each step (the background keeps time with it on music standby)
-    FrameAnimation {                 // 30 a second (every other frame): smooth for slow movement, half the drawing
+    // 30 steps a second, each moved on by the real time since the last (so the speed is exact). A plain timer, not
+    // a FrameAnimation: while one of those runs, Qt redraws the screen at the display's full 60 a second even when
+    // the step is skipped — music standby was drawn twice as often as it changed.
+    Timer {
+        interval: 33; repeat: true
         running: w.running && w.visible
+        onRunningChanged: w.last = 0
         onTriggered: {
-            w.acc += Math.min(0.1, frameTime)
-            if (currentFrame % 2) return
-            w.t += w.acc; w.acc = 0
+            var now = Date.now() / 1000
+            w.t += w.last > 0 ? Math.min(0.1, now - w.last) : 0
+            w.last = now
             w.ticked()
         }
     }

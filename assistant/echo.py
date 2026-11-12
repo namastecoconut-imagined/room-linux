@@ -8,10 +8,6 @@ less music under it. It learns while only music is playing and holds still while
 
 Partitioned-block frequency-domain NLMS (overlap-save): 8 ms blocks, a 200 ms echo tail; a bulk delay (Bluetooth
 plays ~300 ms late) is taken off the reference first.
-
-It rests while nothing plays: once a second and a bit of silence has gone through it, its estimate is zero and the
-mic would come out exactly as it went in, so it hands the mic straight on — it was half the assistant's load in a
-quiet room (measured with scripts/assistant-profile.sh). It picks up again the moment anything plays.
 """
 import numpy as np
 
@@ -100,26 +96,11 @@ class EchoCanceller:
         self.next_delay = 5.0
         self.said = 0.0
         self.removed = []
-        self.silent = 0                                    # samples since anything played
-        self.rested = False
-
-    QUIET = 1e-4                                           # what's playing is silence below this (−80 dB)
 
     def process(self, mic: np.ndarray, ref: np.ndarray) -> np.ndarray:
         """One frame of mic and of what's playing (float, in step) → the mic with it taken out (int16)."""
         m = len(mic)
         self.clock += m / RATE
-        # Nothing played for longer than the delay line (1 s) plus the filter's tail (200 ms): what it would take out
-        # is zero, so the mic is handed straight on. Its learning (the echo path) is kept for when music comes back.
-        if float(np.max(np.abs(ref))) < self.QUIET:
-            self.silent += m
-            if self.silent > len(self.hist) + self.aec.B * self.aec.P:
-                if not self.rested:
-                    self.rested = True
-                    print("[assistant] echo: resting while nothing plays (it picks up the moment anything does)", flush=True)
-                return (np.clip(mic, -1, 1) * 32767).astype(np.int16)
-        else:
-            self.silent = 0
         self.hist = np.concatenate([self.hist[m:], ref])
         d = self.hist[len(self.hist) - m - self.shift:len(self.hist) - self.shift]
         B = self.aec.B

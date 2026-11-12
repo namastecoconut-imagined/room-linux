@@ -55,14 +55,6 @@ if [ -f ~/.config/systemd/user/room-assistant.service ] && [ ! -f "$D/perf.conf"
   systemctl --user daemon-reload
 fi
 command -v powerprofilesctl >/dev/null && [ "$(powerprofilesctl get 2>/dev/null)" = performance ] && powerprofilesctl set balanced 2>/dev/null || true
-# hand gestures: the IR camera's tools, and the IR-lights helper (scripts/irlight.sh, needs the password once — so
-# room-update only reminds; and again when the helper itself has changed, since the copy that runs is root's own)
-command -v media-ctl >/dev/null || echo "  (gestures need the IR camera's tools — run: sudo dnf install -y v4l-utils)"
-if [ ! -e /run/room-irlight.sock ]; then
-  echo "  (gestures need the IR-lights helper — run: bash $HERE/scripts/irlight.sh)"
-elif ! cmp -s "$HERE/scripts/irlight-helper.py" /usr/local/libexec/room-irlight; then
-  echo "  (the IR-lights helper has changed — run: bash $HERE/scripts/irlight.sh)"
-fi
 # Room's cool power profile (scripts/cool.sh, needs the password once — so room-update only reminds)
 command -v tuned-adm >/dev/null && ! tuned-adm active 2>/dev/null | grep -q ': room$' && \
   echo "  (the Surface isn't on Room's cool power profile — run: bash $HERE/scripts/cool.sh)" || true

@@ -10,9 +10,9 @@ CLEAN=$([ "${1:-}" = clean ] && echo 1 || echo 0)
 
 # ---------------------------------------------------------------- the list
 # packages installed for an experiment (the dnf command line that installed each)
-# (v4l-utils, installed for the IR camera tests, is Room's own since gestures: install.sh puts it on)
 PACKAGES=(
   "libcamera-tools"     # 12 Nov · the camera tests (cam)
+  "v4l-utils"           # 12 Nov · the IR camera tests (media-ctl, v4l2-ctl)
   "i2c-tools"           # 12 Nov · the IR lights test (i2ctransfer, for ir-capture.sh lit)
 )
 # files (and folders) an experiment wrote in your home folder

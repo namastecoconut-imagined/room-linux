@@ -17,11 +17,6 @@ The Room panel as a native Qt Quick app. The screens are drawn on the GPU, and t
    The panel, AirPlay ("Room"), Spotify Connect ("Room", asks for the Soloist key once), the voice assistant,
    never-suspend, the sound fixes, and the `room-update` / `room-kiosk` commands.
 5. **Kiosk** (just the panel, no desktop; signs in by itself): `room-kiosk on`, restart. Back to GNOME: `room-kiosk off`.
-6. **Hand gestures** (optional): `bash ~/room/scripts/irlight.sh` (your password once). It sets up the IR-lights
-   helper, the one thing Room does as root: switching the IR lights beside the camera on and off. While music plays
-   or is paused, a swipe right to left is next, left to right previous, and a palm held up still plays or pauses
-   (`room/eyes.py`; a small warm light at the top of the screen while the camera watches). `irlight.sh remove` takes
-   it off; `"gestures": {"enabled": false}` in config.json turns gestures off.
 
 What runs (all user services, the same under GNOME and in kiosk mode):
 
@@ -31,7 +26,6 @@ What runs (all user services, the same under GNOME and in kiosk mode):
 | `room-assistant` | "Alexa" (`assistant/`) | `journalctl --user -u room-assistant -f` |
 | `room-airplay` | AirPlay receiver (shairport-sync) | `journalctl --user -u room-airplay -f` |
 | `room-spotify` | Spotify Connect speaker (Soloist) | `journalctl --user -u room-spotify -f` |
-| `room-irlight` (system) | the IR-lights helper, run once per request | `journalctl -u 'room-irlight@*'` |
 
 Room itself doesn't restart on its own (a crash stays visible); the others do.
 Versions are locked: `requirements.lock` (the panel) and `assistant/requirements.lock` (the assistant) — installs
@@ -75,7 +69,6 @@ journalctl --user -u room -f                                          # live log
 | `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
 | `room/mic.py` | how loud the room is (screen wake; while music plays, the background's swell) |
-| `room/eyes.py` | hand gestures for the music, with the IR camera (its lights through `scripts/irlight-helper.py`) |
 | `room/wiz.py` | WiZ bulbs (UDP 38899) |
 | `room/wifi.py` · `room/bluetooth.py` | Wi-Fi through NetworkManager (`nmcli`) · Bluetooth through `bluetoothctl` |
 | `room/spotify.py` | Spotify Web API (shares the iPhone panel's login) |

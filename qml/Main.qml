@@ -221,7 +221,6 @@ Window {
         transform: Translate { x: win.shiftX; y: win.shiftY }
         visible: !win.asleep
         VolumeHud { backdrop: stage }
-        GestureSign { backdrop: stage }      // what a hand gesture did, and the IR camera's light
     }
 
     // screen off (room/sleep.py: a quiet room on standby, or the power button): black, backlight off; a touch

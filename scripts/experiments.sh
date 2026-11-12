@@ -22,7 +22,7 @@ FILES=(
   "$HOME/room-camera-back.jpg"    # 12 Nov · camera-test.sh back
   "$HOME/room-ir.jpg"             # 12 Nov · ir-capture.sh
   "$HOME/room-ir-lit.jpg"         # 12 Nov · ir-capture.sh lit
-  "$HOME/.cache/room-experiments" # 12 Nov · py-spy, for assistant-profile.sh (a folder)
+  "$HOME/.cache/room-experiments" # 12 Nov · py-spy, for the assistant profile (a folder; the script is gone)
 )
 # services an experiment added to your user (none)
 SERVICES=()
@@ -41,7 +41,7 @@ ROOM_PIP=("numpy")                # 12 Nov · gestures (reverted)
 # Not on the Surface — on the Mac: ~/Downloads/room-camera-front.jpg, ~/Downloads/room-ir.jpg, ~/Downloads/room-ir-lit.jpg
 # (the camera and IR photos), and ~/Downloads/RoomPanel/Kasero.otf (the copy for installing the font; the font itself
 # lives in ~/.config/room/fonts — keep that).
-# The camera, IR and gesture scripts left the repo when that experiment ended (12 Nov). Gone by themselves at the
+# The camera, IR and gesture scripts, and assistant-profile.sh, left the repo when those experiments ended (12 Nov). Gone by themselves at the
 # next restart: the IR camera's pipeline link and the i2c-dev kernel module.
 
 # ---------------------------------------------------------------- packages

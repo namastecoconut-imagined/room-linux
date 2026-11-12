@@ -12,6 +12,7 @@ Built on step 3 and 4's measurements on this Surface:
 Wake word: Room's own "Alexa" (assistant/models/alexa.onnx, LiveKit WakeWord); openWakeWord's stock "alexa" only
 if that's missing.
 """
+import collections
 import io
 import json
 import os
@@ -262,6 +263,53 @@ class Wake:
         self.m.reset()
 
 
+# ---------------------------------------------------------------- the wake word rests in a quiet room
+class Rest:
+    """In a quiet room the "Alexa" listener rests: nothing to hear, nothing to score. It listens again at the first
+    sound above the room's own hum — first to the last PRE seconds (kept all along), so the start of "Alexa" isn't
+    lost — and carries on until HOLD seconds after the last sound. A room that's never quiet (TV, music, talk: any
+    sound above CEIL) is listened to all the time, exactly as before. The bars are low on purpose: listening when
+    it didn't need to only costs a moment of work; resting through a soft "Alexa" would cost you the command.
+
+    Time is counted in frames heard, not by the clock, so a recording replayed through it (bench/rest_eval) behaves
+    exactly as the live mic does. "assistant": {"wakeRest": false} in config.json turns it off."""
+    MARGIN = 5.0            # dB above the quiet room's hum that counts as a sound
+    CEIL = -42.0            # any sound louder than this counts, whatever the hum (a loud room never rests)
+    HOLD = 2.0              # s it keeps listening after the last sound
+    PRE = 2.5               # s kept from before the sound
+
+    def __init__(self):
+        self.floor = -50.0                  # the quiet room's hum (dB): follows it down fast, up slowly
+        self.t = 0.0                        # seconds of sound heard
+        self.until = 0.0                    # listening until then
+        self.pre = collections.deque(maxlen=int(self.PRE * RATE / FRAME))
+        self.frames = self.listened = 0     # for the log
+
+    def again(self):
+        """Listening starts over (after an answer): nothing from before carries into it — the last "Alexa" is still
+        in what was kept, and hearing it again would wake it twice. It listens for a moment first, for a follow-up."""
+        self.pre.clear()
+        self.until = self.t + self.HOLD
+
+    def step(self, f):
+        """One 80 ms frame → (the frames to score now, whether to start the wake word afresh first)."""
+        self.t += FRAME / RATE
+        rms = float(np.sqrt(np.mean((f.astype(np.float32) / 32768) ** 2)))
+        db = 20 * np.log10(max(rms, 1e-6))
+        self.floor += (db - self.floor) * (0.3 if db < self.floor else 0.005)
+        out, fresh = [], False
+        if db > min(self.floor + self.MARGIN, self.CEIL):
+            if self.t >= self.until:        # it was resting: the moments just before first
+                out, fresh = list(self.pre), True
+            self.until = self.t + self.HOLD
+        self.pre.append(f)
+        if self.t < self.until:
+            out.append(f)
+            self.listened += 1
+        self.frames += 1
+        return out, fresh
+
+
 # ---------------------------------------------------------------- speech or not (Silero VAD, ONNX)
 class VAD:
     def __init__(self):
@@ -338,8 +386,10 @@ class Listener:
     PRE = 0.15              # audio kept from just before the request starts (not the "Alexa" before it)
     TAIL = 0.25             # the end of "Alexa" itself is still in the first moment: not the start of a request
 
-    def __init__(self, mic: Mic, wake: Wake, vad: VAD):
+    def __init__(self, mic: Mic, wake: Wake, vad: VAD, rest: bool = True):
         self.mic, self.wake, self.vad = mic, wake, vad
+        self.rest = Rest() if rest else None   # the wake word rests in a quiet room (Rest)
+        self.rest_said = time.time()
         self.last_wake = 0.0
         self.tap = threading.Event()        # a tap on the panel: listen now, no wake word needed
         self.abort = threading.Event()      # stop listening to this request (a tap to cancel)
@@ -350,6 +400,8 @@ class Listener:
 
     def wait_wake(self) -> float:
         best, loud, since = 0.0, 0.0, time.time()
+        if self.rest:
+            self.rest.again()
         while True:
             if self.tap.is_set():
                 self.tap.clear()
@@ -360,17 +412,28 @@ class Listener:
                 if time.time() - since > 3:
                     log("no sound from the mic"); since = time.time()
                 continue
-            s = self.wake.score(f)
-            if self.verbose:
+            frames, fresh = self.rest.step(f) if self.rest else ([f], False)
+            if fresh:
+                self.wake.reset()
+            if self.rest and time.time() - self.rest_said > 600:
+                r = self.rest
+                log(f"wake word: listened {100 * r.listened / max(1, r.frames):.0f} % of the last "
+                    f"{(time.time() - self.rest_said) / 60:.0f} min — rested in the quiet the rest (room hum {r.floor:.0f} dB)")
+                r.frames = r.listened = 0; self.rest_said = time.time()
+            s = 0.0
+            for g in frames:
+                s = self.wake.score(g)
+                if s >= self.wake.threshold and time.time() - self.last_wake > 2.0:
+                    self.last_wake = time.time()
+                    self.wake.reset()
+                    return s
                 best = max(best, s)
+            if self.verbose:
                 loud = max(loud, float(np.sqrt(np.mean((f.astype(np.float32) / 32768) ** 2))))
                 if time.time() - since > 2:
-                    print(f"   mic {20 * np.log10(max(loud, 1e-6)):6.1f} dB · best \"Alexa\" score {best:.2f}", flush=True)
+                    print(f"   mic {20 * np.log10(max(loud, 1e-6)):6.1f} dB · best \"Alexa\" score {best:.2f}"
+                          + (" · resting" if self.rest and not frames else ""), flush=True)
                     best, loud, since = 0.0, 0.0, time.time()
-            if s >= self.wake.threshold and time.time() - self.last_wake > 2.0:
-                self.last_wake = time.time()
-                self.wake.reset()
-                return s
 
     def voice_level(self, f, p) -> float:
         """How loud *your voice* is, 0…1, for the screen. Only speech counts (Silero's probability gates it), and only

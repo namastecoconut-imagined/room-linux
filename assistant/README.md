@@ -29,4 +29,6 @@ What it runs on (each chosen by a test on this Surface):
 
 Files: `__main__.py` the loop · `listen.py` mic, wake word, end of speech, Sarvam · `brain.py` Claude · `tts.py` +
 `player.py` the voice · `echo.py` echo cancelling · `duck.py` music down/up · `link.py` the line to Room (`room/voice.py` on the other end).
-Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "echoCancel": true, "enabled": true}`.
+Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "echoCancel": true, "wakeRest": true, "enabled": true}`.
+`wakeRest`: the "Alexa" listener rests in a quiet room and listens again at the first sound, hearing the 2.5 s before it
+first (listen.Rest); `false` keeps it listening all the time. `bench/rest_eval` checks it against your recorded "Alexa"s.

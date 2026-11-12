@@ -6,7 +6,7 @@
 
 Everything it does is logged ([assistant] lines: journalctl --user -u room-assistant). Settings in config.json:
 "anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.7, "bargeIn": true,
-"bargeThreshold": 0.6}.
+"bargeThreshold": 0.6, "wakeRest": true}.
 """
 import json
 import os
@@ -43,7 +43,8 @@ class Assistant:
         self.computer = Computer(cfg.get("computer"))
         self.link = Link(on_command=self.command)
         self.mic = Mic(float(a.get("micLevel", 0.65)), echo=a.get("echoCancel", True) is not False)
-        self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
+        # the wake word rests in a quiet room and listens again at the first sound (listen.Rest; "wakeRest": false = always)
+        self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD(), rest=a.get("wakeRest", True) is not False)
         if a.get("endQuiet"):
             self.ears.END_QUIET = float(a["endQuiet"])
         self.voice = Voice(voice=a.get("voice", "af_heart"), boost=a.get("cpuBoost", True) is not False)

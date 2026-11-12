@@ -6,7 +6,7 @@ Item {
     property string name
     property real size: 24
     property color color: Theme.tx
-    property bool filled: name === "play" || name === "pause" || name === "next" || name === "prev" || name === "heartOn"
+    property bool filled: name === "play" || name === "pause" || name === "next" || name === "prev" || name === "heartOn" || name === "shiftOn"
     width: size; height: size
     readonly property var paths: ({
         "bulb": "M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z",
@@ -35,6 +35,10 @@ Item {
         "globe": "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zM3.5 9h17M3.5 15h17M12 3c-2.4 2.6-3.6 5.6-3.6 9s1.2 6.4 3.6 9M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9",
         "set": "M4 7h10M18 7h2M4 17h4M12 17h8M18 7a2 2 0 1 1-4 0a2 2 0 1 1 4 0M12 17a2 2 0 1 1-4 0a2 2 0 1 1 4 0",
         "chev": "M9 5l7 7-7 7",
+        "shift": "M12 4l8 8h-4.5v7h-7v-7H4z",
+        "shiftOn": "M12 4l8 8h-4.5v7h-7v-7H4z",
+        "bksp": "M9 5h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7zM12 9.5l5 5M17 9.5l-5 5",
+        "kbdown": "M6 9l6 6 6-6",
         "dim": "M12 8a4 4 0 1 0 0 8 4 4 0 1 0 0-8zM12 3v1.5M12 19.5V21M3 12h1.5M19.5 12H21M5.6 5.6l1 1M17.4 17.4l1 1M5.6 18.4l1-1M17.4 6.6l1-1"
     })
     Shape {

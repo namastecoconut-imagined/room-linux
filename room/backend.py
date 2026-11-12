@@ -6,6 +6,7 @@ from PySide6.QtCore import Property, QObject, Qt, QTimer, Signal, Slot
 
 from .airplay import AirPlay
 from .bluetooth import Bluetooth
+from .wifi import Wifi
 from .display import Display
 from .calendar import Calendar
 from .lights import Lights
@@ -100,6 +101,8 @@ class Room(QObject):
         self.alertChanged.connect(lambda: self.alert and self.alert.get("kind") and self.sleep.wake("alert"))
         self.bt = Bluetooth()
         self.bt.changed.connect(self.settingsChanged)
+        self.wifi = Wifi()
+        self.wifi.changed.connect(self.settingsChanged)
         self._kiosk = False
         self._desktop = False
         self._desktop_note = ""
@@ -117,10 +120,17 @@ class Room(QObject):
     def start(self):
         self._things.start()
         if self.demo:
-            self.bt.devices = demo.BLUETOOTH; self.settingsChanged.emit()
+            self.bt.devices = demo.BLUETOOTH; self.wifi.networks = [dict(n) for n in demo.WIFI]
+            self.wifi.device, self.wifi.ready = "wlp1s0", True
+            if os.environ.get("ROOM_DEMO_WIFI") == "joining":
+                self.wifi.busy["Airtel_Xstream_4410"] = "Joining…"
+            elif os.environ.get("ROOM_DEMO_WIFI") == "wrong":
+                self.wifi.note = "Couldn't join — wrong password?"
+            self.settingsChanged.emit()
             return
         self._display.start()
         self.bt.refresh()
+        self.wifi.refresh()
         # the panel session says so itself (kiosk.sh); the login manager's note is the fallback
         self._kiosk = os.environ.get("XDG_CURRENT_DESKTOP") == "Room" or self._session() == "room-panel"
         import shutil
@@ -811,6 +821,26 @@ class Room(QObject):
     def btStop(self):
         if not self.demo:
             self.bt.stop_search()
+
+    @Property("QVariantMap", notify=settingsChanged)
+    def wifiState(self):
+        """Wi-Fi: radio, device, searching, note, current (the network it's on), networks."""
+        return self.wifi.snapshot()
+
+    @Slot()
+    def wifiSearch(self):
+        if not self.demo:
+            self.wifi.search()
+
+    @Slot(str, str)
+    def wifiJoin(self, ssid, password):
+        if not self.demo:
+            self.wifi.join(ssid, password)
+
+    @Slot(str)
+    def wifiForget(self, ssid):
+        if not self.demo:
+            self.wifi.forget(ssid)
 
     @Slot(str)
     def btPair(self, mac): self.bt.pair(mac)

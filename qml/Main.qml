@@ -33,7 +33,7 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" || startScreen.indexOf("setw") === 0 || startScreen.indexOf("setj") === 0 ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
@@ -152,6 +152,15 @@ Window {
             onClose: { win.voiceUp = false }
             onGo: (where, arg) => { if (where === "room") win.roomName = arg; win.screen = where }
             onTouched: if (!win.voiceBusy) voiceHide.restart()
+        }
+        // the on-screen keyboard: up while a text box is being typed in (the Wi-Fi password)
+        Keyboard {
+            sink: stage
+            allowed: room.kiosk && !win.alerting && !win.voiceUp && !win.standbyOn
+            target: {
+                var f = win.activeFocusItem
+                return f && typeof f.insert === "function" && f.cursorPosition !== undefined && !f.readOnly ? f : null
+            }
         }
         // (checks) where the touch screen doesn't respond
         Repeater {

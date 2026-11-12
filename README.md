@@ -59,7 +59,8 @@ journalctl --user -u room -f                                          # live log
 | `qml/ClockView.qml` | the Clock screen: next alarm, timers, alarms, the alarm editor sheet |
 | `qml/WeatherView.qml` | the Weather screen: now, the rain to expect, the next 12 hours as one line, three days |
 | `qml/RemindersView.qml` | the Reminders screen: two columns (tap to tick, hold to delete); new ones are asked for (the assistant) |
-| `qml/SettingsView.qml` | the Settings screen: brightness, Bluetooth, web browser / desktop / shut down (asks first) |
+| `qml/SettingsView.qml` | the Settings screen: brightness, Wi-Fi (join with a password), Bluetooth, web browser / desktop / shut down (asks first) |
+| `qml/Keyboard.qml` | the on-screen keyboard (the Wi-Fi password): rises when a text box is typed in, lifts the sheet above it |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `qml/VoiceOverlay.qml` + `shaders/horizon.frag` | the assistant over the top band: the light line, your words, the answer, buttons under the line |
 | `qml/VoiceCard.qml` · `qml/Words.qml` | the card beside an answer (weather, forecast, air, timer, music, schedule, alarm, lights) · words that come in one by one |
@@ -67,6 +68,7 @@ journalctl --user -u room -f                                          # live log
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
 | `room/mic.py` | how loud the room is (screen wake; while music plays, the background's swell) |
 | `room/wiz.py` | WiZ bulbs (UDP 38899) |
+| `room/wifi.py` · `room/bluetooth.py` | Wi-Fi through NetworkManager (`nmcli`) · Bluetooth through `bluetoothctl` |
 | `room/spotify.py` | Spotify Web API (shares the iPhone panel's login) |
 | `room/weather.py` · `room/calendar.py` | Open-Meteo, Google Calendar iCal |
 

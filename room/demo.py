@@ -61,6 +61,13 @@ def fill_things(t):
                    "sub": "Pasta" if k == "timer" else "Reminder" if k == "reminder" else "Alarm", "at": time.time()}
 
 
+WIFI = [
+    {"ssid": "Jain Home 5G", "signal": 84, "secure": True, "active": True, "saved": True, "uuid": "u1"},
+    {"ssid": "Jain Home", "signal": 71, "secure": True, "active": False, "saved": True, "uuid": "u2"},
+    {"ssid": "Airtel_Xstream_4410", "signal": 52, "secure": True, "active": False, "saved": False, "uuid": ""},
+    {"ssid": "Third Wave Coffee", "signal": 31, "secure": False, "active": False, "saved": False, "uuid": ""},
+    {"ssid": "ACT-Fibernet-2207", "signal": 22, "secure": True, "active": False, "saved": False, "uuid": ""},
+]
 BLUETOOTH = [
     {"mac": "00:11:22:33:44:55", "name": "Marshall Emberton", "kind": "Speaker", "paired": True, "connected": True},
     {"mac": "00:11:22:33:44:56", "name": "JBL Flip 5", "kind": "Speaker", "paired": True, "connected": False},

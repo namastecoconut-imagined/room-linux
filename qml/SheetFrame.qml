@@ -1,6 +1,7 @@
 import QtQuick
-// A sheet that rises from the bottom over the screen dimmed 55 % (room-motion.html's sheet): the alarm editor, a new
-// reminder, "are you sure?". Tap outside to close. Its content goes inside (it's the pane's child).
+// A sheet that rises from the bottom over the screen dimmed 55 % (room-motion.html's sheet): the alarm editor, a Wi-Fi
+// password, "are you sure?". Tap outside to close. Its content goes inside (it's the pane's child). While a text box
+// in it is being typed in, it rises further, so the box sits just above the on-screen keyboard (Keyboard.qml).
 Item {
     id: sf
     width: 1368; height: 912
@@ -9,6 +10,12 @@ Item {
     property real paneH: 912 - 32 - paneY
     default property alias content: pane.data
     signal close()
+    // typing in it: where the pane goes so the box stays above the keys
+    readonly property bool typing: Typing.up && Typing.inside(Typing.target, pane)
+    property real liftTo: paneY
+    onTypingChanged: if (typing) liftTo = Math.min(paneY, Typing.top - 28 - Typing.target.mapToItem(pane, 0, Typing.target.height).y)
+    // closing it puts the keyboard away too
+    onOpenChanged: if (!open && Typing.target && Typing.inside(Typing.target, pane)) Typing.target.focus = false
     visible: scrim.opacity > 0.001
     z: 50
     Rectangle {
@@ -21,7 +28,7 @@ Item {
     }
     Rectangle {
         id: pane
-        x: 44; y: sf.open ? sf.paneY : 960; width: 1280; height: sf.paneH; radius: 26
+        x: 44; y: !sf.open ? 960 : sf.typing ? sf.liftTo : sf.paneY; width: 1280; height: sf.paneH; radius: 26
         Behavior on y { NumberAnimation { duration: Theme.moveMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
         opacity: sf.open ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }

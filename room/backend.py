@@ -73,14 +73,10 @@ class Room(QObject):
         # volume changes reach the speaker at most ~8 a second (the latest one wins): sliding the phone's volume sends
         # a burst of steps — 8 in 4 s, the pattern that once tipped PipeWire over — and each was its own wpctl
         self._vol_want, self._vol_applied = None, 0.0
-        # the phone's AirPlay volume, relative to where the speaker was when the session started: (phone, speaker).
-        # The phone remembers its own AirPlay level for Room and announces it when a session starts — applied as is,
-        # Spotify on the Xiaomi at 15 jumped to 68 the moment AirPlay took over. Now the speaker stays put and the
-        # phone's slider moves it proportionally from there (down to 0, up to 100). Room's own slider/buttons re-set it.
-        self._pv_anchor, self._pv_last = None, None
-        # how far each step of the phone's volume moves the speaker: the iPhone's buttons step ~6 of 100, which at
-        # a low volume was a big jump (12 → 19 on one click); half by default ("airplayVolumeStep" in config.json)
-        self._pv_step = max(0.1, min(1.0, float(self.cfg.get("airplayVolumeStep", 0.5))))
+        # the phone's AirPlay volume IS the speaker's: phone at 70 % → the speaker at 70, every click a full step, like
+        # a HomePod. (From 11 Nov the speaker stayed put when a session started and the phone moved it in half steps
+        # from there — no jump, but the two numbers drifted apart: the phone at 70 had the speaker at 30. Matching
+        # them was chosen over that, so a session starting now takes the phone's level.)
         self._vol_apply = QTimer(self); self._vol_apply.setSingleShot(True); self._vol_apply.timeout.connect(self._apply_sink)
         self.wx.changed.connect(self.weatherChanged)
         self.calendar.changed.connect(self.eventsChanged)
@@ -175,7 +171,6 @@ class Room(QObject):
         # the phone's AirPlay volume moves the speaker (and the slider) too, as before; the slider still sets the
         # speaker directly (AirPlay can't move the phone's volume back)
         self.airplay.volumeSet.connect(self._phone_volume)
-        self.airplay.changed.connect(self._airplay_session)
         self.bt.connectedChanged.connect(self.output.poke)
         # the volume slider works on the speaker the music is on: a Bluetooth speaker when one's connected, otherwise
         # the Surface's own. Looked up off the screen's thread (pw-dump is slow), at start, when a
@@ -568,7 +563,6 @@ class Room(QObject):
         """While the slider is being dragged: the speaker's level, straight away (a local change, no servers)."""
         if self._plays_here():
             self._set_sink(v)
-            self._reanchor(int(v))
 
     @Slot(int)
     def setVolume(self, v):
@@ -578,7 +572,6 @@ class Room(QObject):
         v = max(0, min(100, int(v)))
         if self._plays_here():
             self._set_sink(v)
-            self._reanchor(v)
         else:
             self.spotify.set_volume(v)
 
@@ -610,45 +603,14 @@ class Room(QObject):
             print(f"[room] volume: {v} on {'the Bluetooth speaker' if self._sink[0] != '@' else 'the Surface'}", flush=True)
 
     def _phone_volume(self, v):
-        print(f"[room] AirPlay: the phone's volume is {v}", flush=True)
-        self._pv_last = v
-        if self._pv_anchor is None or not self.airplay.showing:
-            # a session starting (AirPlay wasn't the music here — e.g. Room's Spotify was playing): the phone's level
-            # only becomes the starting point and the speaker stays where it is. (It once asked "is AirPlay playing?",
-            # and a wrong "paused" made every click of the phone's volume do nothing.)
-            here = self._out_volume if self._out_volume is not None else v
-            if self._pv_anchor != (v, here):
-                print(f"[room] AirPlay: the speaker stays at {here} — the phone's {v} is the starting point", flush=True)
-            self._pv_anchor = (v, here)
-            return
-        target = self._phone_mapped(v)
-        self._phone_vol = (target, time.time())
+        """The phone's AirPlay volume (0–100): the speaker the music is on goes to the same number, from the first
+        message of a session on. The phone at zero is silence."""
+        print(f"[room] AirPlay: the phone's volume is {v} — the speaker too", flush=True)
+        v = max(0, min(100, int(v)))
+        self._phone_vol = (v, time.time())
         self._find_sink_soon()
         self._vol_said = 0
-        self._set_sink(target)
-
-    def _phone_mapped(self, v):
-        """The phone's volume → the speaker's: from the session's starting point, each step of the phone moves the
-        speaker by a fraction of it (airplayVolumeStep). The phone at zero is always silence. Reaching 0 or 100 moves
-        the starting point, so coming back the other way responds from the first click."""
-        if v <= 0:
-            self._pv_anchor = (0, 0.0)           # silence — and turning it back up starts from silence
-            return 0
-        pa, sa = self._pv_anchor
-        t = sa + self._pv_step * (v - pa)
-        if t > 100 or t < 0:
-            t = max(0.0, min(100.0, t))
-            self._pv_anchor = (v, t)
-        return round(t)
-
-    def _airplay_session(self):
-        if self._pv_anchor is not None and not self.airplay.active:
-            self._pv_anchor = None             # the session ended: the next one starts from the speaker again
-
-    def _reanchor(self, v):
-        """Room's own slider or buttons set the speaker: the phone's current level now means this."""
-        if self._pv_anchor is not None and self._pv_last is not None:
-            self._pv_anchor = (self._pv_last, v)
+        self._set_sink(v)
 
     def _spotify_full(self):
         """Room's own Spotify plays at full — the speaker's volume is the one that changes. Once, when it starts

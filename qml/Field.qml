@@ -77,7 +77,11 @@ ShaderEffect {
     property real la: lightA;               Behavior on la { NumberAnimation { duration: 2000 } }
     property real dirX: pal.dir[0];           Behavior on dirX { Glide {} }
     property real dirY: pal.dir[1];           Behavior on dirY { Glide {} }
-    property real ampV: pal.amp;              Behavior on ampV { Glide {} }
+    // the cover sets how lively it is, within limits: art.py gives a 14–46 s loop and a 60–220 px drift (a lively,
+    // high-contrast cover moved over three times as fast and as far as a calm one, too fast at this pace); here a
+    // 24–40 s loop and at most 140 px, so covers still differ but none races
+    readonly property real per: Math.max(24, Math.min(40, pal.period || 30))
+    property real ampV: Math.min(140, pal.amp || 100);  Behavior on ampV { Glide {} }
     property bool soft: false           // waking from standby: brighten slowly, evenly
     property real dimV: dim
     Behavior on dimV { NumberAnimation { duration: f.soft ? 1600 : Theme.fadeMs; easing.type: f.soft ? Easing.InOutSine : Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
@@ -126,8 +130,8 @@ ShaderEffect {
         var dt = f.last > 0 ? Math.min(0.25, now - f.last) : 0
         f.last = now
         f.t += dt
-        f.ph = (f.ph + f.pace * dt / Math.max(10, f.pal.period || 30)) % 1000
-        var w = f.pace * dt * 30 / Math.max(10, f.pal.period || 30)                    // the swirl: a lively cover turns it faster
+        f.ph = (f.ph + f.pace * dt / f.per) % 1000
+        var w = f.pace * dt * 30 / f.per                    // the swirl: a lively cover turns it a little faster
         f.rotP = f.turn(f.rotP, w / 9)
         f.orbX = Qt.vector4d(f.turn(f.orbX.x, w / 6), f.turn(f.orbX.y, w / 6.8), f.turn(f.orbX.z, w / 7.6), f.turn(f.orbX.w, w / 8.4))
         f.orbY = Qt.vector4d(f.turn(f.orbY.x, w / 7.5), f.turn(f.orbY.y, w / 8.1), f.turn(f.orbY.z, w / 8.7), f.turn(f.orbY.w, w / 9.3))

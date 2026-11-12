@@ -109,7 +109,7 @@ ShaderEffect {
     property vector4d brP: Qt.vector4d(0, 0, 0, 0)
     readonly property real tau: 2 * Math.PI
     function turn(v, d) { return (v + d) % tau }
-    property real pace: 2.2             // everything moves 2.2× the design's speed (the design's felt too still)
+    property real pace: 3.2             // everything moves 3.2× the design's speed (2.2 still felt slow on the Surface)
     // the swirl: 0.55 while music plays moves the screen as much as the old music standby did (measured: the same
     // share of the picture changing over 6 s; the design's drift alone moved it about half as much); otherwise a
     // gentle 0.25, so the panel never looks frozen

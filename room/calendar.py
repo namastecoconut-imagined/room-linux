@@ -1,5 +1,7 @@
-"""Google Calendar through its secret iCal address (config "icalURL"), refreshed every 10 minutes.
-Recurring events and their exceptions are expanded the same way the iPhone panel does."""
+"""Google Calendar through secret iCal addresses (config "icalURLs", a list — say work and personal — and the older
+single "icalURL"), each refreshed every 10 minutes and shown together. Recurring events and their exceptions are
+expanded the same way the iPhone panel does. The addresses are secrets: they're never printed (scripts/calendar.sh
+adds them to config.json)."""
 import datetime as dt
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -10,13 +12,16 @@ from . import net
 class Calendar(QObject):
     changed = Signal()
 
-    def __init__(self, url: str | None):
+    def __init__(self, urls):
         super().__init__()
-        self.url = (url or "").replace("webcal://", "https://")
+        if isinstance(urls, str):
+            urls = [urls]
+        self.urls = list(dict.fromkeys(u.strip().replace("webcal://", "https://") for u in (urls or []) if u and u.strip()))
+        self.got: dict = {}               # address → its events (the last good download)
         self.events: list[dict] = []
 
     def start(self):
-        if not self.url:
+        if not self.urls:
             return
         self.fetch()
         self.timer = QTimer(self); self.timer.timeout.connect(self.fetch); self.timer.start(10 * 60 * 1000)
@@ -24,10 +29,12 @@ class Calendar(QObject):
         self.tick = QTimer(self); self.tick.timeout.connect(self.changed.emit); self.tick.start(60 * 1000)
 
     def fetch(self):
-        net.request("GET", self.url, self._got, timeout_ms=20000)
+        for i, u in enumerate(self.urls):
+            net.request("GET", u, lambda status, data, u=u, i=i: self._got(u, i, status, data), timeout_ms=20000)
 
-    def _got(self, status, data):
+    def _got(self, url, i, status, data):
         if status != 200:
+            print(f"[room] calendar {i + 1} of {len(self.urls)}: couldn't be fetched ({status})", flush=True)
             return
         try:
             import icalendar
@@ -36,7 +43,7 @@ class Calendar(QObject):
             now = dt.datetime.now().astimezone()
             items = recurring_ical_events.of(cal).between(now - dt.timedelta(hours=12), now + dt.timedelta(days=7))
         except Exception as e:
-            print(f"[room] calendar couldn't be read: {e}")
+            print(f"[room] calendar {i + 1} of {len(self.urls)} couldn't be read: {e}")
             return
         out = []
         for ev in items:
@@ -48,8 +55,14 @@ class Calendar(QObject):
             else:
                 s, e = s.astimezone(), e.astimezone()
             out.append({"title": str(ev.get("SUMMARY", "")).strip() or "Busy", "start": s, "end": e, "allDay": all_day})
-        out.sort(key=lambda x: x["start"])
-        self.events = out
+        self.got[url] = out
+        # all the calendars together; a meeting that's on both (an invite to both) once
+        seen, merged = set(), []
+        for ev in sorted((e for evs in self.got.values() for e in evs), key=lambda x: x["start"]):
+            k = (ev["title"].lower(), ev["start"])
+            if k not in seen:
+                seen.add(k); merged.append(ev)
+        self.events = merged
         self.changed.emit()
 
     def upcoming(self, n=3, clock24=False) -> list[dict]:

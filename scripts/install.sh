@@ -91,6 +91,7 @@ exec bash "$HERE/scripts/update.sh" "\$@"
 UPD
 chmod +x ~/.local/bin/room-update
 ln -sf "$HERE/scripts/kiosk.sh" ~/.local/bin/room-kiosk
+ln -sf "$HERE/scripts/calendar.sh" ~/.local/bin/room-calendar
 # the rest of what room-update keeps in place (sound buffers for AirPlay and Spotify, …), without pulling
 ROOM_NO_PULL=1 bash "$HERE/scripts/update.sh" >/dev/null || true
 

@@ -57,7 +57,8 @@ class Room(QObject):
         self.demo = os.environ.get("ROOM_DEMO") == "1"
         loc = cfg.get("location") or {}
         self.wx = Weather(loc.get("lat", 12.9716), loc.get("lon", 77.5946))
-        self.calendar = Calendar(cfg.get("icalURL"))
+        ical = cfg.get("icalURL") or []
+        self.calendar = Calendar((cfg.get("icalURLs") or []) + ([ical] if isinstance(ical, str) else list(ical)))
         self.lights = Lights(cfg.get("rooms", []), cfg.get("here", ""))
         self.spotify = Spotify(cfg.get("spotify"))
         self.airplay = AirPlay()

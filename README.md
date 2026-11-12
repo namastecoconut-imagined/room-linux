@@ -70,7 +70,7 @@ journalctl --user -u room -f                                          # live log
 | `room/wiz.py` | WiZ bulbs (UDP 38899) |
 | `room/wifi.py` · `room/bluetooth.py` | Wi-Fi through NetworkManager (`nmcli`) · Bluetooth through `bluetoothctl` |
 | `room/spotify.py` | Spotify Web API (shares the iPhone panel's login) |
-| `room/weather.py` · `room/calendar.py` | Open-Meteo, Google Calendar iCal |
+| `room/weather.py` · `room/calendar.py` | Open-Meteo, Google Calendar iCal (several, merged; add one with `room-calendar add`) |
 
 Shaders are precompiled (`*.qsb`). After editing a `.frag`, recompile it:
 `pyside6-qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o shaders/field.frag.qsb shaders/field.frag`

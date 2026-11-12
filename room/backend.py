@@ -236,7 +236,7 @@ class Room(QObject):
                 m["nextUp"] = sp.get("nextUp", [])
                 m["recent"] = sp.get("recent", [])
                 m["context"] = sp.get("context", "")
-                m["canSeek"] = True          # AirPlay can't seek, but Spotify on the phone can — seek through it
+                # (no seeking over AirPlay, even when it's Spotify on the phone: only Room's own Spotify seeks)
                 # AirPlay 2 often sends no progress at all; Spotify always knows where the song is
                 if sp.get("duration"):
                     m["duration"], m["position"], m["at"], m["playing"] = sp["duration"], sp["position"], sp["at"], sp["playing"]
@@ -244,7 +244,7 @@ class Room(QObject):
             if key != getattr(self, "_match_said", None):
                 self._match_said = key
                 print(f"[room] airplay {m.get('title')!r} · spotify {sp.get('title')!r} ({sp.get('device') or 'no device'})"
-                      f" → {'same song: queue, progress and seek from Spotify' if same else 'not the same song'}", flush=True)
+                      f" → {'same song: queue and progress from Spotify' if same else 'not the same song'}", flush=True)
         m.setdefault("nextUp", [])
         m.setdefault("canSeek", m.get("source") != "airplay")
         m["hereDevice"] = (self.spotify.home or "").lower()      # this panel's own Spotify Connect name (Play on)
@@ -762,14 +762,10 @@ class Room(QObject):
 
     @Slot(float)
     def seek(self, s):
-        """Spotify seeks (also when it's Spotify on the phone being AirPlayed here); AirPlay itself has no seek."""
-        if self.music.get("canSeek"):
-            print(f"[room] seek → {int(s) // 60}:{int(s) % 60:02d}, through Spotify"
-                  + (" (the phone's, behind AirPlay)" if self.airplay.showing else ""), flush=True)
+        """Room's own Spotify seeks. Nothing over AirPlay seeks from here — not even Spotify on the phone."""
+        if self.music.get("canSeek") and self.music.get("source") != "airplay":
+            print(f"[room] seek → {int(s) // 60}:{int(s) % 60:02d}, through Spotify", flush=True)
             self.spotify.seek(s)
-            if self.airplay.showing:          # show the new place straight away; the phone confirms it shortly
-                self.airplay.position, self.airplay.at = float(s), time.time()
-                self.musicChanged.emit()
 
     # ---------------------------------------------------------------- Settings: screen, Bluetooth, the desktop
     @Property("QVariantMap", notify=settingsChanged)

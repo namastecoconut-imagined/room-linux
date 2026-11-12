@@ -133,7 +133,8 @@ ShaderEffect {
         f.orbY = Qt.vector4d(f.turn(f.orbY.x, w / 7.5), f.turn(f.orbY.y, w / 8.1), f.turn(f.orbY.z, w / 8.7), f.turn(f.orbY.w, w / 9.3))
         f.brP = Qt.vector4d(f.turn(f.brP.x, w / 5), f.turn(f.brP.y, w / 5.9), f.turn(f.brP.z, w / 6.8), f.turn(f.brP.w, w / 7.7))
         // the swell eases away when the music stops (or the mic is off: the level stops arriving)
-        if (!room.micOn || !f.playing) f.sound *= 0.8
+        if (!room.micOn || !f.playing) { f.soundT = 0; f.sound *= 0.8 }
+        else f.sound += (f.soundT - f.sound) * (f.soundT > f.sound ? 0.3 : 0.12)
         f.ticked()
     }
     Timer {
@@ -145,7 +146,11 @@ ShaderEffect {
     onExternalChanged: last = 0
 
     // ---------------------------------------------------------------- the room's sound
+    // The mic's level arrives 20 times a second; it only sets where the swell is heading (soundT, which the shader
+    // doesn't read). The swell itself (sound, which it does) moves in the background's own steps: changed straight
+    // from the mic, it redrew the screen on a second clock out of step with the first — up to twice as often.
     property real sound: 0
+    property real soundT: 0
     property real floorL: -1
     property real lastL: 0
     Connections {
@@ -155,8 +160,7 @@ ShaderEffect {
             var l = room.level
             f.lastL = l
             if (f.floorL < 0) f.floorL = l; else f.floorL += (l - f.floorL) * (l < f.floorL ? 0.3 : 0.01)
-            var raw = Math.max(0, Math.min(1, (l - f.floorL - 0.1) * 1.5))
-            f.sound += (raw - f.sound) * (raw > f.sound ? 0.3 : 0.12)
+            f.soundT = Math.max(0, Math.min(1, (l - f.floorL - 0.1) * 1.5))
         }
     }
 

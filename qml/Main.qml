@@ -235,6 +235,18 @@ Window {
         MouseArea { anchors.fill: parent; onPressed: room.wakeScreen() }
     }
 
+    // how often the screen is actually drawn, logged once a minute (health.sh shows the latest): drawing is most of
+    // what Room costs the Surface, and two clocks out of step can quietly double it
+    property int framesDrawn: 0
+    onFrameSwapped: framesDrawn++
+    Timer {
+        interval: 60000; running: !windowed; repeat: true
+        onTriggered: {
+            console.log("[room] drawing " + (win.framesDrawn / 60).toFixed(1) + " frames a second · "
+                        + (win.asleep ? "screen off" : win.standbyOn ? (win.musicFace ? "music standby" : "standby") : win.screen))
+            win.framesDrawn = 0
+        }
+    }
     // ROOM_SHOT: save a picture of the screen and quit (used to check builds)
     Timer {
         interval: shotMs; running: shotPath !== ""

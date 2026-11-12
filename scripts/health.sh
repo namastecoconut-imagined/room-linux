@@ -87,6 +87,8 @@ echo "  $([ "${p:4:1}" = r ] && echo ✓ || echo ✗) power meter: the tracker m
 
 echo; echo "== Working (sit still for $SECS s — no touching)"
 python3 "$HERE/scripts/watch.py" --report "$SECS"
+fr=$(journalctl -b -q --no-pager "_SYSTEMD_USER_UNIT=room.service" -g "frames a second" 2>/dev/null | tail -1 | sed 's/.*\[room\] //')
+echo "  Screen: ${fr:-not logged yet (Room logs it once a minute)}"
 echo "  Disk: $(df -h / | awk 'NR==2 {print $3 " used of " $2 " (" $5 ")"}')"
 OLD="$UHOME/room-watch.log"
 if [ -s "$OLD" ]; then

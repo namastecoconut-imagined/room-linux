@@ -30,42 +30,42 @@ Item {
     }
 
     // ---------------------------------------------------------------- to read
+    // Kasero only at headline size (its stencil cuts are made for big type); the rest in Inter Tight and mono
     Rise {
         order: 0
-        x: 44; y: 126; width: 640; height: 240
+        x: 44; y: 126; width: 660; height: 300
         Mono { text: "Reminders"; color: Theme.w62 }
+        // none left: a headline, then what it means
+        Serif { y: 40; visible: rv.open_.length === 0; text: "All clear"; font.pixelSize: 132; tracking: -0.03 }
+        Text { y: 40 + 132 + 20; visible: rv.open_.length === 0; text: "Nothing to remember"; color: Theme.w62; font.pixelSize: 30; font.family: Theme.face; renderType: Text.QtRendering }
+        // some: the count, big, and what it counts
         Row {
-            y: 26
-            Serif { id: cnt; text: rv.open_.length ? rv.open_.length : "Nothing"; font.pixelSize: rv.open_.length ? 150 : 96 }
-            Serif {
-                text: rv.open_.length ? " to remember" : " to remember"; font.pixelSize: 52
-                css: false; anchors.baseline: cnt.baseline; transform: Translate { y: cnt.shift }
-            }
+            y: 26; visible: rv.open_.length > 0; spacing: 20
+            Serif { id: cnt; text: rv.open_.length; font.pixelSize: 150 }
+            Text { anchors.baseline: cnt.baseline; transform: Translate { y: cnt.shift }
+                   text: "to remember"; color: "white"; font.pixelSize: 34; font.family: Theme.face; renderType: Text.QtRendering }
         }
-        Mono { y: 26 + 150 + 12; visible: rv.dueToday.length > 0; color: Theme.timer; text: rv.dueToday.length + " due today" }
+        Mono { y: 26 + 150 + 18; visible: rv.open_.length > 0 && rv.dueToday.length > 0; color: Theme.timer; text: rv.dueToday.length + " due today" }
     }
-    // how to add one: ask
+    // how to add one: ask — the part you'd change is white, the pattern dimmed
     Rise {
         order: 1
-        x: 1324 - 640; y: 126; width: 640; height: 300       // each example on one line, even in Kasero (a wide face)
+        x: 764; y: 126; width: 560; height: 300
+        Mono { text: "To add one, ask Alexa"; color: Theme.w62 }
         Column {
-            width: parent.width; spacing: 10
-            Mono { width: parent.width; horizontalAlignment: Text.AlignRight; color: Theme.w62; text: "To add one, ask Alexa" }
+            y: 40; width: parent.width; spacing: 14
             Repeater {
-                model: ["“Remind me to water the plants at six”", "“Remind me to call the bank tomorrow”"]
-                Serif {
-                    width: parent.width; horizontalAlignment: Text.AlignRight; wrapMode: Text.WordWrap
-                    css: false; height: implicitHeight
-                    text: modelData; font.pixelSize: 34; lineHeight: 1.05
+                model: ["water the plants at six", "call the bank tomorrow"]
+                Text {
+                    width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.StyledText
+                    color: "white"; font.pixelSize: 30; font.family: Theme.face; renderType: Text.QtRendering
+                    text: "<font color=\"#8cffffff\">“Remind me to</font> " + modelData + "<font color=\"#8cffffff\">”</font>"
                 }
             }
-            Item { width: 1; height: 4 }
-            Mono {
-                width: parent.width; horizontalAlignment: Text.AlignRight; wrapMode: Text.WordWrap; lineHeight: 1.6
-                size: 12; color: Theme.w62
-                text: "Or tap + Add a reminder and just say what and when. Kept on this panel only: when one's due, Room "
-                      + "chimes and keeps it on standby until you tick it off."
-            }
+        }
+        Mono {
+            y: 40 + 2 * 50 + 22; width: parent.width; wrapMode: Text.WordWrap; lineHeight: 1.6; size: 12; color: Theme.w62
+            text: "Or tap + Add a reminder and just say what and when. When one's due, Room chimes and keeps it on standby until you tick it off."
         }
     }
 
@@ -75,7 +75,7 @@ Item {
         x: 44; y: 524; width: 1280; height: 360
         Mono { text: "All reminders"; color: Theme.w62 }
         Mono { anchors.right: parent.right; visible: rv.list.length > 0; text: "Tap to tick off · hold to delete"; color: Theme.w62 }
-        Mono { y: 46; visible: rv.list.length === 0; text: "Nothing yet · tap + Add a reminder and say it, or say “Alexa, remind me to …”"; color: Theme.w62 }
+        Text { y: 46; visible: rv.list.length === 0; text: "New reminders show up here."; color: Theme.w42; font.pixelSize: 26; font.family: Theme.face; renderType: Text.QtRendering }
         GridView {
             id: grid
             y: 36; width: 1280 + 24; height: 192

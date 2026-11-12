@@ -11,6 +11,13 @@ Text {
     color: "white"
     font.family: Theme.serif
     font.pixelSize: 84
+    // Kasero sets loose, so a little tighter at every size. Tracking is a share of the size (the clock asks for
+    // more); set here rather than bound, since the spacing is part of the font it depends on
+    property real tracking: Theme.serif === "Kasero" ? -0.02 : 0
+    function track() { var w = tracking * font.pixelSize; if (Math.abs(font.letterSpacing - w) > 0.01) font.letterSpacing = w }
+    onTrackingChanged: track()
+    onFontChanged: track()
+    Component.onCompleted: track()
     // drawn from the glyphs' own curves: Kasero's hairlines (the stencil cuts, "/", "°") fell apart as the usual
     // distance fields — a dashed degree sign, a missing slash
     renderType: Text.CurveRendering

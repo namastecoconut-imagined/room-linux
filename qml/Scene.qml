@@ -535,7 +535,7 @@ Item {
         Serif {
             id: clockT
             text: Theme.clock(sc.date, room.clock24)
-            font.pixelSize: 250; font.letterSpacing: -7.5
+            font.pixelSize: 250; tracking: -0.03
         }
     }
 

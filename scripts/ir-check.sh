@@ -18,7 +18,7 @@ done
 
 echo; echo "== Drivers"
 for m in ov7251 ov5693 ov8865 ipu3_cio2 ipu3_imgu intel_skl_int3472_discrete intel_skl_int3472_tps68470; do
-  if lsmod | grep -q "^$m "; then echo "  ✓ $m loaded"; else echo "  · $m not loaded"; fi
+  if [ -d "/sys/module/$m" ]; then echo "  ✓ $m loaded"; else echo "  · $m not loaded"; fi
 done
 echo "  sensors the kernel bound:"
 for n in /sys/bus/i2c/devices/*/name; do

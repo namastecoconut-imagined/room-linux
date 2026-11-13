@@ -70,7 +70,7 @@ Window {
     readonly property bool alerting: room.alert && room.alert.kind !== undefined
     onAlertingChanged: if (alerting) wake()
     function wake() { lastTouch = Date.now() / 1000; standbyOn = false }
-    function enterStandby() { screen = "home"; standbyOn = true }
+    function enterStandby() { app = ""; screen = "home"; standbyOn = true }     // (an open app closes: nothing left running)
 
     // burn-in care: the slow drift (see the stage) and the nightly refresh
     property real orbitAmp: standbyOn ? 28 : 6

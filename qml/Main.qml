@@ -47,6 +47,15 @@ Window {
     readonly property bool lateNight: nightHour(new Date(now * 1000).getHours())
     readonly property bool dayTime: { var h = new Date(now * 1000).getHours(); return h >= 7 && h < 18 }
     property bool sheetOpen: false        // speaker picker / library over the player
+    // an app (apps/<name>/App.qml — Home → Apps): loaded when it's opened, over everything else, and thrown away
+    // when it's closed, so nothing of it runs otherwise. While one is open Room's own screens aren't drawn.
+    property string app: startScreen.indexOf("yt-") === 0 ? "youtube" : ""
+    onAppChanged: openApp()
+    function openApp() {
+        if (app === "") { appL.source = ""; return }
+        appL.setSource(Qt.resolvedUrl("../apps/" + app + "/App.qml"),
+                       { start: startScreen.indexOf("yt-") === 0 ? startScreen.slice(3) : "" })
+    }
 
     // the voice assistant (its own program, assistant/): up over everything the moment it listens, a few seconds
     // after it's done it goes, back to where you were
@@ -102,7 +111,7 @@ Window {
     }
     onStandbyOnChanged: room.setScreenState(standbyOn, standbyOn && lateNight)
     onLateNightChanged: room.setScreenState(standbyOn, standbyOn && lateNight)
-    Component.onCompleted: room.setScreenState(standbyOn, standbyOn && lateNight)
+    Component.onCompleted: { room.setScreenState(standbyOn, standbyOn && lateNight); if (app !== "") openApp() }
 
     Rectangle { anchors.fill: parent; color: "black" }
     // screen pixels per stage pixel (2 on the Surface): pictures drawn into layers use it to stay sharp
@@ -121,6 +130,7 @@ Window {
         // Home, the player, standby and the Room screen: one scene (the redesign — things travel between them)
         Scene {
             id: scene
+            visible: appL.status !== Loader.Ready          // an app is open: Room's screens aren't drawn under it
             hush: win.voiceUp && voiceO.mode !== "gone"
             view: win.standbyOn ? "standby" : win.screen === "home" ? "home" : win.screen === "music" ? "player"
                   : win.screen === "room" ? "room" : win.screen === "clock" ? "clock" : win.screen === "weather" ? "weather"
@@ -130,7 +140,7 @@ Window {
             night: win.lateNight
             dayTime: win.dayTime
             musicFace: win.musicFace
-            sheet: startScreen === "musiclib" ? "library" : startScreen === "musicspk" ? "speakers" : startScreen === "scenes" ? "scenes" : ""
+            sheet: startScreen === "musiclib" ? "library" : startScreen === "musicspk" ? "speakers" : startScreen === "scenes" ? "scenes" : startScreen === "apps" ? "apps" : ""
             onSheetChanged: win.sheetOpen = sheet !== ""
             onOpenPlayer: win.screen = "music"
             onOpenRoom: (name) => { win.roomName = name; win.screen = "room" }
@@ -139,6 +149,13 @@ Window {
             onOpenReminders: win.screen = "reminders"
             onOpenSettings: win.screen = "settings"
             onGoHome: win.screen = "home"
+            onOpenApp: (name) => { win.app = name }
+        }
+        // an open app (Home → Apps), over Room's screens
+        Loader {
+            id: appL
+            width: Theme.stageW; height: Theme.stageH
+            Connections { target: appL.item; ignoreUnknownSignals: true; function onClose() { win.app = "" } }
         }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}

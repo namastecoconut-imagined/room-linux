@@ -8,6 +8,7 @@ Item {
     width: 1368; height: 912
     property string kind: ""                   // "" (closed) · scenes · speakers · library
     signal close()
+    signal launch(string name)
     readonly property bool open: kind !== ""
     property string shown: ""                  // what's in it (kept while it slides away)
     onKindChanged: if (kind !== "") shown = kind
@@ -37,7 +38,8 @@ Item {
 
         Mono {
             x: 36; y: 30; color: Theme.w62
-            text: sh.shown === "scenes" ? "Scenes · the whole house" : sh.shown === "speakers" ? "Play on" : "Playlists and albums"
+            text: sh.shown === "scenes" ? "Scenes · the whole house" : sh.shown === "speakers" ? "Play on"
+                  : sh.shown === "apps" ? "Apps · open only while you use them" : "Playlists and albums"
         }
         Press {
             anchors.right: parent.right; anchors.rightMargin: 14; y: 14; width: cl.implicitWidth + 32; height: 46; pressScale: 0.94
@@ -61,6 +63,25 @@ Item {
                     Rectangle { anchors.fill: parent; radius: 16; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.14) }
                     Serif { x: 22; y: 22; text: modelData[0]; font.pixelSize: 46 }
                     Mono { x: 22; anchors.bottom: parent.bottom; anchors.bottomMargin: 22; width: parent.width - 44; text: modelData[1]; size: 12; color: Theme.w62 }
+                }
+            }
+        }
+
+        // ------------------------------------------------------------ apps: each runs only while it's open
+        Row {
+            visible: sh.shown === "apps"
+            x: 36; y: 72; spacing: 16
+            Repeater {
+                model: [{ app: "youtube", name: "YouTube", sub: "Your feeds and search", icon: "play" },
+                        { app: "browser", name: "Web browser", sub: "Firefox, full screen", icon: "globe" }]
+                    .filter(function (a) { return a.app !== "browser" || (room.kiosk && room.browser) })
+                Press {
+                    width: (1280 - 72 - 48) / 4; height: 200; pressScale: 0.97
+                    onTapped: { if (modelData.app === "browser") { room.openBrowser(); sh.close() } else sh.launch(modelData.app) }
+                    Rectangle { anchors.fill: parent; radius: 16; color: "transparent"; border.width: 1; border.color: Qt.rgba(1, 1, 1, 0.14) }
+                    Icon { x: 22; y: 24; name: modelData.icon; size: 30; color: "white" }
+                    Serif { x: 22; y: 80; text: modelData.name; font.pixelSize: 40 }
+                    Mono { x: 22; anchors.bottom: parent.bottom; anchors.bottomMargin: 22; width: parent.width - 44; text: modelData.sub; size: 12; color: Theme.w62 }
                 }
             }
         }

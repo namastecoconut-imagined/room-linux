@@ -366,6 +366,10 @@ class Room(QObject):
     def clock24(self):
         return bool(self.cfg.get("clock24"))
 
+    @Property(bool, constant=True)
+    def cats(self):                     # Bebo and Evan on the screens ("cats": false in config.json: none at all)
+        return self.cfg.get("cats") is not False
+
     @Property(str, constant=True)
     def here(self):
         return self.cfg.get("here", "") or ("Living room" if self.demo else "")

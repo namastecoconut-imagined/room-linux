@@ -38,6 +38,7 @@ Window {
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby" || startScreen === "catsstandby" || startScreen === "catsdaystandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing
+    readonly property Item sceneItem: scene             // (for the cats, inside their loader)
     readonly property bool musicFace: playing || startScreen === "musicstandby"
     readonly property var timing: room.timing
     function nightHour(h) {
@@ -151,18 +152,21 @@ Window {
             onGoHome: win.screen = "home"
             onOpenApp: (name) => { win.app = name }
         }
-        // Bebo and Evan, on Room's screens (Cats.qml)
-        Cats {
-            scene: scene
-            night: win.lateNight && startScreen.indexOf("catsday") < 0
-            music: win.playing
-            listening: win.voiceState === "listening"
-            alarm: win.alerting
+        // Bebo and Evan, on Room's screens (Cats.qml) — "cats": false in config.json: not loaded at all
+        Loader {
+            active: room.cats
             z: win.alerting || win.voiceUp || kbd.up ? 5 : 0      // racing about over an alarm, ears up over the assistant, on the keyboard
-            kbTop: kbd.up ? kbd.keysTop : -1
-            floorY: Theme.stageH - win.shiftY          // the screen's bottom edge, wherever the drift has the stage
-            visible: appL.status !== Loader.Ready && !win.asleep
-            demoFast: startScreen.indexOf("cats") >= 0
+            sourceComponent: Cats {
+                scene: win.sceneItem
+                night: win.lateNight && startScreen.indexOf("catsday") < 0
+                music: win.playing
+                listening: win.voiceState === "listening"
+                alarm: win.alerting
+                kbTop: kbd.up ? kbd.keysTop : -1
+                floorY: Theme.stageH - win.shiftY          // the screen's bottom edge, wherever the drift has the stage
+                visible: appL.status !== Loader.Ready && !win.asleep
+                demoFast: startScreen.indexOf("cats") >= 0
+            }
         }
         // an open app (Home → Apps), over Room's screens
         Loader {

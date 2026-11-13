@@ -104,7 +104,8 @@ top, the forecast's curve, a list's lines, a sheet's top edge, the bottom edge o
 to peek up). They breathe and blink, wash, yawn, knead, roll over, nap, walk and leap between edges, now and then
 chase each other off the side of the screen, push the song's playhead along, nod to music, prick up their ears when
 the assistant listens, swat the clock when the minute changes, race about when an alarm goes off, and sleep at night.
-They never take a touch. To check them: `ROOM_SCREEN=catsdayhome` / `catsdaystandby` (everything happens sooner).
+They never take a touch. `"cats": false` in config.json turns them off (not loaded at all). To check them:
+`ROOM_SCREEN=catsdayhome` / `catsdaystandby` (everything happens sooner).
 
 ## Buttons and screen
 

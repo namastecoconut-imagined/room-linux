@@ -39,7 +39,7 @@ Item {
     Rise {
         order: 0
         x: 44; y: 126; width: 600; height: 240
-        Mono { text: "Next alarm"; color: Theme.w62 }
+        Mono { id: naLbl; text: "Next alarm"; color: Theme.w62 }
         Row {
             y: 26
             Serif { id: naT; text: cv.na.h !== undefined ? Theme.hm(cv.na.h, cv.na.m, room.clock24) : "—"; font.pixelSize: 150 }
@@ -57,6 +57,7 @@ Item {
         order: 1
         x: 1324 - 560; y: 126; width: 560; height: 240
         Mono {
+            id: tLbl
             anchors.right: parent.right
             color: Theme.w62
             text: cv.t0 ? "Timer" + (cv.t0.label ? " · " + cv.t0.label : "") + (cv.t0.paused ? " · paused" : "") : "Timers"
@@ -128,6 +129,13 @@ Item {
         Mono { y: 46; visible: cv.alarms.length === 0; text: "No alarms yet · + New alarm, up top"; color: Theme.w62 }
         ListView {
             id: alist
+            // where the cats can be: each alarm's line, between its time and its switch
+            function catSpots(sc, out) {
+                for (var i = 0; i < count && i < 4; i++) {
+                    var a = alist.mapToItem(sc, 230, (i + 1) * pitch - contentY)
+                    if (a.y < alist.mapToItem(sc, 0, height).y) out.push({ id: "alarm" + i, x0: a.x, x1: a.x + width - 230 - 110, y: a.y })
+                }
+            }
             y: 32; width: parent.width; height: parent.height - 32
             clip: true
             interactive: contentHeight > height
@@ -163,6 +171,16 @@ Item {
     }
 
     // ---------------------------------------------------------------- add / change an alarm
+    // where the cats can be: the next alarm's and the timer's numbers (lying down: the top bar's just above), the
+    // alarms' lines, the bottom edge on the left
+    function catSpots(sc, out) {
+        if (na.h !== undefined) sc.catDigits(naT, "alarmT", true, out, naLbl)
+        sc.catDigits(tBig, "timerT", true, out, tLbl)
+        alist.catSpots(sc, out)
+        out.push({ id: "floor", x0: 100, x1: 680, floor: true })
+    }
+    readonly property bool sheetUp: editor.open            // (the cats: up onto its top edge)
+    readonly property real sheetTop: editor.paneTop
     SheetFrame {
         id: editor
         paneY: 520

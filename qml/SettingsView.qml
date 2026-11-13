@@ -48,7 +48,7 @@ Item {
     Rise {
         order: 0
         x: 44; y: 126; width: 640; height: 220
-        Mono { text: "Screen"; color: Theme.w62 }
+        Mono { id: scrLbl; text: "Screen"; color: Theme.w62 }
         Row {
             y: 26
             Serif { id: bri; text: Math.round((bar.dragging ? bar.shown : (sv.disp.level || 0)) * 100); font.pixelSize: 120 }
@@ -291,6 +291,15 @@ Item {
     }
 
     // ---------------------------------------------------------------- switch to desktop / shut down: are you sure?
+    // where the cats can be: the screen's brightness number, its slider's line (clear of the words), the bottom edge
+    function catSpots(sc, out) {
+        sc.catDigits(bri, "bri", true, out, scrLbl)
+        var a = bar.mapToItem(sc, 280, 14), b = bar.mapToItem(sc, bar.width - 30, 14)
+        out.push({ id: "slider", x0: a.x, x1: b.x, y: a.y })
+        out.push({ id: "floor", x0: 430, x1: 700, floor: true })
+    }
+    readonly property bool sheetUp: confirm.open || joiner.open        // (the cats: up onto its top edge)
+    readonly property real sheetTop: confirm.open ? confirm.paneTop : joiner.paneTop
     SheetFrame {
         id: confirm
         paneY: 560

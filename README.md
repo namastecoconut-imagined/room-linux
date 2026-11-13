@@ -66,6 +66,8 @@ journalctl --user -u room -f                                          # live log
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `qml/VoiceOverlay.qml` + `shaders/horizon.frag` | the assistant over the top band: the light line, your words, the answer, buttons under the line |
 | `qml/VoiceCard.qml` · `qml/Words.qml` | the card beside an answer (weather, forecast, air, timer, music, schedule, alarm, lights) · words that come in one by one |
+| `qml/Cats.qml` · `qml/Cat.qml` | the cats: where they can be on each screen and what they do next · one cat, drawn frame by frame |
+| `assets/cats/` · `qml/catsdata.js` · `tools/cats/` | the cats' drawings (sprite sheets), where each drawing is, and the scripts that draw them |
 | `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
 | `room/mic.py` | how loud the room is (screen wake; while music plays, the background's swell) |
@@ -94,6 +96,15 @@ the volume slider and puts music streams that were left turned down back to full
 The Surface's LCD is old, so: everything drifts very slowly round a small loop (±6 px in use, ±28 px on standby), and
 once a night (`"refreshAt": "04:00"`, `""` to turn it off) while on standby a minute of slow full-screen colour washes
 exercises every pixel. A tap stops it.
+
+## The cats
+
+Bebo and Evan live on Room's screens, always on something real: the tops of the clock's numbers, the music card's
+top, the forecast's curve, a list's lines, a sheet's top edge, the bottom edge of the screen (or just below it, about
+to peek up). They breathe and blink, wash, yawn, knead, roll over, nap, walk and leap between edges, now and then
+chase each other off the side of the screen, push the song's playhead along, nod to music, prick up their ears when
+the assistant listens, swat the clock when the minute changes, race about when an alarm goes off, and sleep at night.
+They never take a touch. To check them: `ROOM_SCREEN=catsdayhome` / `catsdaystandby` (everything happens sooner).
 
 ## Buttons and screen
 

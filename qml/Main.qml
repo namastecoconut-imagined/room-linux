@@ -33,9 +33,9 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" || startScreen.indexOf("setw") === 0 || startScreen.indexOf("setj") === 0 ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: startScreen === "catshome" || startScreen === "catsdayhome" ? "home" : startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" || startScreen.indexOf("setw") === 0 || startScreen.indexOf("setj") === 0 ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
-    property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby"
+    property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby" || startScreen === "catsstandby" || startScreen === "catsdaystandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing
     readonly property bool musicFace: playing || startScreen === "musicstandby"
@@ -151,6 +151,19 @@ Window {
             onGoHome: win.screen = "home"
             onOpenApp: (name) => { win.app = name }
         }
+        // Bebo and Evan, on Room's screens (Cats.qml)
+        Cats {
+            scene: scene
+            night: win.lateNight && startScreen.indexOf("catsday") < 0
+            music: win.playing
+            listening: win.voiceState === "listening"
+            alarm: win.alerting
+            z: win.alerting || win.voiceUp || kbd.up ? 5 : 0      // racing about over an alarm, ears up over the assistant, on the keyboard
+            kbTop: kbd.up ? kbd.keysTop : -1
+            floorY: Theme.stageH - win.shiftY          // the screen's bottom edge, wherever the drift has the stage
+            visible: appL.status !== Loader.Ready && !win.asleep
+            demoFast: startScreen.indexOf("cats") >= 0
+        }
         // an open app (Home → Apps), over Room's screens
         Loader {
             id: appL
@@ -173,6 +186,7 @@ Window {
         }
         // the on-screen keyboard: up while a text box is being typed in (the Wi-Fi password)
         Keyboard {
+            id: kbd
             sink: stage
             allowed: room.kiosk && !win.alerting && !win.voiceUp && !win.standbyOn
             target: {

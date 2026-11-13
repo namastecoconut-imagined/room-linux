@@ -18,6 +18,13 @@ Item {
     readonly property var tomorrow: days.length > 1 ? days[1] : null
     visible: opacity > 0.002
     opacity: shown ? 1 : 0
+    // where the cats can be: the tops of the big temperature, and along the forecast's curve (it follows its height)
+    function catSpots(sc, out) {
+        if (!ok) return
+        sc.catDigits(tempT, "temp", true, out)
+        if (chart.n > 1) out.push({ id: "curve", x0: chart.px(0) + 24, x1: chart.px(chart.n - 1) - 24, y: chart.yAt(chart.px(0)),
+                                    yAt: function (x) { return chart.yAt(x) } })
+    }
     Behavior on opacity { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
 
     component Rise: Item {
@@ -38,7 +45,7 @@ Item {
         order: 0
         visible: wv.ok
         x: 44; y: 120; width: 340; height: 240
-        Serif { text: (wv.wx.t !== undefined ? wv.wx.t : "–") + "°"; font.pixelSize: 230 }
+        Serif { id: tempT; text: (wv.wx.t !== undefined ? wv.wx.t : "–") + "°"; font.pixelSize: 230 }
     }
     Rise {
         order: 1
@@ -102,6 +109,20 @@ Item {
             readonly property real span: Math.max(6, hi - lo)
             function px(i) { return 44 + i * (1280 / Math.max(1, n - 1)) }
             function py(t) { return 736 - (t - lo) / span * 120 }
+            // the curve's height at x (each hour to the next is a cubic: ends level, an S between)
+            function yAt(x) {
+                if (n < 2) return 736
+                var w = 1280 / (n - 1), i = Math.max(0, Math.min(n - 2, Math.floor((x - 44) / w)))
+                var x0 = px(i), x1 = px(i + 1), xm = (x0 + x1) / 2, y0 = py(wv.hours[i].t), y1 = py(wv.hours[i + 1].t)
+                var lo_ = 0, hi_ = 1
+                for (var k = 0; k < 18; k++) {
+                    var t = (lo_ + hi_) / 2, u = 1 - t
+                    var xt = x0 * u * u * u + 3 * xm * t * u * u + 3 * xm * t * t * u + x1 * t * t * t
+                    if (xt < x) lo_ = t; else hi_ = t
+                }
+                var tt = (lo_ + hi_) / 2
+                return y0 + (y1 - y0) * (3 * tt * tt - 2 * tt * tt * tt)
+            }
             readonly property string curve: {
                 if (n < 2) return ""
                 var d = "M " + px(0) + " " + py(wv.hours[0].t)

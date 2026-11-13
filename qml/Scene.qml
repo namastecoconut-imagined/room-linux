@@ -540,6 +540,83 @@ Item {
         }
     }
 
+    // ---------------------------------------------------------------- where the cats can be (Cats.qml)
+    // Real edges only, read from the layout as it is: the tops of the clock's numbers, the line the clock stands on,
+    // the top of the music card, and the stretch of the bottom edge with nothing above it to cover. Each:
+    // { id, x0, x1, y } in the scene's coordinates (the stage's) — the bottom edge's y is the screen's (Cats knows it).
+    TextMetrics { id: catTm; font: clockT.font }
+    TextMetrics { id: catTmX }
+    // the level part of the top of each digit of a big serif number t (see catTops), as spots "<idp><i>"; low: the cats
+    // only lie down there (something's just above)
+    function catDigits(t, idp, low, out, label) {
+        if (!t || !t.visible || t.opacity < 0.5) return
+        // a label just above: no cat on the digits under it (it would cover the words)
+        var la = label ? label.mapToItem(sc, 0, 0).x : 0, lb = label ? la + label.width : 0
+        var str = String(t.text); catTmX.font = t.font
+        catTmX.text = str; var total = catTmX.advanceWidth
+        var off = t.horizontalAlignment === Text.AlignRight ? t.width - total : t.horizontalAlignment === Text.AlignHCenter ? (t.width - total) / 2 : 0
+        for (var i = 0; i < str.length; i++) {
+            var top = catTops[str[i]]; if (!top) continue
+            catTmX.text = str.substring(0, i); var adv = catTmX.advanceWidth
+            catTmX.text = str[i]; var r = catTmX.tightBoundingRect
+            var a = t.mapToItem(sc, off + adv + r.x, t.baselineOffset + r.y), b = t.mapToItem(sc, off + adv + r.x + r.width, t.baselineOffset + r.y)
+            var w = b.x - a.x, x0 = a.x + w * top[0], x1 = a.x + w * top[1]
+            if (label && x1 + 50 > la && x0 - 50 < lb) continue
+            out.push({ id: idp + i, x0: x0, x1: x1, y: a.y, low: low })
+        }
+    }
+    // a sheet's up over the screen (the cats go up onto its top edge)
+    readonly property bool catSheet: sheet !== "" || clockV.sheetUp || setV_.sheetUp
+    readonly property real catSheetTop: sheet !== "" ? 540 : clockV.sheetUp ? clockV.sheetTop : setV_.sheetTop
+    // the part of each number's top that's level enough to stand on (of its width): round tops only near the middle,
+    // the 4 only at its peak, the 5 and 7 along their bars
+    readonly property var catTops: ({ "0": [0.3, 0.7], "1": [0.35, 0.75], "2": [0.3, 0.65], "3": [0.3, 0.65], "4": [0.64, 0.84],
+                                      "5": [0.4, 0.95], "6": [0.4, 0.75], "7": [0.08, 0.92], "8": [0.3, 0.7], "9": [0.3, 0.7] })
+    function catSpots() {
+        var out = []
+        if (sV && !m) {                      // standby: the top of each number
+            var t = clockT.text
+            for (var i = 0; i < t.length; i++) {
+                if (t[i] === ":") continue
+                catTm.text = t.substring(0, i); var adv = catTm.advanceWidth
+                catTm.text = t[i]; var r = catTm.tightBoundingRect
+                var a = clockT.mapToItem(sc, adv + r.x, clockT.baselineOffset + r.y)
+                var b = clockT.mapToItem(sc, adv + r.x + r.width, clockT.baselineOffset + r.y)
+                var top = catTops[t[i]] || [0.3, 0.7], w = b.x - a.x
+                out.push({ id: "digit" + i, x0: a.x + w * top[0], x1: a.x + w * top[1], y: a.y })
+            }
+            out.push({ id: "floor", x0: 110, x1: 1258, floor: true })     // the bottom edge (nothing there to cover)
+        }
+        if (hV) {                            // Home: the tops of the clock's numbers (lying down: the top bar's just
+            catDigits(clockT, "digit", true, out)    // above), the music card's top
+            // the card's top, only where nothing's above it (a cat sitting there would reach the top bar's words)
+            var words = ctl.x + ctl.width - ctlR.width
+            if (card.opacity > 0.5) out.push({ id: "cardtop", x0: card.x + 40, x1: Math.min(card.x + card.width - 40, words - 75), y: card.y })
+            // the bottom edge, only where there's nothing to cover: between the footer's words and the card
+            out.push({ id: "floor", x0: 420, x1: Math.min(card.x, 690) - 80, floor: true })
+        }
+        if (catSheet) {                      // a sheet: its top edge, and nothing else
+            return [{ id: "sheettop", x0: 44 + 70, x1: 44 + 1280 - 70, y: catSheetTop }]
+        }
+        if (sV && m) {                       // music standby: the cover's top, the bottom edge under the song's line
+            out.push({ id: "covertop", x0: sbCover.x + 30, x1: sbCover.x + sbCover.width - 30, y: sbCover.y })
+            out.push({ id: "floor", x0: 300, x1: 640, floor: true })
+        }
+        if (pV) {                            // the player: the card's top over the cover (lying down: the top bar's near)
+            out.push({ id: "cardtop", x0: card.x + 110, x1: card.x + 560, y: card.y, low: true })
+        }
+        if (wV) weatherV_.catSpots(sc, out)
+        if (rV) rview.catSpots(sc, out)
+        if (remV) remV_.catSpots(sc, out)
+        if (cV) clockV.catSpots(sc, out)
+        if (setV) setV_.catSpots(sc, out)
+        // the seek bar's line, while a song's showing: only for pushing the playhead along (use: "push")
+        if (prog.opacity > 0.5 && (hV || pV || (sV && m)))
+            out.push({ id: "seek", x0: prog.x, x1: prog.x + prog.width, y: prog.y, use: "push" })
+        return out
+    }
+    function catKnob() { return prog.x + seek.shown * prog.width }
+
     // ================================================================= Home: the glance list, the footer, the lights
     Mover {
         id: info
@@ -823,13 +900,14 @@ Item {
         opacity: sc.hk
         Behavior on opacity { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
         ClockView { id: clockV; shown: sc.cV; now: sc.now }
-        WeatherView { shown: sc.wV }
+        WeatherView { id: weatherV_; shown: sc.wV }
         RemindersView { id: remV_; shown: sc.remV }
-        SettingsView { shown: sc.setV }
+        SettingsView { id: setV_; shown: sc.setV }
     }
 
     // ================================================================= the sheets
     Sheet {
+        id: sheetV
         kind: sc.sheet
         onClose: sc.sheet = ""
         onLaunch: (name) => { sc.sheet = ""; sc.openApp(name) }

@@ -31,10 +31,15 @@ Item {
 
     // ---------------------------------------------------------------- to read
     // Kasero only at headline size (its stencil cuts are made for big type); the rest in Inter Tight and mono
+    function catSpots(sc, out) {
+        if (open_.length > 0) sc.catDigits(cnt, "count", true, out, remLbl)
+        grid.catSpots(sc, out)
+        out.push({ id: "floor", x0: 330, x1: 1040, floor: true })
+    }
     Rise {
         order: 0
         x: 44; y: 126; width: 660; height: 300
-        Mono { text: "Reminders"; color: Theme.w62 }
+        Mono { id: remLbl; text: "Reminders"; color: Theme.w62 }
         // none left: a headline, then what it means
         Serif { y: 40; visible: rv.open_.length === 0; text: "All clear"; font.pixelSize: 132; tracking: -0.03 }
         Text { y: 40 + 132 + 20; visible: rv.open_.length === 0; text: "Nothing to remember"; color: Theme.w62; font.pixelSize: 30; font.family: Theme.face; renderType: Text.QtRendering }
@@ -78,6 +83,17 @@ Item {
         Text { y: 46; visible: rv.list.length === 0; text: "New reminders show up here."; color: Theme.w42; font.pixelSize: 26; font.family: Theme.face; renderType: Text.QtRendering }
         GridView {
             id: grid
+            // where the cats can be: each row's line, on its right (clear of the words) — a reminder about the cats
+            // is their favourite
+            function catSpots(sc, out) {
+                for (var i = 0; i < 4; i++) {
+                    var idx = page * 4 + i; if (idx >= count) break
+                    var m = rv.list[idx], col = i % 2, r = Math.floor(i / 2)
+                    var a = grid.mapToItem(sc, col * cellWidth + 380, r * cellHeight + 80 - contentY + page * 192)
+                    var fav = /\b(cats?|kittens?|bebo|evan|litter|vet)\b/i.test(m.text || "")
+                    out.push({ id: "row" + i, x0: a.x, x1: a.x + 220, y: a.y, fav: fav })
+                }
+            }
             y: 36; width: 1280 + 24; height: 192
             cellWidth: 652; cellHeight: 96
             flow: GridView.FlowLeftToRight

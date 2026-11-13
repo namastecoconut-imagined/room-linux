@@ -165,7 +165,21 @@ Item {
         Mono { text: "Lamps"; color: Theme.w62 }
         Mono { anchors.right: parent.right; text: "Tap to switch · drag to dim"; color: Theme.w62 }
     }
+    // where the cats can be: the big percentage's tops, the brightness line (clear of its label), each lamp's line
+    // (lying down only: the rows are close), and the bottom edge under the lamps
+    function catSpots(sc, out) {
+        if (Math.round(big.shown) > 0) sc.catDigits(big, "big", true, out)
+        var a = bar.mapToItem(sc, 260, 20), b = bar.mapToItem(sc, bar.width - 20, 20)
+        out.push({ id: "bright", x0: a.x, x1: b.x, y: a.y })
+        for (var i = 0; i < lampRep.count; i++) {
+            var it = lampRep.itemAt(i); if (!it) continue
+            var p = it.mapToItem(sc, 220 + 40, (it.height - 44) / 2 + 21), q = it.mapToItem(sc, it.width - 64 - 20, 0)
+            out.push({ id: "lamp" + i, x0: p.x, x1: q.x, y: p.y, low: true })
+        }
+        out.push({ id: "floor", x0: 790, x1: 1270, floor: true })
+    }
     Repeater {
+        id: lampRep
         model: rv.r ? rv.r.lamps : []
         Item {
             id: lamp

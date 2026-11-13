@@ -13,6 +13,7 @@ Item {
     // typing in it: where the pane goes so the box stays above the keys
     readonly property bool typing: Typing.up && Typing.inside(Typing.target, pane)
     property real liftTo: paneY
+    readonly property real paneTop: !open ? 960 : typing ? liftTo : paneY   // (where its top edge is: the cats sit on it)
     onTypingChanged: if (typing) liftTo = Math.min(paneY, Typing.top - 28 - Typing.target.mapToItem(pane, 0, Typing.target.height).y)
     // closing it puts the keyboard away too
     onOpenChanged: if (!open && Typing.target && Typing.inside(Typing.target, pane)) Typing.target.focus = false

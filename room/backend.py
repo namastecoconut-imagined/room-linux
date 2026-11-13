@@ -221,7 +221,7 @@ class Room(QObject):
     def music(self):
         if self.demo:
             m = dict(demo.MUSIC); m["at"] = time.time() - 4; m["canSeek"] = True
-            m["playing"] = os.environ.get("ROOM_SCREEN") != "standby"; m["exists"] = m["playing"]
+            m["playing"] = os.environ.get("ROOM_SCREEN") not in ("standby", "catsstandby", "catsdaystandby"); m["exists"] = m["playing"]
             if os.environ.get("ROOM_DEMO_ART"):          # a cover to check layouts with
                 if not getattr(self, "_demo_art", None):
                     from PySide6.QtGui import QImage

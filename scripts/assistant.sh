@@ -25,11 +25,8 @@ else
 fi
 
 # (the wake word and end-of-speech models ship with Room, in assistant/models)
-get() { if [ ! -s "$2" ]; then curl -fsSL --retry 3 -o "$2.part" "$1" && mv "$2.part" "$2"; fi; }
-echo "▸ Assistant: Room's voice (Kokoro)"
-K="$HOME/.local/share/room/assistant/kokoro"; mkdir -p "$K"
-KURL=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
-for f in kokoro-v1.0.fp16.onnx voices-v1.0.bin; do get "$KURL/$f" "$K/$f"; done
+# (Room's voice is Sarvam's, made online: nothing to download for it)
+rm -rf "$HOME/.local/share/room/assistant/kokoro"
 
 echo "▸ Assistant: its service (starts with the Surface, restarts if it stops)"
 mkdir -p ~/.config/systemd/user

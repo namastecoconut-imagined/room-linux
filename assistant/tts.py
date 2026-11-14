@@ -1,110 +1,156 @@
-"""Room's voice: Kokoro ("Heart", af_heart), made on the Surface itself — free, offline — and played by player.py.
+"""Room's voice: Sarvam's Bulbul (v4 Flash, "Ishita · customer" unless another is chosen), streamed — the answer is
+sent the moment it's complete and played as it arrives, so Room starts talking with the first sound. Nothing is made
+on the Surface any more: Kokoro, made here, only just kept up with playback, and once the screen got busier (the cats)
+it fell behind and the voice stopped between sentences.
 
-The half-precision build (fp16) is the fastest here — but on the cool power profile it only just keeps up with
-playback (2.06 s to make 2.03 s of speech; 1.43 s with the CPU boosted, see boost.py). So:
-  • the first piece of an answer is very short (3–4 words, or up to the first comma), so Room starts talking well
-    under a second after the answer arrives; the rest is made, sentence by sentence, while it speaks;
-  • the CPU is boosted only while speech is being made (boost.py);
-  • short lines ("Done.", "Timer set for ten minutes.") are kept once made — the common ones are made at start —
-    so they play instantly.
+  • one kept connection (listen.py's, opened the moment "Alexa" is heard) — a cold one cost ~2 s;
+  • every answer is brought to the same loudness (Leveller): voices and lines come out at different levels;
+  • short lines ("Done.", "Lights off.", "Sorry, I can't reach the internet right now.") are made once and kept on
+    disk (~/.local/state/room/voice/<voice>/): they play at once, cost nothing again, and the internet line is there
+    when the internet isn't;
+  • if Sarvam can't be reached mid-answer, Room says the kept internet line instead (the words are on the screen).
+
+Sarvam is paid per character: ₹10 per 10,000 with v4 Flash — about 1.5 paise for a usual answer.
 """
+import hashlib
 import os
-import re
 import threading
 import time
 
 import numpy as np
 
-from .boost import Boost
+from .listen import _http, log
 from .player import Player
 
-KDIR = os.path.expanduser("~/.local/share/room/assistant/kokoro")
-COMMON = ["Done.", "Okay.", "Sure.", "Sorry, I didn't catch that.", "Sorry, I can't reach the internet right now.",
-          "Let me check.", "On it.", "Lights off.", "Lights on.", "Goodnight."]
+URL = "https://api.sarvam.ai/text-to-speech/stream"
+MODEL = "bulbul:v4-flash"
+DEFAULT = "ishita_en_customer"
+RATE = 24000
+CACHE = os.path.expanduser("~/.local/state/room/voice")
+OFFLINE = "Sorry, I can't reach the internet right now."
+COMMON = ["Done.", "Okay.", "Sure.", "Sorry, I didn't catch that.", OFFLINE, "Let me check.", "On it.", "Lights off.",
+          "Lights on.", "Goodnight.", "Sorry, I couldn't reach my brain just now — try again in a moment."]
+KEEP = 60                       # lines up to this long are kept once made
+TARGET = 10 ** (-17 / 20)       # the speech level every answer is brought to (RMS of its voiced parts, of full scale)
 
 
-SMALL = {"a", "an", "the", "in", "on", "at", "of", "to", "for", "with", "and", "or", "but", "from", "by", "is", "are",
-         "was", "it's", "its", "my", "your", "this", "that", "some", "about", "around", "like", "into",
-         # nor on a word that leaves the sentence hanging ("what would you / like…")
-         "you", "i", "we", "they", "he", "she", "would", "could", "should", "will", "can", "be", "have", "has", "do",
-         "does", "did", "not", "so", "as", "than", "if", "when", "what", "which", "who", "how", "there", "here"}
+class Leveller:
+    """Brings an answer to TARGET as it streams: the level of its voiced parts so far (it settles within the first
+    few words, which the speaker holds back anyway) sets the gain, eased from one chunk to the next, and a soft
+    ceiling keeps the loudest syllables from clipping."""
+    def __init__(self):
+        self.level, self.gain = None, None
+
+    def whole(self, x: np.ndarray) -> np.ndarray:
+        self.level = None
+        self.__call__(x)                                     # (measures it all)
+        self.gain = None
+        return self.__call__(x)
+
+    def __call__(self, x: np.ndarray) -> np.ndarray:
+        n = 480                                              # 20 ms frames
+        if len(x) >= n:
+            f = x[:len(x) // n * n].reshape(-1, n)
+            rms = np.sqrt((f ** 2).mean(axis=1))
+            v = rms[rms > 0.008]
+            if len(v):
+                r = float(np.sqrt((v ** 2).mean()))
+                self.level = r if self.level is None else 0.7 * self.level + 0.3 * r
+        want = 1.0 if self.level is None else float(np.clip(TARGET / self.level, 0.5, 4.0))
+        g0 = want if self.gain is None else self.gain
+        self.gain = want
+        y = x * np.linspace(g0, want, len(x), dtype=np.float32)
+        a = np.abs(y)
+        over = a > 0.85
+        if over.any():                                      # soft ceiling at full scale
+            y[over] = np.sign(y[over]) * (0.85 + 0.15 * np.tanh((a[over] - 0.85) / 0.15))
+        return y
 
 
-def pieces(text: str) -> list[str]:
-    """The answer as speakable pieces, growing: ~3 words, then ~5, ~7, ~10, ~14… — never past a sentence's end.
-
-    Making a piece takes about as long as saying it (0.7× with the CPU boosted), so the first is tiny (Room starts
-    talking almost at once) and each next one is only a little longer than what's already queued to play — it's made
-    while that plays, so there's no gap. One tiny first piece followed by the whole rest of the sentence "ran dry":
-    a pause after the opening words. Breaks fall on a sentence end, else a comma near the budget, never on "the",
-    "and", "you"…"""
-    words = text.split()
-    out, i, budget = [], 0, 3.0
-    while i < len(words):
-        # this sentence's end, from here
-        end = next((j + 1 for j in range(i, len(words)) if words[j].endswith((".", "!", "?"))), len(words))
-        n = max(2, int(round(budget)))
-        if end - i <= n + max(2, n // 3):            # the rest of the sentence fits (or nearly): take it whole
-            cut = end
-        else:
-            cut = None
-            for j in range(min(i + n + 1, end - 1), i, -1):         # a comma at or just past the budget, or before it
-                if words[j - 1].endswith((",", ";", ":")):
-                    cut = j
-                    break
-            if not cut:                 # nearest to the budget, either way, that doesn't end on "you", "the", "and"…
-                near = sorted(range(i + 2, end), key=lambda c: (abs(c - (i + n)), c > i + n))
-                cut = next((c for c in near if words[c - 1].lower().strip(",;:") not in SMALL), i + n)
-            if end - cut <= 2:          # never leave a stub ("…like me / to do?"): the sentence's end goes with it
-                cut = end
-        out.append(" ".join(words[i:cut]))
-        i = cut
-        budget = min(budget * 1.45, 40)
-    return out
+def voice_ok(name) -> bool:
+    return isinstance(name, str) and "_en_" in name
 
 
 class Voice:
-    def __init__(self, voice="af_heart", speed=1.0, model="kokoro-v1.0.fp16.onnx", boost=True):
-        from kokoro_onnx import Kokoro
-        import onnxruntime as ort
-        # Kokoro leaves a core free: with every core busy making the next sentence, the speaker's callback (Python,
-        # every 50 ms) was served late — the voice broke up ("sound system missed 46 blocks" an answer) while there
-        # was plenty made ("ran dry 0×")
-        o = ort.SessionOptions()
-        o.intra_op_num_threads = max(1, (os.cpu_count() or 4) // 2 - 1)
-        o.inter_op_num_threads = 1
-        sess = ort.InferenceSession(os.path.join(KDIR, model), sess_options=o, providers=["CPUExecutionProvider"])
-        self.k = Kokoro.from_session(sess, os.path.join(KDIR, "voices-v1.0.bin"))
-        self.voice, self.speed = voice, speed
+    def __init__(self, key: str, voice: str = DEFAULT):
+        self.key = key
+        self.voice = voice if voice_ok(voice) else DEFAULT
         self.player = Player()
         self.player.start()
-        self.cache: dict[str, tuple[np.ndarray, int]] = {}
         self.gen = 0
-        self.lock = threading.Lock()          # one Kokoro call at a time
         self.making = False
-        self.boost = Boost(boost)
         threading.Thread(target=self._prepare, daemon=True).start()
 
-    def _make(self, text):
-        if text in self.cache:
-            return self.cache[text]
-        with self.lock:
-            a, sr = self.k.create(text, voice=self.voice, speed=self.speed, lang="en-us")
-        a = np.asarray(a, dtype=np.float32)
-        if len(text) <= 60:
-            self.cache[text] = (a, sr)
-            if len(self.cache) > 300:
-                self.cache.pop(next(iter(self.cache)))
-        return a, sr
+    # ---------------------------------------------------------------- kept lines
+    def _path(self, text, voice=None):
+        h = hashlib.sha1(text.strip().encode()).hexdigest()[:16]
+        return os.path.join(CACHE, voice or self.voice, h + ".pcm")
+
+    def _kept(self, text, voice=None):
+        try:
+            with open(self._path(text, voice), "rb") as f:
+                b = f.read()
+            return np.frombuffer(b, dtype="<i2").astype(np.float32) / 32768 if b else None
+        except OSError:
+            return None
+
+    def _keep(self, text, x, voice=None):
+        x = Leveller().whole(x)                              # (all of it known: levelled as one)
+        p = self._path(text, voice)
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p + ".part", "wb") as f:
+            f.write((np.clip(x, -1, 1) * 32767).astype("<i2").tobytes())
+        os.replace(p + ".part", p)
 
     def _prepare(self):
+        """The usual short lines, made once (and the internet line, for when there isn't any)."""
+        if not self.key:
+            return
         for t in COMMON:
-            try:
-                self._make(t)
-            except Exception as e:
-                print("[assistant] voice:", repr(e), flush=True); return
+            if self._kept(t) is None:
+                try:
+                    self._make(t, lambda x: None, lambda: True)
+                except Exception as e:
+                    log("voice: couldn't make the usual lines yet —", repr(e)); return
 
-    def say(self, text: str, done=None, started=None):
+    # ---------------------------------------------------------------- making a line
+    def _make(self, text, out, live, voice=None):
+        """Streams `text` from Sarvam, levelled, into out(samples) as it arrives, while live() says so. Lines up to
+        KEEP characters are kept. Returns the samples made."""
+        lev, got, left, head = Leveller(), [], b"", True
+        r = _http().post(URL, stream=True, timeout=(6, 20),
+                         headers={"api-subscription-key": self.key, "Content-Type": "application/json"},
+                         json={"text": text, "language_code": "en-IN", "model": MODEL, "speaker": voice or self.voice,
+                               "output_audio_codec": "linear16", "speech_sample_rate": RATE, "enable_preprocessing": True})
+        try:
+            if r.status_code != 200:
+                raise RuntimeError(f"Sarvam {r.status_code}: {r.text[:160]}")
+            for chunk in r.iter_content(chunk_size=4800):
+                if not live():
+                    return None
+                if not chunk:
+                    continue
+                b = left + chunk
+                if head:                                     # (a WAV header, if one comes)
+                    head = False
+                    if b[:4] == b"RIFF":
+                        i = b.find(b"data")
+                        b = b[i + 8:] if i >= 0 else b[44:]
+                cut = len(b) - len(b) % 2
+                left = b[cut:]
+                if cut:
+                    y = lev(np.frombuffer(b[:cut], dtype="<i2").astype(np.float32) / 32768)
+                    got.append(y)
+                    out(y)
+        finally:
+            r.close()
+        x = np.concatenate(got) if got else np.zeros(0, np.float32)
+        if len(text) <= KEEP and len(x):
+            self._keep(text, x, voice)
+        return x
+
+    # ---------------------------------------------------------------- speaking
+    def say(self, text: str, done=None, started=None, voice=None):
         """Speak (replacing whatever was being said). started() as the first sound goes out (the screen shows the
         words then, not before); done() once it's all been played (or it was stopped)."""
         self.gen += 1
@@ -113,36 +159,45 @@ class Voice:
 
         def go():
             self.making = True
-            self.boost.on()
             t0 = time.time()
+            first = [True]
+
+            def out(y):
+                if g != self.gen:
+                    return
+                self.player.feed(y, RATE)
+                if first[0]:
+                    first[0] = False
+                    log(f"voice: first sound {time.time() - t0:.2f} s after the answer")
+                    if started:
+                        try:
+                            started()
+                        except Exception as e:
+                            log("voice: started():", repr(e))
             try:
-                for i, p in enumerate(pieces(text)):
-                    if g != self.gen:
-                        break
-                    a, sr = self._make(p)
-                    if g != self.gen:
-                        break
-                    self.player.feed(a, sr)
-                    if i == 0:
-                        print(f"[assistant] voice: first sound {time.time() - t0:.2f} s after the answer", flush=True)
-                        if started:
-                            try:
-                                started()
-                            except Exception as e:
-                                print("[assistant] voice: started():", repr(e), flush=True)
+                kept = self._kept(text, voice)
+                if kept is not None:
+                    out(kept)
+                elif not self.key:
+                    raise RuntimeError("no sarvamKey in config.json")
+                else:
+                    self._make(text, out, lambda: g == self.gen, voice)
             except Exception as e:
-                print("[assistant] voice:", repr(e), flush=True)
+                log("voice:", repr(e))
+                if first[0] and g == self.gen and text != OFFLINE:      # nothing said yet: the internet line
+                    k = self._kept(OFFLINE, voice)
+                    if k is not None:
+                        self.player.feed(k, RATE)
             finally:
                 self.making = False
-                self.boost.off()
                 if g == self.gen:
                     self.player.end()
                     self.player.wait_done()
                     s1 = self.player.stats()
                     if s1["starved"] or s1["xruns"]:
-                        print(f"[assistant] voice: broke up — ran dry {s1['starved']}× (made slower than it played), "
-                              f"sound system missed {s1['xruns']} blocks (so far, all told)", flush=True)
-                    if done and g == self.gen:
+                        log(f"voice: broke up — ran dry {s1['starved']}× (arrived slower than it played), "
+                            f"sound system missed {s1['xruns']} blocks (so far, all told)")
+                    if done:
                         done()
         threading.Thread(target=go, daemon=True).start()
 

@@ -68,10 +68,12 @@ if [ "$m" -gt 0 ]; then echo "  tracker: $m minutes logged · last: $(tail -1 "$
 else echo "  tracker: started — its first line comes a minute after it starts ($W)"; fi
 
 echo; echo "== Room's permissions (set again at every start)"
-# by group NUMBER: the start-up's first stage (the boot image) can't look names up — with the name, the speech
-# boost's line logged "Unknown group" there at every start
+# by group NUMBER: the start-up's first stage (the boot image) can't look names up — with the name, a line
+# logged "Unknown group" there at every start
 G=$(id -g "$U")
-for R in /etc/tmpfiles.d/room-boost.conf /etc/tmpfiles.d/room-power.conf; do
+# (the speech boost's permission is gone with it: the assistant's voice is made online now)
+[ -f /etc/tmpfiles.d/room-boost.conf ] && rm -f /etc/tmpfiles.d/room-boost.conf && echo "  ▸ the old speech-boost permission: removed"
+for R in /etc/tmpfiles.d/room-power.conf; do
   if [ -f "$R" ] && grep -qE '^z .* root [^0-9 ][^ ]* ' "$R"; then
     sed -i -E "s/^(z .* root )[^0-9 ][^ ]*( .*)$/\1$G\2/" "$R" && echo "  ▸ $(basename "$R"): your group by number now"
   fi
@@ -79,9 +81,7 @@ done
 # the tracker logs watts too when your group may read the power meter (once; at every start after)
 R=/etc/tmpfiles.d/room-power.conf
 [ -f "$R" ] || printf '# Room: its tracker (scripts/watch.py) reads the processor'"'"'s power meter\nz /sys/class/powercap/intel-rapl:*/energy_uj 0440 root %s - -\n' "$G" > "$R"
-systemd-tmpfiles --create $(ls /etc/tmpfiles.d/room-boost.conf "$R" 2>/dev/null) 2>&1 | sed 's/^/  ! /'
-p=$(stat -Lc '%A' /sys/devices/system/cpu/cpufreq/policy0/energy_performance_preference 2>/dev/null)
-echo "  $([ "${p:5:1}" = w ] && echo ✓ || echo ✗) speech boost: the assistant may raise the CPU's speed while it talks ($p)"
+systemd-tmpfiles --create "$R" 2>&1 | sed 's/^/  ! /'
 p=$(stat -Lc '%A' /sys/class/powercap/intel-rapl:0/energy_uj 2>/dev/null)
 echo "  $([ "${p:4:1}" = r ] && echo ✓ || echo ✗) power meter: the tracker may read it ($p)"
 

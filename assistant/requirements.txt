@@ -4,7 +4,6 @@ sounddevice>=0.5
 soxr>=0.5
 onnxruntime>=1.17
 requests
-kokoro-onnx>=0.4
 # openWakeWord (the stock "alexa", only if Room's own model is missing) needs these; it and livekit-wakeword are
 # installed without their dependency lists (scripts/assistant.sh)
 scipy

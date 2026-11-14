@@ -33,6 +33,8 @@ if [ -f "$C" ] && ! grep -q ignore_volume_control "$C"; then
 fi
 # the assistant's models ship with Room now (assistant/models): the old downloaded copies go
 rm -rf "$HOME/.local/share/room/assistant/models"
+# Room's voice is Sarvam's now (made online): the voice that was made on the Surface (Kokoro, ~340 MB) goes
+rm -rf "$HOME/.local/share/room/assistant/kokoro"
 # a Bluetooth speaker stays a speaker (never its low-quality "headset" mode) — kept in place
 W=~/.config/wireplumber/wireplumber.conf.d/90-room-no-headset.conf
 if [ ! -f "$W" ]; then

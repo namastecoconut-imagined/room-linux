@@ -1,12 +1,12 @@
 """Room's voice assistant — its own program (the room-assistant service), separate from the panel.
 
   "Alexa" (or a tap on the panel) → music down → your request, recorded until you've finished → Sarvam's words →
-  Claude (with the home's current state) → Room carries out the actions → Kokoro speaks the answer → music back up.
+  Claude (with the home's current state) → Room carries out the actions → Sarvam's voice speaks the answer → music back up.
   If the answer is a question, it listens again for a few seconds without the wake word.
 
 Everything it does is logged ([assistant] lines: journalctl --user -u room-assistant). Settings in config.json:
-"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "voiceFloor": 0.7, "bargeIn": true,
-"bargeThreshold": 0.6}.
+"anthropicKey", "sarvamKey" and, optionally, "assistant": {"wakeThreshold": 0.5, "micLevel": 0.65,
+"voice": "ishita_en_customer" (a Sarvam Bulbul v4 Flash English voice), "bargeIn": true, "bargeThreshold": 0.6}.
 """
 import json
 import os
@@ -46,7 +46,7 @@ class Assistant:
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         if a.get("endQuiet"):
             self.ears.END_QUIET = float(a["endQuiet"])
-        self.voice = Voice(voice=a.get("voice", "af_heart"), boost=a.get("cpuBoost", True) is not False)
+        self.voice = Voice(self.sarvam_key, a.get("voice") or "")
         # the echo canceller pauses while Room speaks unless "echoWhileSpeaking" (default on): with it working, Room's own
         # voice is taken out of the mic and "Alexa" over an answer stands out. (It was paused because its Python work
         # competed with the voice and made it break up — back when the Dolby filter was eating half a core.)
@@ -56,8 +56,8 @@ class Assistant:
         self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False
         # talking over Room: "Alexa" while it speaks stops it and listens to you ("bargeIn": false turns it off).
-        # Room's own voice doesn't wake the model — Kokoro saying ten typical answers scored 0.00–0.01, and saying
-        # "Alexa, turn off the lights" itself only 0.02 (it was trained on people) — so it listens to the raw mic then.
+        # Room's own voice doesn't wake the model — the earlier voice (Kokoro) saying ten typical answers scored
+        # 0.00–0.01, and "Alexa, turn off the lights" itself only 0.02 — and the echo canceller takes it back out.
         self.barge = a.get("bargeIn", True) is not False
         self.barge_threshold = float(a.get("bargeThreshold", 0.6))
         if not self.sarvam_key:

@@ -1,6 +1,6 @@
-"""Ear test: Room's voice from Sarvam (Bulbul, streamed) next to the current one made on the Surface (Kokoro
-"Heart"). The same answer in each voice, played through the assistant's own kind of speaker (player.py), with how
-long each took to start talking and to finish making. Nothing in the assistant changes; it keeps running.
+"""Ear test: Sarvam's voices (Bulbul, streamed), the same answer in each, played through the assistant's own kind
+of speaker (player.py), with how long each took to start talking and to finish making. Nothing in the assistant
+changes; it keeps running. (Room's voice is "Ishita · customer", chosen with this on 14 Nov.)
 
   cd ~/room && assistant/.venv/bin/python -m assistant.bench.tts_test
   … --text "Your own sentence"      … --only 3,5      … --no-wait (play them all without pressing Enter)
@@ -19,13 +19,12 @@ TEXT = ("It's twenty seven degrees and partly cloudy in Bangalore right now, wit
         "I've turned the living room down to thirty percent.")
 RATE = 24000
 
-# (model, speaker): Sarvam's English (India) voices worth hearing, then the current voice for comparison
+# (model, speaker): Sarvam's English (India) voices
 VOICES = [
     ("bulbul:v4-flash", "simran_en_conversation"), ("bulbul:v4-flash", "ishita_en_customer"),
     ("bulbul:v4-flash", "roopa_en_conversational"), ("bulbul:v4-flash", "neha_en_customer"),
     ("bulbul:v4-flash", "amelia_en_conversational"), ("bulbul:v4-flash", "dev_en_conversational"),
     ("bulbul:v4-flash", "shubh_en_narration"), ("bulbul:v3", "ishita"), ("bulbul:v3", "shubh"),
-    ("kokoro", "af_heart"),
 ]
 PRICE = {"bulbul:v4-flash": 10, "bulbul:v3": 30}          # ₹ per 10,000 characters, pay as you go
 
@@ -65,25 +64,6 @@ def sarvam(http, k, text, model, speaker, player):
     return first or 0.0, time.time() - t0, n / RATE
 
 
-_K = None
-
-
-def kokoro(text, voice, player):
-    global _K
-    if _K is None:
-        import onnxruntime as ort
-        from kokoro_onnx import Kokoro
-        d = os.path.expanduser("~/.local/share/room/assistant/kokoro")
-        o = ort.SessionOptions(); o.intra_op_num_threads = max(1, (os.cpu_count() or 4) // 2 - 1); o.inter_op_num_threads = 1
-        _K = Kokoro.from_session(ort.InferenceSession(os.path.join(d, "kokoro-v1.0.fp16.onnx"), sess_options=o,
-                                                      providers=["CPUExecutionProvider"]), os.path.join(d, "voices-v1.0.bin"))
-    t0 = time.time()
-    a, sr = _K.create(text, voice=voice, speed=1.0, lang="en-us")
-    took = time.time() - t0
-    player.feed(np.asarray(a, dtype=np.float32), sr)
-    return took, took, len(a) / sr
-
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--text", default=TEXT)
@@ -105,12 +85,11 @@ def main():
     for i, (model, speaker) in enumerate(VOICES, 1):
         if only and i not in only:
             continue
-        name = f"{i:2}. {speaker} ({'on the Surface, now' if model == 'kokoro' else model})"
+        name = f"{i:2}. {speaker} ({model})"
         print(name, flush=True)
         player.begin()
         try:
-            first, made, dur = (kokoro(a.text, speaker, player) if model == "kokoro"
-                                else sarvam(http, k, a.text, model, speaker, player))
+            first, made, dur = sarvam(http, k, a.text, model, speaker, player)
         except Exception as e:
             print(f"    ✗ {e}\n", flush=True); rows.append(f"{name}: failed"); continue
         player.end(); player.wait_done()

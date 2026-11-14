@@ -25,8 +25,8 @@ What it runs on (each chosen by a test on this Surface):
 | finished talking | Silero VAD: 1 s of quiet once you've started; up to 5 s to start | |
 | words | Sarvam (saarika), the whole request at once | 7.1 % word errors, all the Hinglish right, 0.4 s — Whisper turbo 18.6 % in 12 s on the Surface |
 | understanding | Claude (Haiku), the home's state with every request | |
-| voice | Kokoro "Heart" (fp16) on the Surface, played by `player.py` | your pick; fp16 the fastest build on this CPU |
+| voice | Sarvam Bulbul v4 Flash, "Ishita · customer", streamed and played by `player.py` as it arrives; levelled to one loudness; short lines kept on the Surface | your pick (14 Nov). It was Kokoro "Heart", made on the Surface: it only just kept up with playback, and once the screen got busier it fell behind (pauses between sentences) |
 
 Files: `__main__.py` the loop · `listen.py` mic, wake word, end of speech, Sarvam · `brain.py` Claude · `tts.py` +
 `player.py` the voice · `echo.py` echo cancelling · `duck.py` music down/up · `link.py` the line to Room (`room/voice.py` on the other end).
-Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "af_heart", "echoCancel": true, "enabled": true}`.
+Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "ishita_en_customer", "echoCancel": true, "enabled": true}`.

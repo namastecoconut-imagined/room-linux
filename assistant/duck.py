@@ -10,10 +10,11 @@ import subprocess
 import threading
 
 LEVEL = 0.15            # music at 15 % of where it was while you talk and Room answers
-FLOOR = 0.70            # while Room talks, the speaker is at least 70 %: Room's voice shares the speaker with the music,
-                        # so a speaker turned down for music (the slider, or the phone's AirPlay volume) left the voice
-                        # too quiet — 40 % still was on the Surface's speakers. Put back exactly after the conversation;
-                        # the music, ducked to 15 % of its own level meanwhile, stays quiet under it.
+FLOOR = 0.86            # while Room talks, the speaker is lifted to at least this (wpctl's scale; 0.86 is the chip's
+                        # 4 dB crackle cap — the assistant works it out from the cap, __main__.floor): Room's voice shares
+                        # the speaker with the music, so a speaker turned down for music (the slider, or the phone's
+                        # AirPlay volume) left the voice too quiet — 40 % was, and 70 % still was. Put back exactly after
+                        # the conversation; the music, ducked to 15 % of its own level meanwhile, stays quiet under it.
 
 
 class Duck:

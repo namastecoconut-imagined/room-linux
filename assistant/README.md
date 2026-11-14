@@ -30,3 +30,4 @@ What it runs on (each chosen by a test on this Surface):
 Files: `__main__.py` the loop · `listen.py` mic, wake word, end of speech, Sarvam · `brain.py` Claude · `tts.py` +
 `player.py` the voice · `echo.py` echo cancelling · `duck.py` music down/up · `link.py` the line to Room (`room/voice.py` on the other end).
 Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "voice": "ishita_en_customer", "echoCancel": true, "enabled": true}`.
+While Room talks the speaker is lifted to the chip's crackle cap (Settings → More settings → Sound), then put back.

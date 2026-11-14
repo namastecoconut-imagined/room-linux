@@ -52,7 +52,8 @@ class Assistant:
         # competed with the voice and made it break up — back when the Dolby filter was eating half a core.)
         self.echo_speaking = a.get("echoWhileSpeaking", True) is not False
         self.mic.hold = lambda: self.voice.busy and not self.echo_speaking
-        self.duck = Duck(float(a.get("voiceFloor", 0.70)))
+        self.floor_set = a.get("voiceFloor")
+        self.duck = Duck(self.floor())
         self.ears.on_level = lambda v: self.link.send({"t": "level", "v": round(v, 3)})
         self.cancelled = False
         # talking over Room: "Alexa" while it speaks stops it and listens to you ("bargeIn": false turns it off).
@@ -64,6 +65,19 @@ class Assistant:
             log("no sarvamKey in config.json — it can't understand speech")
         if not self.brain:
             log("no anthropicKey in config.json — it can't answer")
+
+    def floor(self) -> float:
+        """How loud the speaker is while Room talks (wpctl's scale): as loud as Room ever lets the chip go — the crackle
+        cap, "speakerHeadroomDb" in Settings → More settings → Sound (4 dB unless changed). It was 70 %, about a third
+        of full loudness, so on a speaker turned down for music the voice was quiet."""
+        if self.floor_set is not None:
+            return float(self.floor_set)
+        try:
+            s = json.load(open(os.path.expanduser("~/.config/room/settings.json")))
+        except (OSError, ValueError):
+            s = {}
+        db = abs(float(s.get("speakerHeadroomDb", self.cfg.get("speakerHeadroomDb", 4)) or 0))
+        return round((10 ** (-db / 20)) ** (1 / 3), 2)
 
     # ---------------------------------------------------------------- what Room asks
     def command(self, m: dict):
@@ -98,6 +112,7 @@ class Assistant:
     def conversation(self):
         follow, turns = False, 0
         self.cancelled = False
+        self.duck.floor = self.floor()
         self.duck.down()
         while True:
             more = self.turn(follow)

@@ -96,7 +96,7 @@ Item {
         }
         return []
     }
-    function turnTo(c, x) { return (x - c.ax) * c.dir < 0 ? ["turn", { flip: true }, "turn.back"] : [] }
+    function turnTo(c, x) { return [{ face: x }] }        // (turns round then, if it needs to: see Cat.go)
 
     // ---------------------------------------------------------------- plans
     function walkPlan(c, x, then) {
@@ -149,9 +149,9 @@ Item {
     }
     // off the side of the screen, out of sight
     function runOff(c, toRight) {
-        var x = toRight ? Theme.stageW + 130 : -130
+        var x = toRight ? Theme.stageW + 130 : -130, strides = 0
         return route(c.pose, "stand").concat(turnTo(c, x), ["run.in",
-            { c: "run", early: true, until: function () { return (x - c.ax) * c.dir < 0 } },
+            { c: "run", early: true, until: function () { return (toRight ? c.ax > x : c.ax < x) || ++strides > 400 } },
             { call: function () { c.pose = "none"; c.spotId = "below" } }])
     }
     // in from the side of the screen, already running, to x on the bottom edge
@@ -164,16 +164,23 @@ Item {
     function zoomies(c) {
         var f = spot("floor"); if (!f || c.spotId !== "floor") return null
         var right = c.ax < Theme.stageW / 2, o = other(c)
-        if (o.shown && o.pose !== "none") {
-            var chase = o.spotId === "floor" ? runOff(o, right)
-                      : o.spotId !== "below" ? leapPlan(o, f, Math.max(f.x0, Math.min(f.x1, o.ax + (right ? 120 : -120))), null).concat(runOff(o, right)) : null
-            if (chase) { chaser.c = o; chaser.plan = chase; chaser.tries = 0; o.thinkAt = now + 60; chaser.restart() }
+        if (o.shown && o.pose !== "none" && o.spotId !== "below") {
+            chaser.c = o; chaser.right = right; chaser.tries = 0; o.thinkAt = now + 60; chaser.restart()
         }
         return runOff(c, right)
     }
+    // the chase, worked out once the other one's free to go: from where it is by then
+    function chase(o, right) {
+        var f = spot("floor"); if (!f || !o.shown || o.pose === "none" || o.spotId === "below") return null
+        return o.spotId === "floor" ? runOff(o, right)
+             : leapPlan(o, f, Math.max(f.x0, Math.min(f.x1, o.ax + (right ? 120 : -120))), null).concat(runOff(o, right))
+    }
     Timer {                                             // the other one gives chase, as soon as it's free (a moment later)
-        id: chaser; property var c: null; property var plan: []; property int tries: 0; interval: 600
-        onTriggered: if (c) { if (c.free()) { c.go(plan); c = null } else if (++tries < 12) restart(); else c = null }
+        id: chaser; property var c: null; property bool right: true; property int tries: 0; interval: 600
+        onTriggered: if (c) {
+            if (c.free()) { var p = cats.chase(c, right); if (p) c.go(p); c.thinkAt = cats.later(3, 7); c = null }
+            else if (++tries < 12) restart(); else { c.thinkAt = cats.now; c = null }
+        }
     }
 
     // ---------------------------------------------------------------- pushing the song along (the seek bar's playhead)
@@ -340,12 +347,20 @@ Item {
     // the layout moved under a cat (a number changed width, the card went): back onto its edge, or somewhere else
     function keepOn(c) {
         if (c.flying || c.spotId === "below" || c.spotId === "") return
-        var s = spot(c.spotId)
+        var s = spot(c.spotId) || under(c)          // (a number's spot can change its name as the numbers change: same place)
         if (!s) { lost(c); return }
+        c.spotId = s.id
         c.ay = yOn(s, c.ax)
         if (!c.free()) return
         var m = Math.min(28, wide(s) / 2)
         c.ax = Math.max(s.x0 + m, Math.min(s.x1 - m, c.ax))
+    }
+    function under(c) {
+        for (var i = 0; i < spots.length; i++) {
+            var t = spot(spots[i].id)
+            if (!t.use && c.ax > t.x0 - 30 && c.ax < t.x1 + 30 && Math.abs(yOn(t, c.ax) - c.ay) < 40) return t
+        }
+        return null
     }
     function lost(c) {
         c.shown = false

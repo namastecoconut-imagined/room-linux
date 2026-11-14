@@ -39,7 +39,8 @@ Item {
     x: ax - 100 * k
     y: ay - (180 - Data.top) * k
     width: Data.cellW * k; height: Data.cellH * k
-    opacity: shown ? 1 : 0
+    opacity: shown && !waiting ? 1 : 0
+    property bool waiting: false                     // just put somewhere: unseen until its first drawing there is in
     visible: opacity > 0.01 && !hidden
     Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
     transform: Scale { origin.x: 100 * cat.k; xScale: cat.mirror ? -1 : 1 }
@@ -80,7 +81,9 @@ Item {
     // ---------------------------------------------------------------- giving it things to do
     // a plan: clip names, or steps — { c: "walk", to: x } walks until near x; { c: "air", leap: { x, y }, from } flies
     // there; { c, n } plays a loop n times; { c, until: fn } loops until fn() says so; { flip: true } turns the
-    // drawing round; { call: fn } runs fn. A resting cat takes it near the bottom of a breath (no jump).
+    // drawing round; { face: x } turns round (standing) if it's facing away from x — decided when it gets there, not
+    // when the plan was made, as a leap before it may have turned it; { call: fn } runs fn. A resting cat takes it
+    // near the bottom of a breath (no jump).
     function go(steps) {
         plan = steps.map(function (st) { return typeof st === "string" ? { c: st } : st })
         load(sheetOf(firstClip()))
@@ -91,6 +94,7 @@ Item {
         pose = p; hidden = p === "none"
         if (m !== undefined) mirror = m
         pend = p === "none" ? null : { c: p, rest: true }
+        waiting = pend !== null
         if (pend) load(sheetOf(p))
     }
     function sheetOf(name) { var c = Data.clips[who][name]; return c ? c.s : "" }
@@ -127,6 +131,7 @@ Item {
             var st = plan.shift()
             if (st.flip) mirror = !mirror
             if (st.call) st.call()
+            if (st.face !== undefined && (st.face - ax) * dir < 0) plan.unshift({ c: "turn" }, { flip: true }, { c: "turn.back" })
         }
         if (plan.length) pend = plan.shift()
         else if (pose === "none") { hidden = true; restClip = true; item = null; return }
@@ -138,7 +143,7 @@ Item {
         if (!c) { console.warn("[room] cats: no clip " + who + " " + name); pend = null; plan = []; return }
         if (!ready(c.s)) { load(c.s); return }               // (rare: hold this drawing until its sheet is in)
         restClip = !!pend.rest; item = restClip ? null : pend; pend = null
-        clip = name; fi = 0; hidden = false
+        clip = name; fi = 0; hidden = false; waiting = false
         if (item && item.leap) arc(item.leap, item.from)
         move()
         // the sheet after this one, loading while this clip plays

@@ -21,6 +21,12 @@ from lib import *
 from lib import lerp, ease
 TAU = 2 * math.pi
 
+# how many px a unit each sheet is drawn at: the size the cats are shown at (0.65–0.85 px a unit) — drawn bigger
+# (1.6, as they were) every new drawing meant 2.5× the pixels to unpack, send to the graphics chip and scale down.
+# The big cat that flops out across the bottom is shown at ~2: its sheets are drawn for that.
+SHEET_SCALE = {"flop": 2.0, "belly": 2.0, "big": 2.0}
+def scale_of(sheet): return SHEET_SCALE.get(sheet, 1.0)
+
 # ---------------------------------------------------------------- the states and the life in them
 STATES = dict(stand=(STAND, 24), sit=(SIT, 24), loaf=(LOAF, 24), curl=(CURL, 34), drape=(DRAPE, 24), peek=(PEEK, 24),
               side=(SIDE, 30), belly=(BELLY, 20))
@@ -318,6 +324,11 @@ def library():
     def thud(G, j): G["squash"] = (0.94, 0.985)[j]
     add("flop", "stand.flop", upto(STAND, mid, 3) + between(mid, SIDE, 2, shape=lambda t: t * t) + hold(SIDE, 2, thud), a="stand", b="side")
     add("flop", "side>loaf", between(SIDE, LOAF, 7), a="side", b="loaf")
+    # the big one's own walk and getting up (drawn at its size, so it's as sharp as it is close)
+    add("big", "big.walk.in", [walking(0.5 + i / 8, a) for i, a in enumerate(amts)], a="stand", b="walk", dx=[5 * a for a in amts])
+    add("big", "big.walk", [walking(i / 8) for i in range(8)], loop=True, a="walk", b="walk", dx=[5.0] * 8)
+    add("big", "big.walk.out", [walking(i / 8, a) for i, a in enumerate(amts[::-1])], a="walk", b="stand", dx=[5 * a for a in amts[::-1]])
+    add("big", "side.getup", between(SIDE, LOAF, 7) + [LOAF] + between(LOAF, SIT, 10) + [SIT] + between(SIT, STAND, 9), a="side", b="stand")
     add("flop", "loaf>side", between(LOAF, SIDE, 8), a="loaf", b="side")
     def tremble(G, j): G["legs"] = [[a, k, (p[0] + 0.8 * math.sin(j * 2.1 + i), p[1])] for i, (a, k, p) in enumerate(G["legs"])]; G["head"]["mouth"] = 0.55 - 0.1 * math.sin(j)
     add("flop", "side.stretch", upto(SIDE, SIDE_S, 6) + hold(SIDE_S, 6, tremble) + between(SIDE_S, SIDE, 7), a="side", b="side")
@@ -347,7 +358,8 @@ def build(whos, only=None):
         for sheet in dict.fromkeys(c["sheet"] for c in CLIPS):
             if only and sheet not in only: continue
             clips = [c for c in CLIPS if c["sheet"] == sheet]
-            jobs = [(F, who, seed) for c in clips for F, seed in c["frames"]]
+            sc = scale_of(sheet)
+            jobs = [(F, who, seed, sc) for c in clips for F, seed in c["frames"]]
             with Pool(2) as pool: svgs = pool.starmap(svg, jobs)
             uniq, index, k = [], {}, 0
             idx = []
@@ -355,15 +367,15 @@ def build(whos, only=None):
                 h = hashlib.md5(s.encode()).hexdigest()
                 if h not in index: index[h] = len(uniq); uniq.append(s)
                 idx.append(index[h])
-            tmp = tempfile.mkdtemp(prefix="cats-"); cells = render(uniq, tmp)
-            rects, ims = pack(cells)
+            tmp = tempfile.mkdtemp(prefix="cats-"); cells = render(uniq, tmp, scale=sc)
+            rects, ims = pack(cells, int(CW * sc), int(CH * sc))
             name = f"{who}-{sheet}"
             W = max(r[0] + r[2] for r in rects); H = max(r[1] + r[3] for r in rects)
             out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
             for (x, y, w, h, ox, oy), im in zip(rects, ims): out.paste(im, (x, y))
             out.quantize(256, method=Image.Quantize.FASTOCTREE).save(os.path.join(outdir, name + ".png"), optimize=True)   # (looks the same, ~4× smaller)
             shutil.rmtree(tmp, ignore_errors=True)
-            man["sheets"][name] = dict(size=[W, H], frames=rects)
+            man["sheets"][name] = dict(size=[W, H], frames=rects, unit=sc)
             for c in clips:
                 n = len(c["frames"]); fi = idx[k:k + n]; k += n
                 man["clips"][who][c["name"]] = dict(s=name, f=fi, loop=c["loop"], a=c["a"], b=c["b"], dx=c["dx"], g=c["g"])
@@ -371,7 +383,7 @@ def build(whos, only=None):
     json.dump(man, open(manifest_path, "w"), separators=(",", ":"))
     write_js(man, JS)
 
-def pack(cells, width=2048, pad=2):
+def pack(cells, PXW, PXH, width=2048, pad=2):
     """trim each drawing to what's drawn, then shelf-pack: (x, y, w, h, ox, oy) in px, ox/oy = where it sits in the cell"""
     from PIL import Image
     ims, boxes = [], []
@@ -388,10 +400,10 @@ def pack(cells, width=2048, pad=2):
 def write_js(man, path):
     lines = ["// Bebo and Evan's clips (made by tools/cats/clips.py; don't edit by hand).",
              "// A frame is [x, y, w, h, ox, oy] in its sheet's pixels: where it is in the sheet, and where that sits in the",
-             f"// cat's {CW} × {CH} cell (drawn {SCALE} px a unit; the cell's top is y {TOP}; the cat stands on (100, 180)).",
+             f"// cat's {CW} × {CH} cell (the cell's top is y {TOP}; the cat stands on (100, 180)). A sheet is [w, h, px a unit].",
              "// A clip: s sheet, f frames, loop, a → b the state it starts and ends in, dx how far it moves on each frame (units).",
-             ".pragma library", f"var unit = {SCALE}", f"var top = {TOP}", f"var cellW = {CW}", f"var cellH = {CH}"]
-    lines.append("var sheets = " + json.dumps({k: v["size"] for k, v in man["sheets"].items()}, separators=(",", ":")))
+             ".pragma library", f"var top = {TOP}", f"var cellW = {CW}", f"var cellH = {CH}"]
+    lines.append("var sheets = " + json.dumps({k: v["size"] + [v.get("unit", SCALE)] for k, v in man["sheets"].items()}, separators=(",", ":")))
     lines.append("var frames = " + json.dumps({k: v["frames"] for k, v in man["sheets"].items()}, separators=(",", ":")))
     clips = {who: {n: {k: v for k, v in c.items() if v not in (None, False)} for n, c in cs.items()} for who, cs in man["clips"].items()}
     for who in clips:
@@ -411,14 +423,14 @@ def reel(who, out, names=None):
     n = 0; Wc, Hc = PXW + 160, PXH + 40
     for name in names:
         c = clips[name]; sh = sheets.get(c["s"]) or sheets.setdefault(c["s"], Image.open(os.path.join(assets, c["s"] + ".png")).convert("RGBA"))
-        rects = man["sheets"][c["s"]]["frames"]; x = 0.0
+        rects = man["sheets"][c["s"]]["frames"]; x = 0.0; u = man["sheets"][c["s"]].get("unit", SCALE)
         for rep in range(2 if c["loop"] else 1):
             for j, fi in enumerate(c["f"]):
                 fx, fy, w, h, ox, oy = rects[fi]
                 bg = Image.new("RGBA", (Wc, Hc), (38, 20, 13, 255)); d = ImageDraw.Draw(bg)
-                gy = int((180 - TOP) * SCALE) + 20
+                gy = int((180 - TOP) * u) + 20
                 d.line([(0, gy), (Wc, gy)], fill=(255, 255, 255, 60))
-                if c.get("dx"): x = (x + c["dx"][j] * SCALE) % 120
+                if c.get("dx"): x = (x + c["dx"][j] * u) % 120
                 bg.alpha_composite(sh.crop((fx, fy, fx + w, fy + h)), (int(80 + ox + x - 60), 20 + oy))
                 d.text((8, 4), f"{who}  {name}  {j + 1}/{len(c['f'])}", fill=(255, 255, 255, 160))
                 bg.convert("RGB").save(f"{tmp}/r{n:05d}.png"); n += 1

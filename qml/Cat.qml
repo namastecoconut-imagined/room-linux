@@ -11,7 +11,8 @@ Item {
     property string who: "bebo"
     property real size: 160                          // how wide its 200-unit cell is drawn (stage px)
     readonly property real k: size / Data.cellW      // stage px a unit
-    readonly property real s: k / Data.unit          // stage px a sheet pixel
+    function unit(n) { return n && Data.sheets[n] ? Data.sheets[n][2] : 1 }     // a sheet's px a unit (each its own)
+    readonly property real s: k / unit(cc.s)         // stage px a pixel of the sheet showing
     property real ax: 0
     property real ay: 0
     property bool mirror: false                      // the drawings face right; mirrored, the cat faces left
@@ -47,36 +48,40 @@ Item {
     Behavior on opacity { NumberAnimation { duration: 450; easing.type: Easing.InOutQuad } }
     transform: Scale { origin.x: 100 * cat.k; xScale: cat.mirror ? -1 : 1 }
 
-    // two sheets at a time: the one showing, and the next one loading
-    property string sheetA: ""
-    property string sheetB: ""
-    readonly property int showing: sheetA === cc.s ? 0 : sheetB === cc.s ? 1 : -1
+    // four sheets kept: the one showing, the next one loading, and the ones used most lately — so going between
+    // sitting, walking and lying down doesn't unpack the same drawings again and again (each sheet unpacked is work
+    // for the processor, and a picture sent to the graphics chip)
+    property var slots: ["", "", "", ""]
+    property var used: [0, 0, 0, 0]
+    property int stamp: 0
+    readonly property int showing: slots.indexOf(cc.s)
     function url(n) { return n ? Qt.resolvedUrl("../assets/cats/" + n + ".png") : "" }
-    function ready(n) { return sheetA === n && imgA.status === Image.Ready || sheetB === n && imgB.status === Image.Ready }
+    function ready(n) { var i = slots.indexOf(n), it = i >= 0 ? sheetRep.itemAt(i) : null; return it !== null && it.ready }
     function load(n) {
-        if (!n || sheetA === n || sheetB === n) return
-        if (showing === 0) sheetB = n; else sheetA = n
-    }
-    Item {
-        visible: cat.showing === 0 && imgA.status === Image.Ready
-        x: cat.fr[4] * cat.s; y: cat.fr[5] * cat.s; width: cat.fr[2] * cat.s; height: cat.fr[3] * cat.s
-        clip: true
-        Image {
-            id: imgA
-            source: cat.url(cat.sheetA); asynchronous: true; cache: false; smooth: true
-            x: -cat.fr[0] * cat.s; y: -cat.fr[1] * cat.s
-            width: (cat.sheetA ? Data.sheets[cat.sheetA][0] : 0) * cat.s; height: (cat.sheetA ? Data.sheets[cat.sheetA][1] : 0) * cat.s
+        if (!n) return
+        var i = slots.indexOf(n), u = used.slice()
+        if (i < 0) {                                   // into the slot used least lately (never the one showing)
+            for (var j = 0; j < slots.length; j++) if (j !== showing && (i < 0 || u[j] < u[i])) i = j
+            var sl = slots.slice(); sl[i] = n; slots = sl
         }
+        u[i] = ++stamp; used = u
     }
-    Item {
-        visible: cat.showing === 1 && imgB.status === Image.Ready
-        x: cat.fr[4] * cat.s; y: cat.fr[5] * cat.s; width: cat.fr[2] * cat.s; height: cat.fr[3] * cat.s
-        clip: true
-        Image {
-            id: imgB
-            source: cat.url(cat.sheetB); asynchronous: true; cache: false; smooth: true
-            x: -cat.fr[0] * cat.s; y: -cat.fr[1] * cat.s
-            width: (cat.sheetB ? Data.sheets[cat.sheetB][0] : 0) * cat.s; height: (cat.sheetB ? Data.sheets[cat.sheetB][1] : 0) * cat.s
+    Repeater {
+        id: sheetRep
+        model: 4
+        Item {
+            readonly property string sheet: cat.slots[index]
+            readonly property bool ready: img.status === Image.Ready
+            visible: cat.showing === index && ready
+            x: cat.fr[4] * cat.s; y: cat.fr[5] * cat.s; width: cat.fr[2] * cat.s; height: cat.fr[3] * cat.s
+            clip: true
+            Image {
+                id: img
+                source: cat.url(parent.sheet); asynchronous: true; cache: false; smooth: true
+                x: -cat.fr[0] * cat.s; y: -cat.fr[1] * cat.s
+                width: (parent.sheet ? Data.sheets[parent.sheet][0] / cat.unit(parent.sheet) : 0) * cat.k
+                height: (parent.sheet ? Data.sheets[parent.sheet][1] / cat.unit(parent.sheet) : 0) * cat.k
+            }
         }
     }
 
@@ -108,16 +113,20 @@ Item {
     }
 
     // ---------------------------------------------------------------- the next drawing (10 a second)
-    function tick() {
+    // even: every other tick (Cats.qml's beat). Resting, a cat draws only then, two drawings on — its breathing as
+    // fast as ever, but the screen redrawn half as often while both just rest (each new drawing repaints it all)
+    function tick(even) {
         if (pend) { tryStart(); return }
         if (hidden) { if (plan.length) next(); return }
+        var rest = restClip && !item
+        if (rest && !even) return
         var n = cc.f.length
         if (item && item.leap && !arcA.running) { next(); return }      // landed: on at once, whatever drawing it's on
         if (item && item.early && item.until && item.until()) { next(); return }   // (a gallop can stop on any stride)
         if (fi < n - 1) {
             // resting, and something to do: start it near the bottom of a breath, once its sheet is in
             if (restClip && plan.length && fi >= (clip === pose ? n * 3 / 4 : n - 3) && ready(sheetOf(firstClip()))) { next(); return }
-            fi++; move(); return
+            fi = rest ? Math.min(fi + 2, n - 1) : fi + 1; move(); return
         }
         // this clip is done: round again, or on to what's next
         if (cc.loop && item && !doneLooping()) { fi = 0; move(); return }
@@ -149,6 +158,7 @@ Item {
         if (!ready(c.s)) { load(c.s); return }               // (rare: hold this drawing until its sheet is in)
         restClip = !!pend.rest; item = restClip ? null : pend; pend = null
         clip = name; fi = 0; hidden = false; waiting = false
+        load(c.s)                                    // (kept: used just now)
         if (item && item.leap) arc(item.leap, item.from)
         move()
         // the sheet after this one, loading while this clip plays

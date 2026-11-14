@@ -244,12 +244,13 @@ KEYS = dict(stand=STAND, sit=SIT, loaf=LOAF, curl=CURL, drape=DRAPE, peek=PEEK, 
             side=SIDE, belly=BELLY, rollm=ROLLM, shove=SHOVE,
             rear=REAR, bat1=BAT1, bat2=BAT2, stalk=STALK, boop=BOOP, groom=GROOM, purr=PURR, side_s=SIDE_S)
 
-def svg(F, who, seed):
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 {TOP} {CW} {CH}" width="{PXW}" height="{PXH}">'
+def svg(F, who, seed, scale=SCALE):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 {TOP} {CW} {CH}" width="{int(CW * scale)}" height="{int(CH * scale)}">'
             f'{R.DEFS}{R.frame(F, who, seed)}</svg>')
 
-def render(svgs, outdir, prefix="c"):
+def render(svgs, outdir, prefix="c", scale=SCALE):
     """draw many cells at once: a page of 8 × 8 cells, one screenshot, cut up. Returns the PNG paths."""
+    PXW, PXH = int(CW * scale), int(CH * scale)
     os.makedirs(outdir, exist_ok=True)
     outdir = os.path.abspath(outdir); job = os.path.join(outdir, "_job.json")
     json.dump({"svgs": svgs, "w": PXW, "h": PXH, "out": outdir, "prefix": prefix}, open(job, "w"))

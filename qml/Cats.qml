@@ -34,6 +34,7 @@ Item {
 
     // one tick steps both cats, so the screen's redrawn once for the two of them (10 a second)
     Timer {
+        property int beat: 0
         interval: 100; repeat: true
         running: cats.visible && (cats.where !== "" || bebo.visible || evan.visible)
         onTriggered: {
@@ -41,7 +42,8 @@ Item {
                 if (c.item && c.item.follow && cats.scene) c.ax = cats.scene.catKnob() - 64 * c.k
                 if (c.spotId === "curve" && !c.flying && !(c.item && c.item.leap)) { var s = cats.spot("curve"); if (s) c.ay = s.yAt(c.ax) }
             })
-            bebo.tick(); evan.tick()
+            beat++
+            bebo.tick(beat % 2 === 0); evan.tick(beat % 2 === 0)
         }
     }
 
@@ -553,12 +555,12 @@ Item {
             c.ax = fromRight ? Theme.stageW + 220 : -220; c.ay = cats.floorY; c.spotId = "floor"; c.mirror = fromRight
             c.shown = true
             var o = cats.other(c)
-            c.go([{ call: function () { c.pose = "stand" } }, "walk.in",
-                  { c: "walk", until: function () { return (x - c.ax) * c.dir < 51 * c.k } }, "walk.out",
+            c.go([{ call: function () { c.pose = "stand" } }, "big.walk.in",
+                  { c: "big.walk", until: function () { return (x - c.ax) * c.dir < 51 * c.k } }, "big.walk.out",
                   { call: function () { if (o.shown && o.free() && (o.pose === "sit" || o.pose === "loaf")) o.go([o.pose + ".alert.in", { c: o.pose + ".alert", n: 2 }, o.pose + ".alert.out"]) } },
                   "stand.flop", { c: "side", n: 2 }, "side.stretch", { c: "side", n: 1 }, "side>belly", "belly.wriggle", { c: "belly", n: 3 },
-                  "belly.wriggle", "belly>side", { c: "side", n: 2 }, "side>loaf", "loaf>sit", "sit>stand", { face: off }, "walk.in",
-                  { c: "walk", until: function () { return fromRight ? c.ax < off : c.ax > off } },
+                  "belly.wriggle", "belly>side", { c: "side", n: 2 }, "side.getup", { face: off }, "big.walk.in",
+                  { c: "big.walk", until: function () { return fromRight ? c.ax < off : c.ax > off } },
                   { call: function () { c.pose = "none"; c.spotId = "below"; c.size = small; c.thinkAt = cats.later(4, 12); cats.hogger = null } }])
         }
     }

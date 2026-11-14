@@ -221,38 +221,44 @@ Item {
             c.thinkAt = later(30, 90); return
         }
         if (s && s.low && (p === "sit" || p === "stand")) { c.go(route(p, "loaf")); c.thinkAt = later(3, 8); return }
-        if (music && (p === "sit" || p === "loaf" || p === "drape") && Math.random() < 0.35) {
+        if (music && (p === "sit" || p === "loaf" || p === "drape") && Math.random() < 0.2) {
             var beats = Math.round(rnd(4, 10))
             c.go([p + ".bob.in", { c: p + ".bob", until: function () { return !cats.music || --beats <= 0 } }, p + ".bob.out"])
-            c.thinkAt = later(2, 6); return
+            c.thinkAt = later(1, 3); return
         }
         var o = []
-        if (calm) {                                         // Bebo
-            if (p === "curl") o = [[0.45, route(p, "loaf")], [0.55, []]]
-            else if (p === "loaf") o = [[0.2, ["loaf.knead.in", { c: "loaf.knead", n: Math.round(rnd(3, 7)) }, "loaf.knead.out"]], [0.08, ["loaf.roll"]],
-                                        [s && s.yAt ? 0.15 : 0, along(c, s, false, "loaf")], [music ? 0.05 : 0, pushPlan(c)],
-                                        [0.18, route(p, "curl")], [0.2, route(p, "sit")], [edge ? 0.12 : 0, route(p, "drape")], [0.3, []]]
-            else if (p === "sit") o = [[0.15, ["sit.yawn"]], [0.2, ["sit.wash"]], [0.18, route(p, "loaf")],
-                                       [0.14, along(c, s, false, pick(["sit", "loaf"]))], [0.05, elsewhere(c, s, "sit")], [0.28, []],
-                                       [music ? 0.08 : 0, pushPlan(c)], [s && s.floor ? 0.04 : 0, function () { return zoomies(c) }]]
-            else if (p === "drape") o = [[0.3, route(p, "loaf")], [0.1, ["drape.swat"]], [0.6, []]]
-            else if (p === "stand") o = [[1, route(p, "sit")]]
+        var fl = s && s.floor, curve = s && s.yAt
+        var zoom = function () { return zoomies(c) }
+        var dash = function () { if (!f) return null; var x = placeOn(f, c); return Math.abs(x - c.ax) > 260 ? runPlan(c, x, null) : null }
+        if (calm) {                                         // Bebo: calmer, but up and about
+            if (p === "curl") o = [[0.6, route(p, "loaf")], [0.2, elsewhere(c, s, "sit")], [0.2, []]]
+            else if (p === "loaf") o = [[0.12, ["loaf.knead.in", { c: "loaf.knead", n: Math.round(rnd(3, 6)) }, "loaf.knead.out"]], [0.08, ["loaf.roll"]],
+                                        [0.06, route(p, "curl")], [0.12, route(p, "sit")], [edge ? 0.08 : 0, route(p, "drape")],
+                                        [0.18, along(c, s, false, "loaf")], [s && s.low ? 0.4 : 0.22, elsewhere(c, s, pick(["sit", "loaf"]))],
+                                        [music ? 0.05 : 0, pushPlan(c)], [0.08, []]]
+            else if (p === "sit") o = [[0.1, ["sit.yawn"]], [0.12, ["sit.wash"]], [0.1, route(p, "loaf")],
+                                       [0.25, along(c, s, false, pick(["sit", "loaf"]))], [0.22, elsewhere(c, s, pick(["sit", "loaf"]))],
+                                       [fl ? 0.05 : 0, zoom], [fl ? 0.05 : 0, dash], [music ? 0.06 : 0, pushPlan(c)], [0.06, []]]
+            else if (p === "drape") o = [[0.25, route(p, "loaf")], [0.1, ["drape.swat"]], [0.25, elsewhere(c, s, "sit")],
+                                         [curve ? 0.15 : 0, along(c, s, false, "drape")], [0.15, []]]
+            else if (p === "stand") o = [[0.3, route(p, "sit")], [0.3, along(c, s, false, "sit")], [0.3, elsewhere(c, s, "sit")], [0.1, ["stand.stretch"]]]
             else if (p === "peek") o = [[1, f ? ["peek.down"].concat(popUp(c, f, c.ax, "sit")) : ["peek.down"]]]
             else if (p === "none") o = [[0.6, f ? popUp(c, f, placeOn(f, c), "sit") : null],
                                         [0.4, f ? runIn(c, placeOn(f, c), Math.random() < 0.5, "sit") : null]]
-        } else {                                            // Evan
-            var fl = s && s.floor
-            if (p === "stand") o = [[0.22, along(c, s, false, null)], [0.25, elsewhere(c, s, null)], [0.1, ["stand.stretch"]],
-                                    [0.16, route(p, "sit")], [fl ? 0.1 : 0, along(c, s, true, null)], [fl ? 0.12 : 0, hopDown(c)],
-                                    [0.02, ["stand.startle"]], [fl ? 0.1 : 0, function () { return zoomies(c) }], [music ? 0.12 : 0, pushPlan(c)],
-                                    [fl ? 0.08 : 0, function () { var x = placeOn(f, c); return Math.abs(x - c.ax) > 260 ? runPlan(c, x, null) : null }]]
-            else if (p === "sit") o = [[0.3, route(p, "stand")], [0.12, ["sit.wash"]], [0.08, ["sit.yawn"]], [0.08, ["sit.swat"]],
-                                       [0.12, route(p, "loaf")], [0.3, []], [fl ? 0.06 : 0, function () { return zoomies(c) }]]
-            else if (p === "loaf") o = [[edge ? 0.2 : 0, route(p, "drape")], [0.1, ["loaf.knead.in", { c: "loaf.knead", n: Math.round(rnd(2, 5)) }, "loaf.knead.out"]],
-                                        [0.25, route(p, "sit")], [0.07, route(p, "curl")], [0.38, []], [0.12, ["loaf.roll"]],
-                                        [s && s.yAt ? 0.3 : 0, along(c, s, false, "loaf")], [music ? 0.12 : 0, pushPlan(c)]]
-            else if (p === "drape") o = [[0.3, route(p, "loaf")], [0.15, ["drape.swat"]], [0.55, []], [s && s.yAt ? 0.25 : 0, along(c, s, false, "drape")]]
-            else if (p === "curl") o = [[0.6, route(p, "loaf")], [0.4, []]]
+        } else {                                            // Evan: always up to something
+            if (p === "stand") o = [[0.25, along(c, s, false, null)], [0.25, elsewhere(c, s, null)], [0.06, ["stand.stretch"]],
+                                    [0.08, route(p, "sit")], [fl ? 0.12 : 0, along(c, s, true, null)], [fl ? 0.1 : 0, hopDown(c)],
+                                    [0.02, ["stand.startle"]], [fl ? 0.1 : 0, zoom], [music ? 0.12 : 0, pushPlan(c)], [fl ? 0.12 : 0, dash]]
+            else if (p === "sit") o = [[0.2, along(c, s, false, null)], [0.25, elsewhere(c, s, null)], [0.08, ["sit.wash"]], [0.05, ["sit.yawn"]],
+                                       [0.06, ["sit.swat"]], [0.06, route(p, "loaf")], [fl ? 0.08 : 0, zoom], [fl ? 0.08 : 0, dash],
+                                       [music ? 0.1 : 0, pushPlan(c)], [0.04, []]]
+            else if (p === "loaf") o = [[edge ? 0.12 : 0, route(p, "drape")], [0.06, ["loaf.knead.in", { c: "loaf.knead", n: Math.round(rnd(2, 5)) }, "loaf.knead.out"]],
+                                        [0.08, route(p, "sit")], [0.03, route(p, "curl")], [0.1, ["loaf.roll"]],
+                                        [curve ? 0.2 : 0, along(c, s, false, "loaf")], [music ? 0.12 : 0, pushPlan(c)],
+                                        [0.25, elsewhere(c, s, null)], [0.05, []]]
+            else if (p === "drape") o = [[0.2, route(p, "loaf")], [0.15, ["drape.swat"]], [0.25, elsewhere(c, s, null)],
+                                         [curve ? 0.2 : 0, along(c, s, false, "drape")], [0.1, []]]
+            else if (p === "curl") o = [[0.6, route(p, "loaf")], [0.25, elsewhere(c, s, null)], [0.15, []]]
             else if (p === "peek") o = [[0.45, ["peek.down"]], [0.35, f ? ["peek.down"].concat(popUp(c, f, placeOn(f, c), null)) : null], [0.2, []]]
             else if (p === "none") {
                 var ups = spots.map(function (t) { return spot(t.id) }).filter(function (t) { return !t.floor && !t.use && wide(t) >= 16 && roomFor(t, c) })
@@ -265,7 +271,7 @@ Item {
         var ch = o.length ? choose(c, o) : null
         if (ch && typeof ch[1] === "function") ch = [ch[0], ch[1]() || []]
         if (ch && ch[1] && ch[1].length) c.go(ch[1])
-        c.thinkAt = calm ? later(8, 22) : later(4, 12)
+        c.thinkAt = calm ? later(3, 8) : later(2, 5)
     }
 
     // ---------------------------------------------------------------- arriving on a screen

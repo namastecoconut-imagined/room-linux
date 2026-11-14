@@ -29,7 +29,6 @@ Item {
     signal openReminders()
     signal openSettings()
     signal goHome()
-    signal openApp(string name)
 
     // what's on screen: the view, a step behind it — so that coming off standby (waking) is known before anything
     // starts to move. Waking is choreographed: the clock glides to its place, standby's bits sink away, the
@@ -661,7 +660,6 @@ Item {
             Btn { text: "Weather"; onTapped: sc.openWeather() }
             Btn { text: "Reminders"; onTapped: sc.openReminders() }
             Btn { text: "Scenes"; onTapped: sc.sheet = "scenes" }
-            Btn { text: "Apps"; onTapped: sc.sheet = "apps" }
         }
     }
     // top bar, right: All off · Dim · Night · the mic · settings
@@ -910,6 +908,5 @@ Item {
         id: sheetV
         kind: sc.sheet
         onClose: sc.sheet = ""
-        onLaunch: (name) => { sc.sheet = ""; sc.openApp(name) }
     }
 }

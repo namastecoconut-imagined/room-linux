@@ -33,7 +33,7 @@ Window {
     Shortcut { sequence: "F11"; onActivated: { win.keptWindowed = win.visibility === Window.FullScreen; win.visibility = win.keptWindowed ? Window.Windowed : Window.FullScreen } }
 
     // the screen you're on while awake, and whether standby is showing over it
-    property string screen: startScreen === "catshome" || startScreen === "catsdayhome" ? "home" : startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" || startScreen.indexOf("setw") === 0 || startScreen.indexOf("setj") === 0 ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
+    property string screen: startScreen === "catshome" || startScreen === "catsdayhome" ? "home" : startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" || startScreen.indexOf("setw") === 0 || startScreen.indexOf("setj") === 0 || startScreen.indexOf("setmore") === 0 ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby" || startScreen === "catsstandby" || startScreen === "catsdaystandby"
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
@@ -147,7 +147,7 @@ Window {
             z: win.alerting || win.voiceUp || kbd.up ? 5 : 0      // racing about over an alarm, ears up over the assistant, on the keyboard
             sourceComponent: Cats {
                 scene: win.sceneItem
-                night: win.lateNight && startScreen.indexOf("catsday") < 0
+                night: win.lateNight && room.panel.catsSleep !== false && startScreen.indexOf("catsday") < 0
                 music: win.playing
                 listening: win.voiceState === "listening"
                 alarm: win.alerting

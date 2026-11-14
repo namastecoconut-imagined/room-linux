@@ -8,6 +8,9 @@ The Room panel as a native Qt Quick app. The screens are drawn on the GPU, and t
 2. **Battery.** In the Surface UEFI (hold volume-up while powering on), turn on **Battery Limit**. This caps the charge at 50% so the battery doesn't swell while the Surface is always plugged in.
 3. **Config.** Copy `config.json` from the Mac (`Downloads/RoomPanel/config.json`) to `~/.config/room/config.json`
    (with `"anthropicKey"` and `"sarvamKey"` for the assistant). Keys live only there, never in this repo.
+   Everyday settings are made on the panel instead (Settings → More settings): the cats, the 12/24-hour clock, when
+   night is, how long before standby, the microphone, waking on a sound, AirPlay to the speaker, the speaker limit.
+   Room keeps those in `~/.config/room/settings.json`; it never writes config.json, and what's set on the panel wins.
    **Display font:** the clock, big numbers and Alexa's words are set in Kasero when `~/.config/room/fonts/Kasero.otf`
    is there. It's a licensed font, so it isn't in this public repo; without it Room uses Instrument Serif, which ships here.
 4. **Room — everything, in one go:**
@@ -61,7 +64,7 @@ journalctl --user -u room -f                                          # live log
 | `qml/ClockView.qml` | the Clock screen: next alarm, timers, alarms, the alarm editor sheet |
 | `qml/WeatherView.qml` | the Weather screen: now, the rain to expect, the next 12 hours as one line, three days |
 | `qml/RemindersView.qml` | the Reminders screen: two columns (tap to tick, hold to delete); new ones are asked for (the assistant) |
-| `qml/SettingsView.qml` | the Settings screen: brightness, Wi-Fi (join with a password), Bluetooth, web browser / desktop / shut down (asks first) |
+| `qml/SettingsView.qml` | the Settings screen: brightness, Wi-Fi (join with a password), Bluetooth, web browser / desktop / shut down (asks first); More settings (a sheet): the cats, clock & night, standby, sound |
 | `qml/Keyboard.qml` | the on-screen keyboard (the Wi-Fi password): rises when a text box is typed in, lifts the sheet above it |
 | `qml/VolumeHud.qml` | the volume buttons' capsule |
 | `qml/VoiceOverlay.qml` + `shaders/horizon.frag` | the assistant over the top band: the light line, your words, the answer, buttons under the line |
@@ -88,7 +91,7 @@ Its own program in `assistant/` (its own service, `room-assistant`; see `assista
 
 `room/mic.py` measures how loud the room is (the default mic, through pw-record) — loudness only, nothing is recognised
 or kept. It brings the screen back at a sound, and while music plays the background's lights swell with it.
-`"roomMic": false` in config.json turns it off. `room/output.py` keeps the Surface's own speakers at full underneath
+Settings → More settings → Sound turns it off. `room/output.py` keeps the Surface's own speakers at full underneath
 the volume slider and puts music streams that were left turned down back to full when Room starts.
 
 ## Burn-in care
@@ -104,7 +107,8 @@ top, the forecast's curve, a list's lines, a sheet's top edge, the bottom edge o
 to peek up). They breathe and blink, wash, yawn, knead, roll over, nap, walk and leap between edges, now and then
 chase each other off the side of the screen, push the song's playhead along, nod to music, prick up their ears when
 the assistant listens, swat the clock when the minute changes, race about when an alarm goes off, and sleep at night.
-They never take a touch. `"cats": false` in config.json turns them off (not loaded at all). To check them:
+They never take a touch. Settings → More settings → Cats turns them off (not loaded at all) or keeps them awake
+at night. To check them:
 `ROOM_SCREEN=catsdayhome` / `catsdaystandby` (everything happens sooner).
 
 ## Buttons and screen
@@ -115,6 +119,6 @@ They never take a touch. `"cats": false` in config.json turns them off (not load
   `scripts/buttons.sh` has run (`undo` takes it back).
 - On standby, after 5 quiet minutes the backlight goes fully off — never while music plays on the Surface or through
   it (its speakers, or a speaker it sends to; not Spotify on the phone), and music starting there brings it back. While it's off, a small sound brings it back: anything slightly over the room's background, like a
-  snap of the fingers. `"wakeAbove"` in config.json sets how far over, in dB (10 unless set; lower wakes on smaller
+  snap of the fingers. Settings → More settings → Sound sets how far over, in dB (10 unless set; lower wakes on smaller
   sounds); the log says once a minute how loud the loudest sound was, to set it by.
 - Settings → This panel: switch to the desktop, or shut down.

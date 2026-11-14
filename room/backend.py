@@ -48,6 +48,7 @@ class Room(QObject):
     asleepChanged = Signal()
     voiceChanged = Signal()
     browserChanged = Signal()
+    panelChanged = Signal()              # a setting changed in Settings → More settings
     _sinkFound = Signal()                # (from the speaker lookup's thread)
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
@@ -114,11 +115,10 @@ class Room(QObject):
         self.voicelink.changed.connect(self.voiceChanged)
         self.voicelink.changed.connect(lambda: self.voice.get("state") in ("listening", "thinking", "speaking")
                                        and self.sleep.wake("the assistant"))
-        self.mic = RoomMic(self) if cfg.get("roomMic") is not False else None
-        if self.mic:
-            self.mic.level.connect(self._sound_level)
-            self.mic.heard.connect(self.sleep.hear)
-            self.mic.loudest.connect(self.sleep.loudest)
+        self._live = False                  # (start() has run, not in the demo)
+        self.mic = None
+        if cfg.get("roomMic") is not False:
+            self._mic_on(True)
 
     def start(self):
         self._things.start()
@@ -196,6 +196,7 @@ class Room(QObject):
         self._sink_timer = QTimer(self); self._sink_timer.timeout.connect(self._find_sink); self._sink_timer.start(15000)
         self._read_out_volume()
         self._vol_timer = QTimer(self); self._vol_timer.timeout.connect(self._read_out_volume); self._vol_timer.start(10000)
+        self._live = True
         if self.mic:
             self.mic.start()
         self.voicelink.start()
@@ -362,13 +363,73 @@ class Room(QObject):
             self.musicChanged.emit()
         self._now = now
 
-    @Property(bool, constant=True)
+    @Property(bool, notify=panelChanged)
     def clock24(self):
         return bool(self.cfg.get("clock24"))
 
-    @Property(bool, constant=True)
-    def cats(self):                     # Bebo and Evan on the screens ("cats": false in config.json: none at all)
+    @Property(bool, notify=panelChanged)
+    def cats(self):                     # Bebo and Evan on the screens (off: not loaded at all)
         return self.cfg.get("cats") is not False
+
+    # ---------------------------------------------------------------- Settings → More settings
+    # What can be set on the panel, its default and its range. Set there, it's kept in settings.json (config.py) and
+    # takes effect at once; config.json keeps the rest (keys, logins, the rooms) and is never written.
+    PANEL = {"cats": (True,), "catsSleep": (True,), "clock24": (False,),
+             "nightStart": (23, 0, 23), "nightEnd": (7, 0, 23),
+             "homeIdleSec": (300, 60, 1800), "homePlayingSec": (300, 60, 1800), "musicSec": (300, 60, 1800),
+             "menuStandbySec": (180, 60, 1800),
+             "roomMic": (True,), "wakeAbove": (10, 3, 25), "airplayToBluetooth": (True,), "speakerHeadroomDb": (4, 0, 12)}
+
+    def _panel_value(self, k):
+        d = self.PANEL[k]
+        v = self.cfg.get(k, d[0])
+        if isinstance(d[0], bool):
+            return bool(v) if k == "clock24" else v is not False
+        try:
+            return max(d[1], min(d[2], int(round(abs(float(v))))))
+        except (TypeError, ValueError):
+            return d[0]
+
+    @Property("QVariantMap", notify=panelChanged)
+    def panel(self):
+        return {k: self._panel_value(k) for k in self.PANEL}
+
+    @Slot(str, "QVariant")
+    def setPanel(self, key, value):
+        if key not in self.PANEL:
+            return
+        self.cfg[key] = value
+        v = self._panel_value(key)
+        self.cfg[key] = v
+        if not self.demo:
+            from .config import save_setting
+            save_setting(key, v)
+        print(f"[room] settings: {key} → {v}", flush=True)
+        self.panelChanged.emit()
+        if key == "clock24":
+            self.eventsChanged.emit()                       # the agenda's times
+        elif key == "roomMic":
+            self._mic_on(v)
+        elif key == "wakeAbove":
+            self.sleep.wake_above = float(v)
+        elif key in ("airplayToBluetooth", "speakerHeadroomDb") and getattr(self, "output", None):
+            self.output.airplay_bt = self._panel_value("airplayToBluetooth")
+            self.output.headroom = float(self._panel_value("speakerHeadroomDb"))
+            self.output.poke()
+
+    def _mic_on(self, on: bool):
+        """Room's microphone on or off (the screen's wake on a sound, the background moving with music)."""
+        if on and self.mic is None:
+            self.mic = RoomMic(self)
+            self.mic.level.connect(self._sound_level)
+            self.mic.heard.connect(self.sleep.hear)
+            self.mic.loudest.connect(self.sleep.loudest)
+            if self._live:
+                self.mic.start()
+        elif not on and self.mic is not None:
+            self.mic.stop(); self.mic._tick.stop(); self.mic.deleteLater()
+            self.mic = None
+            self._level = 0.0; self.levelChanged.emit()
 
     @Property(str, constant=True)
     def here(self):
@@ -378,7 +439,7 @@ class Room(QObject):
     def status(self):
         return "⚡ Cool" if self.demo else self.screen.status
 
-    @Property("QVariantMap", constant=True)
+    @Property("QVariantMap", notify=panelChanged)
     def timing(self):
         """The standby rules' settings (seconds and hours), straight from config.json."""
         c = self.cfg
@@ -403,7 +464,7 @@ class Room(QObject):
         self._display.set_dim(standby and dim)
         self.spotify.relaxed = standby
 
-    @Property(bool, constant=True)
+    @Property(bool, notify=panelChanged)
     def micOn(self):
         """Whether the room's loudness is measured (it drives the standby ripple and the music beat)."""
         return self.mic is not None and not self.demo

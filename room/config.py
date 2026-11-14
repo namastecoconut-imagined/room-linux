@@ -1,6 +1,8 @@
 """Reads config.json — the same file the iPhone panel uses, so rooms, Spotify and the calendar carry over as-is.
 
 Looked for in this order: $ROOM_CONFIG, ~/.config/room/config.json, ./config.json.
+What's set on the panel itself (Settings → More settings) goes in ~/.config/room/settings.json, beside it, and wins
+over config.json; Room never writes config.json.
 Things the panel learns while running (a rotated Spotify token, the last forecast) go in ~/.local/state/room/.
 """
 import json
@@ -9,6 +11,7 @@ from pathlib import Path
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "room"
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "room"
+SETTINGS = CONFIG_DIR / "settings.json"
 
 DEFAULTS = {
     "here": "",
@@ -40,7 +43,29 @@ def load() -> dict:
             print(f"[room] config.json couldn't be read ({e}) — starting with defaults")
     else:
         print("[room] no config.json found — copy yours to ~/.config/room/config.json")
+    cfg.update(panel_settings())
     return cfg
+
+
+def panel_settings() -> dict:
+    """What was set on the panel (Settings → More settings)."""
+    try:
+        return json.loads(SETTINGS.read_text())
+    except FileNotFoundError:
+        return {}
+    except Exception as e:
+        print(f"[room] settings.json couldn't be read ({e}) — using config.json's")
+        return {}
+
+
+def save_setting(key: str, value) -> None:
+    """Keep one setting made on the panel (the file's replaced whole, never left half-written)."""
+    data = panel_settings()
+    data[key] = value
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = SETTINGS.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    tmp.replace(SETTINGS)
 
 
 class State:

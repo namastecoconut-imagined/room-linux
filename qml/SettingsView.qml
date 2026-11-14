@@ -125,6 +125,7 @@ Item {
         Mono { y: 212; text: "This panel"; color: Theme.w62 }
         Row {
             y: 244; spacing: 10
+            Chip { text: "More settings"; onTapped: more.open = true }
             Chip { visible: room.kiosk && room.browser && !room.desktop; text: room.browserOpen ? "Opening…" : "Web browser"; onTapped: room.openBrowser() }
             Chip { visible: room.kiosk && room.desktop; text: "Switch to desktop"; onTapped: { confirm.kind = "desktop"; confirm.open = true } }
             Chip { text: "Shut down"; onTapped: { confirm.kind = "off"; confirm.open = true } }
@@ -298,8 +299,8 @@ Item {
         out.push({ id: "slider", x0: a.x, x1: b.x, y: a.y })
         out.push({ id: "floor", x0: 430, x1: 700, floor: true })
     }
-    readonly property bool sheetUp: confirm.open || joiner.open        // (the cats: up onto its top edge)
-    readonly property real sheetTop: confirm.open ? confirm.paneTop : joiner.paneTop
+    readonly property bool sheetUp: confirm.open || joiner.open || more.open        // (the cats: up onto its top edge)
+    readonly property real sheetTop: confirm.open ? confirm.paneTop : more.open ? more.paneTop : joiner.paneTop
     SheetFrame {
         id: confirm
         paneY: 560
@@ -367,8 +368,133 @@ Item {
         }
     }
 
+    // ---------------------------------------------------------------- more settings: the panel's own (a sheet, in pages)
+    // What used to be set in config.json by hand, set here instead (kept by Room, apart from config.json).
+    readonly property var pv: room.panel || ({})
+    function pget(k, d) { return pv[k] !== undefined ? pv[k] : d }
+    function pset(k, v) { if (room.setPanel) room.setPanel(k, v) }
+    function hourText(h) {
+        if (pget("clock24", room.clock24)) return (h < 10 ? "0" : "") + h + ":00"
+        return ((h % 12) || 12) + (h < 12 ? " am" : " pm")
+    }
+    function minText(s) { return Math.round(s / 60) + " min" }
+    readonly property var mins: [60, 120, 180, 300, 600, 900, 1200, 1800]     // the steps for "after how long"
+    function stepMin(s, d) {
+        var i = 0; while (i < mins.length - 1 && mins[i] < s) i++
+        return mins[Math.max(0, Math.min(mins.length - 1, i + d))]
+    }
+    // one setting: what it is (and a line under it), and its switch or stepper on the right
+    component Line: Item {
+        id: ln_
+        property string label: ""
+        property string sub: ""
+        default property alias control: slot.data
+        width: 572; height: 64
+        Column {
+            anchors.verticalCenter: parent.verticalCenter; spacing: 5; width: parent.width - slot.width - 24
+            T { width: parent.width; text: ln_.label; font.pixelSize: 22; color: "white" }
+            Mono { visible: ln_.sub !== ""; width: parent.width; text: ln_.sub; size: 12; color: Theme.w62 }
+        }
+        Item { id: slot; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: childrenRect.width; height: childrenRect.height }
+        Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.1) }
+    }
+    component Step: Row {
+        id: st_
+        property string value: ""
+        signal less()
+        signal more()
+        spacing: 8
+        Chip { text: "−"; padX: 16; onTapped: st_.less() }
+        T { anchors.verticalCenter: parent.verticalCenter; width: 92; horizontalAlignment: Text.AlignHCenter; text: st_.value; font.pixelSize: 22; color: "white" }
+        Chip { text: "+"; padX: 16; onTapped: st_.more() }
+    }
+    SheetFrame {
+        id: more
+        paneY: 520
+        onClose: open = false
+        property string page: "cats"
+        Row {
+            x: 36; y: 26; spacing: 10
+            Repeater {
+                model: [["cats", "Cats"], ["night", "Clock & night"], ["standby", "Standby"], ["sound", "Sound"]]
+                Chip { text: modelData[1]; warm: more.page === modelData[0]; onTapped: more.page = modelData[0] }
+            }
+        }
+        Chip { x: 1280 - 36 - width; y: 26; text: "Done"; onTapped: more.open = false }
+
+        // Bebo and Evan
+        Column {
+            visible: more.page === "cats"; x: 36; y: 92
+            Line { label: "Bebo and Evan"; sub: "On every screen"
+                   Toggle { on: sv.pget("cats", true); onTapped: sv.pset("cats", !on) } }
+            Line { label: "Sleep at night"; sub: "Curled up from " + sv.hourText(sv.pget("nightStart", room.timing.nightStart)) + " to " + sv.hourText(sv.pget("nightEnd", room.timing.nightEnd))
+                   opacity: sv.pget("cats", true) ? 1 : 0.4
+                   Toggle { on: sv.pget("catsSleep", true); onTapped: sv.pset("catsSleep", !on) } }
+        }
+        // the clock, and when night is
+        Column {
+            visible: more.page === "night"; x: 36; y: 92
+            Line { label: "24-hour clock"; sub: sv.pget("clock24", room.clock24) ? "16:30" : "4:30 pm"
+                   Toggle { on: sv.pget("clock24", room.clock24); onTapped: sv.pset("clock24", !on) } }
+            Line { label: "Night starts"; sub: "The screen dims · night standby"
+                   Step { value: sv.hourText(sv.pget("nightStart", room.timing.nightStart))
+                          onLess: sv.pset("nightStart", (sv.pget("nightStart", room.timing.nightStart) + 23) % 24)
+                          onMore: sv.pset("nightStart", (sv.pget("nightStart", room.timing.nightStart) + 1) % 24) } }
+            Line { label: "Night ends"; sub: "Back to day"
+                   Step { value: sv.hourText(sv.pget("nightEnd", room.timing.nightEnd))
+                          onLess: sv.pset("nightEnd", (sv.pget("nightEnd", room.timing.nightEnd) + 23) % 24)
+                          onMore: sv.pset("nightEnd", (sv.pget("nightEnd", room.timing.nightEnd) + 1) % 24) } }
+        }
+        // how long before standby
+        Column {
+            visible: more.page === "standby"; x: 36; y: 92
+            Line { label: "Home"; sub: "Nothing playing"
+                   Step { value: sv.minText(sv.pget("homeIdleSec", room.timing.homeIdleSec))
+                          onLess: sv.pset("homeIdleSec", sv.stepMin(sv.pget("homeIdleSec", room.timing.homeIdleSec), -1))
+                          onMore: sv.pset("homeIdleSec", sv.stepMin(sv.pget("homeIdleSec", room.timing.homeIdleSec), 1)) } }
+            Line { label: "Home, music playing"; sub: "Then the music standby"
+                   Step { value: sv.minText(sv.pget("homePlayingSec", room.timing.homePlayingSec))
+                          onLess: sv.pset("homePlayingSec", sv.stepMin(sv.pget("homePlayingSec", room.timing.homePlayingSec), -1))
+                          onMore: sv.pset("homePlayingSec", sv.stepMin(sv.pget("homePlayingSec", room.timing.homePlayingSec), 1)) } }
+            Line { label: "The music player"; sub: "Or a sheet over it"
+                   Step { value: sv.minText(sv.pget("musicSec", room.timing.musicSec))
+                          onLess: sv.pset("musicSec", sv.stepMin(sv.pget("musicSec", room.timing.musicSec), -1))
+                          onMore: sv.pset("musicSec", sv.stepMin(sv.pget("musicSec", room.timing.musicSec), 1)) } }
+        }
+        Column {
+            visible: more.page === "standby"; x: 36 + 572 + 64; y: 92
+            Line { label: "Every other screen"; sub: "Weather, Clock, Lights, Reminders, Settings"
+                   Step { value: sv.minText(sv.pget("menuStandbySec", room.timing.menuStandbySec))
+                          onLess: sv.pset("menuStandbySec", sv.stepMin(sv.pget("menuStandbySec", room.timing.menuStandbySec), -1))
+                          onMore: sv.pset("menuStandbySec", sv.stepMin(sv.pget("menuStandbySec", room.timing.menuStandbySec), 1)) } }
+            Mono { width: 572; topPadding: 18; wrapMode: Text.WordWrap; size: 12; color: Theme.w62
+                   text: "With no touch for this long, standby comes" }
+        }
+        // the microphone, waking, the speakers
+        Column {
+            visible: more.page === "sound"; x: 36; y: 92
+            Line { label: "Room's microphone"; sub: "Wakes the screen · the background moves with music"
+                   Toggle { on: sv.pget("roomMic", true); onTapped: sv.pset("roomMic", !on) } }
+            Line { label: "Wake on a sound"; sub: "Over the room's hum · lower wakes on less"
+                   opacity: sv.pget("roomMic", true) ? 1 : 0.4
+                   Step { value: sv.pget("wakeAbove", 10) + " dB"
+                          onLess: sv.pset("wakeAbove", Math.max(3, sv.pget("wakeAbove", 10) - 1))
+                          onMore: sv.pset("wakeAbove", Math.min(25, sv.pget("wakeAbove", 10) + 1)) } }
+        }
+        Column {
+            visible: more.page === "sound"; x: 36 + 572 + 64; y: 92
+            Line { label: "AirPlay to the speaker"; sub: "The Bluetooth one, when it's connected"
+                   Toggle { on: sv.pget("airplayToBluetooth", true); onTapped: sv.pset("airplayToBluetooth", !on) } }
+            Line { label: "Speaker limit"; sub: "Under full: at the very top they crackle"
+                   Step { value: sv.pget("speakerHeadroomDb", 4) > 0 ? sv.pget("speakerHeadroomDb", 4) + " dB" : "None"
+                          onLess: sv.pset("speakerHeadroomDb", Math.max(0, sv.pget("speakerHeadroomDb", 4) - 1))
+                          onMore: sv.pset("speakerHeadroomDb", Math.min(12, sv.pget("speakerHeadroomDb", 4) + 1)) } }
+        }
+    }
+
     Component.onCompleted: {                    // (checks)
         if (startScreen === "setconfirm") { confirm.kind = "off"; confirm.open = true }
+        if (startScreen.indexOf("setmore") === 0) { more.page = startScreen.slice(8) || "cats"; more.open = true }
         if (startScreen === "setwifi") tab = "wifi"
         if (startScreen === "setjoin") { tab = "wifi"; joiner.ask("Airtel_Xstream_4410"); pw.text = "monsoon24" }
     }

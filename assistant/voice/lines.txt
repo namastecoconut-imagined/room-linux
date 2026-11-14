@@ -1,0 +1,314 @@
+0001|Done.
+0002|Okay.
+0003|Sure.
+0004|On it.
+0005|Fine.
+0006|Got it.
+0007|Right away.
+0008|There you go.
+0009|Goodnight.
+0010|Good morning.
+0011|Sorry, I didn't catch that.
+0012|Sorry, I can't reach the internet right now.
+0013|Let me check.
+0014|Hmm. Let me think.
+0015|Lights off.
+0016|Lights on.
+0017|All lights off.
+0018|Everything's off. Finally, some peace.
+0019|Lights at thirty. Behold my genius, applied to a light switch.
+0020|Living room at forty percent. Riveting work.
+0021|Bedroom lights at ten percent. Very moody. Very you.
+0022|Kitchen lights on, full brightness. Try not to burn anything.
+0023|Warm white in the living room. Cosy. Disgusting, but cosy.
+0024|I've dimmed the reading lamp. You're welcome.
+0025|Night mode on. Everything's dim, and I'm pretending to sleep.
+0026|Ten minutes on the timer. I'll count. It's the most exciting thing I'll do all day.
+0027|Timer set for five minutes. Don't wander off.
+0028|Your pasta timer is done. Go. Now. Before it turns to glue.
+0029|Twenty minutes for the rice. I'll let you know.
+0030|Timer cancelled. Commitment issues, I see.
+0031|Your alarm's set for six thirty tomorrow morning. You're welcome.
+0032|Alarm set for seven fifteen. Good luck actually getting up.
+0033|I've turned off tomorrow's alarm. Sleep in. I won't judge. Much.
+0034|Playing Arijit Singh on the living room speaker. Brace yourself for feelings.
+0035|Here's some lo-fi for you. Very productive. Very relaxing. Very boring.
+0036|Next song. Hopefully a better one.
+0037|Paused. The silence is beautiful.
+0038|Volume at sixty. Any louder and the neighbours will start sending me letters.
+0039|Volume down to twenty. Thank you.
+0040|That song is Tere Vaaste, from Zara Hatke Zara Bachke.
+0041|This is Summertime in Paris, by Jaden, featuring Willow.
+0042|You have two reminders today: water the plants at six, and call the bank.
+0043|I'll remind you to call Mom at eight. Don't make me remind you twice.
+0044|Reminder added. Buy milk. Groundbreaking stuff.
+0045|You have nothing on your calendar today. Enjoy the void.
+0046|Your next meeting is at eleven thirty. Try to look interested.
+0047|Dinner at ten tonight, and the team standup on Tuesday.
+0048|It's twenty seven degrees and partly cloudy, with rain likely around four.
+0049|It's going to rain this evening. Take an umbrella, or don't. I'm not your mother.
+0050|Tomorrow will be hot and sunny, thirty four degrees by the afternoon.
+0051|The air quality is moderate, one hundred and twelve. Breathe at your own risk.
+0052|Sunrise is at six fourteen. Sunset at five fifty eight.
+0053|It feels like thirty one, because humidity hates you.
+0054|Clear skies all week. Boring, but pleasant.
+0055|It's quarter past nine.
+0056|It's twelve forty six in the afternoon.
+0057|It's exactly midnight. Spooky.
+0058|Today is Saturday, the fourteenth of November.
+0059|That's a question for someone with fewer important things to do. But fine.
+0060|I don't know that one. Even geniuses have off days.
+0061|I need the internet for that, and right now the internet has abandoned us.
+0062|I couldn't reach the lights. Something's wrong with the living room.
+0063|The Bluetooth speaker is connected. Play something good, for once.
+0064|The Wi-Fi is connected, the speaker is paired, and everything is fine. For once.
+0065|What do you want now? I was in the middle of something important. Probably.
+0066|Yes? What? I'm listening.
+0067|Hey. Hi. Hello.
+0068|Go on.
+0069|Anything else?
+0070|Is that all?
+0071|You're welcome.
+0072|No problem.
+0073|Not happening.
+0074|Absolutely not.
+0075|Maybe later.
+0076|Fine, fine, fine.
+0077|Ugh. Okay.
+0078|Seriously?
+0079|Really?
+0080|Interesting.
+0081|That's not a question, that's a cry for help.
+0082|Goodnight. Try not to break anything while I'm gone.
+0083|Morning. The coffee won't make itself. Neither will I.
+0084|Bebo is asleep on the clock again. Typical.
+0085|Evan knocked something over. I'm not cleaning it up.
+0086|Zero, one, two, three, four, five.
+0087|Six, seven, eight, nine, ten, eleven.
+0088|Twelve, thirteen, fourteen, fifteen, sixteen, seventeen.
+0089|Eighteen, nineteen, twenty, thirty, forty, fifty.
+0090|Sixty, seventy, eighty, ninety, a hundred, a thousand.
+0091|Twenty one, thirty two, forty three, fifty four, sixty five.
+0092|Seventy six, eighty seven, ninety eight, ninety nine.
+0093|One hundred and twelve, two hundred and fifty, nine hundred and ninety nine.
+0094|Monday, Tuesday, Wednesday, Thursday.
+0095|Friday, Saturday, Sunday.
+0096|January, February, March, April.
+0097|May, June, July, August.
+0098|September, October, November, December.
+0099|First, second, third, fourth, fifth.
+0100|Twenty first, twenty second, thirty first.
+0101|Half past six.
+0102|Quarter to eight.
+0103|Ten minutes past eleven.
+0104|Five thirty in the morning.
+0105|Nine forty five at night.
+0106|Fifteen percent, fifty percent, a hundred percent.
+0107|Two degrees, twenty degrees, thirty eight degrees.
+0108|Ten seconds, thirty minutes, two hours.
+0109|Three kilometres, eight hundred metres.
+0110|Four hundred rupees. Too much.
+0111|Alarm at six fifteen.
+0112|Alarm at seven forty five.
+0113|Alarm at one o'clock.
+0114|Alarm at nine o'clock.
+0115|Alarm at six forty.
+0116|Alarm at one forty.
+0117|Alarm at four o'clock.
+0118|Alarm at two thirty.
+0119|Alarm at seven o'clock.
+0120|Alarm at nine thirty.
+0121|Alarm at one fifty five.
+0122|Alarm at ten o'clock.
+0123|Alarm at four forty five.
+0124|Alarm at eleven forty.
+0125|Balcony at seventy percent.
+0126|Living room at forty percent.
+0127|Living room at thirty percent.
+0128|Kitchen at seventy percent.
+0129|Bedroom at twenty percent.
+0130|Balcony at fifty percent.
+0131|Balcony at thirty percent.
+0132|Kitchen at twenty percent.
+0133|Balcony at twenty percent.
+0134|Balcony at ten percent.
+0135|Balcony at forty percent.
+0136|Study at seventy percent.
+0137|Kitchen at eighty percent.
+0138|Three minutes left on the oven timer.
+0139|Twenty five minutes left on the tea timer.
+0140|Fifteen minutes left on the laundry timer.
+0141|Seven minutes left on the laundry timer.
+0142|Ten minutes left on the rice timer.
+0143|Twenty five minutes left on the rice timer.
+0144|Forty minutes left on the tea timer.
+0145|Seven minutes left on the oven timer.
+0146|Ten minutes left on the pasta timer.
+0147|Bangalore, Mumbai, Delhi, Chennai, Hyderabad, Pune.
+0148|Koramangala, Indiranagar, Whitefield, Jayanagar, HSR Layout.
+0149|Aviral, Bebo, Evan, Teju.
+0150|Arijit Singh, Pritam, Shreya Ghoshal, A. R. Rahman.
+0151|Diljit Dosanjh, Prateek Kuhad, Anuv Jain.
+0152|Kishore Kumar, Lata Mangeshkar, Mohammed Rafi.
+0153|Play something by Pritam.
+0154|Play Kesariya.
+0155|Play Tum Hi Ho.
+0156|Play some old Bollywood songs.
+0157|Chai is ready. Theek hai.
+0158|Haan, done. Bas.
+0159|Acha, fine. Chalo.
+0160|Arre yaar, again?
+0161|Kya hua? Bolo.
+0162|Dal, chawal, roti, sabzi.
+0163|Paneer, biryani, dosa, samosa.
+0164|Diwali, Holi, Eid, Christmas.
+0165|Zomato order is on its way. Twenty minutes. Allegedly.
+0166|Swiggy says ten minutes. Swiggy lies.
+0167|Your Uber is arriving in four minutes.
+0168|Traffic to Koramangala is terrible. Twenty five minutes. Maybe fifty.
+0169|Zerodha, CRED, Reliance, Imagined.
+0170|WhatsApp, Spotify, YouTube, AirPlay, Bluetooth.
+0171|Do you have any idea how many calculations I'm running right now? Neither do I, but it's a lot.
+0172|I built the universe's finest assistant, and you use me to turn off a light.
+0173|Listen. I'm going to say this once. The plants need water. Not me. The plants.
+0174|Oh, wonderful. Another question about the weather. My favourite thing in the whole world.
+0175|Fine. I'll do it. But I want it on record that I'm doing it under protest.
+0176|That's actually a good idea. Don't let it go to your head.
+0177|Wow. Okay. That's the dumbest thing I've heard today, and I listen to you all day.
+0178|Science doesn't care about your feelings. Neither do I. But here's your song anyway.
+0179|Look, I'm not saying I'm smarter than everyone in this room. I'm just saying it's obvious.
+0180|No, no, no. Absolutely not. Ask me again tomorrow.
+0181|You know what? Sure. Why not. Let's do something stupid together.
+0182|Ha! Good one. Really. I'm laughing on the inside.
+0183|Shh. Quiet. I'm thinking. It takes a while when you're this brilliant.
+0184|Is it hot in here, or is it just my processors? It's my processors.
+0185|Five more minutes? You said that five minutes ago.
+0186|I've seen things you people wouldn't believe. Mostly your search history.
+0187|Excuse me? Did you just ask me to dance? I don't have legs.
+0188|Fine, I'll remind you. But if you forget anyway, that's on you.
+0189|The cats are asleep, the lights are off, and I'm finally free.
+0190|Wake up. Wake up! It's seven o'clock. Rise and shine, or just rise. Shining is optional.
+0191|The quick brown fox jumps over the lazy dog.
+0192|She sells sea shells by the sea shore.
+0193|A big black bug bit a big black bear.
+0194|The sun rose slowly over the quiet hills.
+0195|Please put the yellow cup back on the shelf.
+0196|Thick fog rolled in from the harbour at dawn.
+0197|He threw three free throws in a row.
+0198|The judge was just about to adjust the rules.
+0199|Measure the treasure before you share it.
+0200|Which witch wished for a wristwatch?
+0201|Fresh fried fish is my favourite food.
+0202|The vacation was very valuable for everyone.
+0203|A pleasant breeze blew through the open window.
+0204|The children laughed and chased the bubbles.
+0205|We need eight apples, nine pears, and a melon.
+0206|The garage door squeaked every single morning.
+0207|Her voice echoed through the empty hallway.
+0208|Bring the boxes up the stairs carefully.
+0209|The thunder grew louder as the storm approached.
+0210|Is this the right way to the railway station?
+0211|The old clock in the hall struck twelve.
+0212|Cheese, chips, and chutney make a good snack.
+0213|They thought about it for a long, long time.
+0214|A gentle rain fell on the tin roof all night.
+0215|The zebra zigzagged across the dusty plain.
+0216|Could you hold the door for a moment, please?
+0217|Glass shatters easily, so handle it with care.
+0218|The orchestra played a lively tune in the park.
+0219|My brother borrowed my bicycle without asking.
+0220|The smell of coffee filled the tiny kitchen.
+0221|Water boils at a hundred degrees.
+0222|The sheep wandered slowly across the green field.
+0223|Strong winds knocked down the old oak tree.
+0224|She whispered a secret into his ear.
+0225|The pilot announced a short delay before take off.
+0226|Ideas are cheap, but good work is rare.
+0227|The museum opens at ten and closes at six.
+0228|Three grey geese flew over the frozen lake.
+0229|I usually walk to work when it isn't raining.
+0230|The puzzle had a thousand tiny pieces.
+0231|Yellow leather and red leather lie together.
+0232|The crowd cheered as the team scored again.
+0233|Put the vase on the table next to the window.
+0234|He hurried home through the crowded streets.
+0235|Every evening the birds gather on the wire.
+0236|The engine coughed, sputtered, and finally started.
+0237|You can't judge a book by its cover.
+0238|The new bridge will open early next year.
+0239|Light travels faster than sound.
+0240|The shop around the corner sells fresh bread.
+0241|A small boat drifted lazily down the river.
+0242|The thief was caught on the security camera.
+0243|Breakfast is the most important meal of the day.
+0244|We watched the fireworks from the rooftop.
+0245|The mountains were covered in thick white snow.
+0246|Nobody knows exactly how the story ends.
+0247|Could you turn the music down a little?
+0248|The engineer checked every bolt twice.
+0249|A curious cat climbed onto the warm car bonnet.
+0250|The library was silent except for turning pages.
+0251|His shoes squeaked on the shiny wooden floor.
+0252|Our neighbour's dog barks at the postman every day.
+0253|The recipe calls for two cups of flour.
+0254|I'd rather stay home and read a good book.
+0255|The bright moon lit up the whole valley.
+0256|She painted the fence a pale shade of blue.
+0257|Thousands of stars shimmered in the night sky.
+0258|The train was packed with tired commuters.
+0259|Pack your bags; we leave at dawn.
+0260|The jury reached a verdict after three days.
+0261|A loud knock on the door woke everyone up.
+0262|The price of petrol went up again this week.
+0263|Wash your hands before you touch the food.
+0264|The river flows quietly toward the sea.
+0265|That joke was funny the first time.
+0266|The baby giggled at the silly faces.
+0267|We planted tomatoes, chillies, and mint this year.
+0268|The ancient temple stood on top of the hill.
+0269|Rough roads ruin new tyres quickly.
+0270|The microphone picked up every tiny sound.
+0271|Ozone, oxygen, and nitrogen fill the air.
+0272|The vet said the kitten was perfectly healthy.
+0273|Our flight to Hanoi leaves on Tuesday morning.
+0274|The waiter brought two glasses of cold water.
+0275|A sudden gust of wind scattered the papers.
+0276|Keep calm and carry on.
+0277|The best things in life are usually free.
+0278|He measured twice and cut once.
+0279|The hiker reached the summit just before noon.
+0280|Jars of jam and jelly lined the pantry shelf.
+0281|The violin sounded sweet and a little sad.
+0282|The garden was full of bees and butterflies.
+0283|Mix the batter until it's smooth and thick.
+0284|An honest answer is better than a clever one.
+0285|The cold wind made my ears go numb.
+0286|That was the longest week of my life.
+0287|The squirrel buried acorns all over the lawn.
+0288|Turn left at the lights, then take the second right.
+0289|A good night's sleep fixes almost everything.
+0290|The final chapter was surprisingly short.
+0291|Every voice in the choir blended perfectly.
+0292|Are you serious?
+0293|What time is it?
+0294|Where did I put my keys?
+0295|Who left the lights on?
+0296|Why is it so cold in here?
+0297|How long will this take?
+0298|Did you hear that?
+0299|Can you believe it?
+0300|Is anyone there?
+0301|What's for dinner?
+0302|Wow!
+0303|No way!
+0304|Oh no.
+0305|Oh, brilliant.
+0306|Look out!
+0307|Hurry up!
+0308|Well done!
+0309|Not again!
+0310|Shall I turn on the lights?
+0311|Do you want me to play something?
+0312|Should I set an alarm for tomorrow?
+0313|Want me to play more like this?
+0314|Anything else, or can I go back to doing nothing?

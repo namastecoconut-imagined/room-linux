@@ -61,6 +61,17 @@ def main():
         raise SystemExit('no "geminiKey" in ~/.config/room/config.json (get one at aistudio.google.com)')
     from google import genai
     client = genai.Client(api_key=k)
+    global MODEL
+    try:                                                    # the live (talking) models this key can use
+        live = [m.name.split("/")[-1] for m in client.models.list()
+                if "bidiGenerateContent" in (getattr(m, "supported_actions", None) or [])]
+    except Exception as e:
+        live = []; print(f"(couldn't list the models: {e})", flush=True)
+    print("live models for this key: " + (", ".join(live) or "none listed"), flush=True)
+    if live and MODEL not in live:
+        pref = [m for m in live if "native-audio" in m] or [m for m in live if "live" in m] or live
+        MODEL = sorted(pref)[-1]
+    print(f"using {MODEL}", flush=True)
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser("~/gemini-test")
     only = os.environ.get("VOICES")
     n = 0

@@ -67,8 +67,8 @@ def rough(x, semis, grit, fry):
     if fry:
         t = np.arange(len(x)) / RATE
         x = x * (1 - 0.35 * fry * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * 34 * t))) * (np.abs(x) > 0.02))
-    peak = np.abs(x).max() or 1
-    return (x / peak * 0.8).astype(np.float32)
+    from ..tts import Leveller
+    return Leveller().whole(x.astype(np.float32))         # as loud as the assistant's answers
 
 
 def main():
@@ -85,6 +85,17 @@ def main():
     only = {int(v) for v in a.only.split(",") if v.strip()}
     http = requests.Session()
     player = Player(); player.start()
+    import subprocess
+    from ..duck import Duck
+    duck = Duck(0.86); duck.down()                        # the speaker up as for an answer (it was at the music's level)
+    try:
+        run(a, only, http, k, player)
+    finally:
+        duck.up(); time.sleep(1)
+        player.close()
+
+
+def run(a, only, http, k, player):
     for i, (voice, semis, grit, fry) in enumerate(VARIANTS, 1):
         if only and i not in only:
             continue
@@ -99,7 +110,6 @@ def main():
             print(f"   ✗ {e}", flush=True)
         if not a.no_wait:
             input("   (Enter for the next one) ")
-    player.close()
 
 
 if __name__ == "__main__":

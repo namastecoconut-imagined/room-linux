@@ -37,7 +37,7 @@ Item {
         onTriggered: {
             cats.both.forEach(function (c) {
                 if (c.item && c.item.follow && cats.scene) c.ax = cats.scene.catKnob() - 64 * c.k
-                if (c.spotId === "curve" && !c.flying) { var s = cats.spot("curve"); if (s) c.ay = s.yAt(c.ax) }
+                if (c.spotId === "curve" && !c.flying && !(c.item && c.item.leap)) { var s = cats.spot("curve"); if (s) c.ay = s.yAt(c.ax) }
             })
             bebo.tick(); evan.tick()
         }
@@ -356,7 +356,9 @@ Item {
     }
     // the layout moved under a cat (a number changed width, the card went): back onto its edge, or somewhere else
     function keepOn(c) {
-        if (c.flying || c.spotId === "below" || c.spotId === "") return
+        // (and not just after a leap, before it's counted as on where it landed: it was put back on what it had
+        // jumped off for up to a second — gone from where it landed, then back)
+        if (c.flying || (c.item && c.item.leap) || c.spotId === "below" || c.spotId === "") return
         var s = spot(c.spotId) || under(c)          // (a number's spot can change its name as the numbers change: same place)
         if (!s) { lost(c); return }
         c.spotId = s.id
@@ -385,7 +387,7 @@ Item {
         id: relost; property var c: null; interval: 600
         onTriggered: { var f = cats.spot("floor") || cats.landing(); if (c && f) { cats.put(c, f, cats.night ? "curl" : "sit"); c.shown = true } }
     }
-    onFloorYChanged: both.forEach(function (c) { if (c.spotId === "floor" && !c.flying) c.ay = floorY })
+    onFloorYChanged: both.forEach(function (c) { if (c.spotId === "floor" && !c.flying && !(c.item && c.item.leap)) c.ay = floorY })
     onNightChanged: both.forEach(function (c) { c.thinkAt = now })
 
     // ---------------------------------------------------------------- the assistant listening: ears up, a curious look

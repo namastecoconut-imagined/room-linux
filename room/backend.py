@@ -49,6 +49,7 @@ class Room(QObject):
     voiceChanged = Signal()
     browserChanged = Signal()
     panelChanged = Signal()              # a setting changed in Settings → More settings
+    updateChanged = Signal()             # checking for / updating to a newer Room
     _sinkFound = Signal()                # (from the speaker lookup's thread)
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
@@ -115,6 +116,9 @@ class Room(QObject):
         self.voicelink.changed.connect(self.voiceChanged)
         self.voicelink.changed.connect(lambda: self.voice.get("state") in ("listening", "thinking", "speaking")
                                        and self.sleep.wake("the assistant"))
+        from .update import Updater
+        self.updater = Updater(self.demo, self)
+        self.updater.changed.connect(self.updateChanged)
         self._live = False                  # (start() has run, not in the demo)
         self.mic = None
         if cfg.get("roomMic") is not False:
@@ -416,6 +420,14 @@ class Room(QObject):
             self.output.airplay_bt = self._panel_value("airplayToBluetooth")
             self.output.headroom = float(self._panel_value("speakerHeadroomDb"))
             self.output.poke()
+
+    @Property("QVariantMap", notify=updateChanged)
+    def update(self):
+        return dict(self.updater.state, version=self.updater.version)
+
+    @Slot()
+    def checkForUpdate(self):
+        self.updater.check()
 
     def _mic_on(self, on: bool):
         """Room's microphone on or off (the screen's wake on a sound, the background moving with music)."""

@@ -45,6 +45,11 @@ room-update
 
 Pulls, installs the locked versions, keeps the fixes in place, restarts Room and the assistant.
 
+Or on the panel: Settings → More settings → Updates → **Check for updates**. If there's something new it updates
+straight away (the same room-update, run on its own so it carries on while Room restarts), then checks Room came back;
+if it didn't, it goes back to the version before. The page shows what changed and how it went
+(`~/.local/state/room/update.log` has the details).
+
 ## Work on it
 
 ```bash
@@ -71,6 +76,7 @@ journalctl --user -u room -f                                          # live log
 | `qml/VoiceCard.qml` · `qml/Words.qml` | the card beside an answer (weather, forecast, air, timer, music, schedule, alarm, lights) · words that come in one by one |
 | `qml/Cats.qml` · `qml/Cat.qml` | the cats: where they can be on each screen and what they do next · one cat, drawn frame by frame |
 | `assets/cats/` · `qml/catsdata.js` · `tools/cats/` | the cats' drawings (sprite sheets), where each drawing is, and the scripts that draw them |
+| `room/update.py` · `scripts/ota.sh` | Settings → Updates: check GitHub, update, and go back if the new version doesn't start |
 | `room/sleep.py` | screen off in a quiet room (or the power button), back on at a sound or a touch |
 | `room/output.py` | music (AirPlay, the Surface's Spotify) to the Bluetooth speaker when one's connected; speaker levels |
 | `room/mic.py` | how loud the room is (screen wake; while music plays, the background's swell) |

@@ -416,7 +416,7 @@ Item {
         Row {
             x: 36; y: 26; spacing: 10
             Repeater {
-                model: [["cats", "Cats"], ["night", "Clock & night"], ["standby", "Standby"], ["sound", "Sound"]]
+                model: [["cats", "Cats"], ["night", "Clock & night"], ["standby", "Standby"], ["sound", "Sound"], ["updates", "Updates"]]
                 Chip { text: modelData[1]; warm: more.page === modelData[0]; onTapped: more.page = modelData[0] }
             }
         }
@@ -470,6 +470,23 @@ Item {
             Mono { width: 572; topPadding: 18; wrapMode: Text.WordWrap; size: 12; color: Theme.w62
                    text: "With no touch for this long, standby comes" }
         }
+        // a newer Room: one tap checks, and if there is one, updates to it (Room restarts; if the new one doesn't
+        // start, it goes back on its own)
+        Column {
+            id: upd
+            visible: more.page === "updates"; x: 36; y: 92
+            readonly property var u: room.update || ({})
+            readonly property bool busy: u.state === "checking" || u.state === "updating"
+            Line { label: "Room"; sub: "Version " + (upd.u.version || "")
+                   Chip { solid: true; text: upd.busy ? (upd.u.state === "updating" ? "Updating…" : "Checking…") : "Check for updates"
+                          opacity: upd.busy ? 0.5 : 1; onTapped: if (!upd.busy) room.checkForUpdate() } }
+            Mono { visible: (upd.u.note || "") !== ""; width: 1208; topPadding: 16; size: 12
+                   color: upd.u.state === "error" || upd.u.state === "back" ? Theme.timer : "white"; text: upd.u.note || "" }
+            Repeater {
+                model: upd.u.changes || []
+                Mono { width: 1208; topPadding: 6; size: 12; color: Theme.w62; text: "· " + modelData }
+            }
+        }
         // the microphone, waking, the speakers
         Column {
             visible: more.page === "sound"; x: 36; y: 92
@@ -495,6 +512,7 @@ Item {
     Component.onCompleted: {                    // (checks)
         if (startScreen === "setconfirm") { confirm.kind = "off"; confirm.open = true }
         if (startScreen.indexOf("setmore") === 0) { more.page = startScreen.slice(8) || "cats"; more.open = true }
+        if (startScreen === "setmore-updates") room.checkForUpdate()
         if (startScreen === "setwifi") tab = "wifi"
         if (startScreen === "setjoin") { tab = "wifi"; joiner.ask("Airtel_Xstream_4410"); pw.text = "monsoon24" }
     }

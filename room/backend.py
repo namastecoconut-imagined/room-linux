@@ -382,11 +382,14 @@ class Room(QObject):
              "nightStart": (23, 0, 23), "nightEnd": (7, 0, 23),
              "homeIdleSec": (300, 60, 1800), "homePlayingSec": (300, 60, 1800), "musicSec": (300, 60, 1800),
              "menuStandbySec": (180, 60, 1800),
-             "roomMic": (True,), "wakeAbove": (10, 3, 25), "airplayToBluetooth": (True,), "speakerHeadroomDb": (4, 0, 12)}
+             "roomMic": (True,), "wakeAbove": (10, 3, 25), "airplayToBluetooth": (True,), "speakerHeadroomDb": (4, 0, 12),
+             "assistantVoice": ("ishita_en_customer",)}
 
     def _panel_value(self, k):
         d = self.PANEL[k]
         v = self.cfg.get(k, d[0])
+        if isinstance(d[0], str):                           # the assistant's voice: one of Sarvam's English voices
+            return v if isinstance(v, str) and "_en_" in v else d[0]
         if isinstance(d[0], bool):
             return bool(v) if k == "clock24" else v is not False
         try:
@@ -414,6 +417,8 @@ class Room(QObject):
             self.eventsChanged.emit()                       # the agenda's times
         elif key == "roomMic":
             self._mic_on(v)
+        elif key == "assistantVoice":
+            self.voicelink.use_voice(v)                     # from its next line
         elif key == "wakeAbove":
             self.sleep.wake_above = float(v)
         elif key in ("airplayToBluetooth", "speakerHeadroomDb") and getattr(self, "output", None):
@@ -784,6 +789,15 @@ class Room(QObject):
     @Slot()
     def cancelVoice(self):
         self.voicelink.cancel()
+
+    @Slot(str, str)
+    def previewVoice(self, voice, name):
+        """A voice's sample (Settings → More settings → Voice, ▶), said by the assistant; voice "" stops it."""
+        self.voicelink.preview(voice, name)
+
+    @Property(str, notify=voiceChanged)
+    def voicePreview(self):
+        return self.voicelink.previewing
 
     def _music_here(self) -> bool:
         """Music playing on the Surface or through it (its speakers, or a speaker it sends to): AirPlay, or Room's own

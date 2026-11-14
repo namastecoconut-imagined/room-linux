@@ -413,10 +413,12 @@ Item {
         paneY: 520
         onClose: open = false
         property string page: "cats"
+        onPageChanged: if (room.voicePreview !== "") room.previewVoice("", "")        // (a sample playing stops)
+        onOpenChanged: if (!open && room.voicePreview !== "") room.previewVoice("", "")
         Row {
             x: 36; y: 26; spacing: 10
             Repeater {
-                model: [["cats", "Cats"], ["night", "Clock & night"], ["standby", "Standby"], ["sound", "Sound"], ["updates", "Updates"]]
+                model: [["cats", "Cats"], ["night", "Clock & night"], ["standby", "Standby"], ["sound", "Sound"], ["voice", "Voice"], ["updates", "Updates"]]
                 Chip { text: modelData[1]; warm: more.page === modelData[0]; onTapped: more.page = modelData[0] }
             }
         }
@@ -469,6 +471,44 @@ Item {
                           onMore: sv.pset("menuStandbySec", sv.stepMin(sv.pget("menuStandbySec", room.timing.menuStandbySec), 1)) } }
             Mono { width: 572; topPadding: 18; wrapMode: Text.WordWrap; size: 12; color: Theme.w62
                    text: "With no touch for this long, standby comes" }
+        }
+        // the assistant's voice: twelve of Sarvam's English voices (the calm, conversational ones, the least accented
+        // first); ▶ has the assistant say a short sample in it (once made, kept on the Surface), Use picks it — from
+        // its next line on
+        Item {
+            id: vp
+            visible: more.page === "voice"; x: 36; y: 92
+            readonly property string chosen: sv.pget("assistantVoice", "ishita_en_customer")
+            property string demoPlaying: ""                        // (the check screen)
+            readonly property string playing: room.voicePreview || demoPlaying
+            readonly property var voices: [["ishita_en_customer", "Ishita", "Customer care"], ["amelia_en_conversational", "Amelia", "Conversational"],
+                ["sophia_en_conversational", "Sophia", "Conversational"], ["simran_en_conversation", "Simran", "Conversation"],
+                ["zarina_en_conversation", "Zarina", "Conversation"], ["aparna_en_companion", "Aparna", "Companion"],
+                ["shalini_en_companion", "Shalini", "Companion"], ["sanchita_en_companion", "Sanchita", "Companion"],
+                ["neha_en_latenight", "Neha", "Late night"], ["deven_en_conversation", "Deven", "Conversation"],
+                ["dev_en_conversational", "Dev", "Conversational"], ["shubh_en_narration_gentle", "Shubh", "Gentle narration"]]
+            Repeater {
+                model: vp.voices
+                Item {
+                    id: vr
+                    x: Math.floor(index / 4) * (384 + 28); y: (index % 4) * 64; width: 384; height: 64
+                    readonly property bool on: vp.chosen === modelData[0]
+                    readonly property bool sounding: vp.playing === modelData[0]
+                    Column {
+                        anchors.verticalCenter: parent.verticalCenter; spacing: 5
+                        T { text: modelData[1]; font.pixelSize: 22; color: vr.on ? Theme.warm : "white" }
+                        Mono { text: modelData[2]; size: 12; color: Theme.w62 }
+                    }
+                    Row {
+                        anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 8
+                        Chip { text: vr.sounding ? "■" : "▶"; padX: 16
+                               onTapped: room.previewVoice(vr.sounding ? "" : modelData[0], modelData[1]) }
+                        Chip { width: 112; text: vr.on ? "In use" : "Use"; warm: vr.on; onTapped: if (!vr.on) sv.pset("assistantVoice", modelData[0]) }
+                    }
+                    Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.1) }
+                }
+            }
+            Component.onCompleted: if (startScreen === "setmore-voice") demoPlaying = "amelia_en_conversational"
         }
         // a newer Room: one tap checks, and if there is one, updates to it (Room restarts; if the new one doesn't
         // start, it goes back on its own)

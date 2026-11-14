@@ -5,7 +5,8 @@ The assistant tells Room what it's doing (for the screen) and asks it two things
   {"t": "state", "state": "listening|thinking|speaking|idle", "stage": …, "heard": …, "reply": …, "line": …, "card": …}
   {"t": "snapshot", "id": n}              → {"t": "reply", "id": n, "data": {the home right now}}
   {"t": "run", "id": n, "actions": [...]} → {"t": "reply", "id": n, "data": "what was done"}
-Room tells it:  {"t": "listen"} (a tap), {"t": "cancel"} (tap to stop).
+Room tells it:  {"t": "listen"} (a tap), {"t": "cancel"} (tap to stop), {"t": "voice", "voice": id} (the voice chosen in
+Settings), {"t": "preview", "voice": id, "name": …} (play its sample; voice "" stops it) → {"t": "preview", "playing": id or ""}.
 
 If the assistant isn't running, Room carries on exactly the same; the screen just never shows it.
 """
@@ -37,6 +38,7 @@ class VoiceLink(QObject):
         self.st = {"state": "off", "stage": "idle", "heard": "", "reply": "", "line": "", "card": "", "follow": False,
                    "lit": [], "reminded": "", "about": ""}
         self.about_at = 0.0
+        self.previewing = ""                # the voice whose sample is playing (Settings → More settings → Voice)
         self.server = QLocalServer(self)
         self.server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
         self.server.newConnection.connect(self._accept)
@@ -92,6 +94,10 @@ class VoiceLink(QObject):
             self.level = float(m.get("v", 0))
             self.changed.emit()
             return
+        if t == "preview":                                     # a voice's sample playing (Settings), or done
+            self.previewing = m.get("playing") or ""
+            self.changed.emit()
+            return
         if t == "state":
             if m.get("state") == "listening":
                 self.st["lit"], self.st["reminded"] = [], ""     # a new question
@@ -117,6 +123,15 @@ class VoiceLink(QObject):
 
     def cancel(self):
         self.send({"t": "cancel"})
+
+    def preview(self, voice: str, name: str = ""):
+        """Play a voice's sample (Settings → More settings → Voice); voice "" stops it."""
+        self.send({"t": "preview", "voice": voice, "name": name})
+        if not voice and self.previewing:
+            self.previewing = ""; self.changed.emit()
+
+    def use_voice(self, voice: str):
+        self.send({"t": "voice", "voice": voice})
 
     # ---------------------------------------------------------------- the home right now (for Claude)
     def snapshot(self) -> dict:

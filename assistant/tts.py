@@ -79,7 +79,14 @@ class Voice:
         self.player.start()
         self.gen = 0
         self.making = False
-        threading.Thread(target=self._prepare, daemon=True).start()
+        threading.Thread(target=self._prepare, args=(self.voice,), daemon=True).start()
+
+    def set_voice(self, voice: str):
+        """Another voice (Settings → More settings → Voice): from the next line on; its usual lines made meanwhile."""
+        if voice_ok(voice) and voice != self.voice:
+            self.voice = voice
+            log(f"voice: {voice}")
+            threading.Thread(target=self._prepare, args=(voice,), daemon=True).start()
 
     # ---------------------------------------------------------------- kept lines
     def _path(self, text, voice=None):
@@ -102,14 +109,14 @@ class Voice:
             f.write((np.clip(x, -1, 1) * 32767).astype("<i2").tobytes())
         os.replace(p + ".part", p)
 
-    def _prepare(self):
+    def _prepare(self, voice):
         """The usual short lines, made once (and the internet line, for when there isn't any)."""
         if not self.key:
             return
         for t in COMMON:
-            if self._kept(t) is None:
+            if self._kept(t, voice) is None:
                 try:
-                    self._make(t, lambda x: None, lambda: True)
+                    self._make(t, lambda x: None, lambda: True, voice)
                 except Exception as e:
                     log("voice: couldn't make the usual lines yet —", repr(e)); return
 
@@ -186,6 +193,8 @@ class Voice:
                 log("voice:", repr(e))
                 if first[0] and g == self.gen and text != OFFLINE:      # nothing said yet: the internet line
                     k = self._kept(OFFLINE, voice)
+                    if k is None:
+                        k = self._kept(OFFLINE, DEFAULT)                    # (a voice just chosen: Ishita's)
                     if k is not None:
                         self.player.feed(k, RATE)
             finally:

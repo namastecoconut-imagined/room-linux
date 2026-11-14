@@ -46,7 +46,8 @@ class Assistant:
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         if a.get("endQuiet"):
             self.ears.END_QUIET = float(a["endQuiet"])
-        self.voice = Voice(self.sarvam_key, a.get("voice") or "")
+        self.talking, self.previewing = False, ""
+        self.voice = Voice(self.sarvam_key, self.chosen())
         # the echo canceller pauses while Room speaks unless "echoWhileSpeaking" (default on): with it working, Room's own
         # voice is taken out of the mic and "Alexa" over an answer stands out. (It was paused because its Python work
         # competed with the voice and made it break up — back when the Dolby filter was eating half a core.)
@@ -80,8 +81,41 @@ class Assistant:
         return round((10 ** (-db / 20)) ** (1 / 3), 2)
 
     # ---------------------------------------------------------------- what Room asks
+    def chosen(self) -> str:
+        """The voice chosen in Settings → More settings → Voice (settings.json), else config.json's."""
+        try:
+            v = json.load(open(os.path.expanduser("~/.config/room/settings.json"))).get("assistantVoice")
+        except (OSError, ValueError):
+            v = None
+        return v or (self.cfg.get("assistant") or {}).get("voice") or ""
+
+    # a voice's sample (Settings → More settings → Voice, ▶): the music down, the speaker up, as for an answer
+    def preview(self, voice: str, name: str):
+        if not voice:
+            if self.previewing:
+                self.previewing = ""
+                self.voice.stop(); self.duck.up()
+                self.link.send({"t": "preview", "playing": ""})
+            return
+        if self.talking:
+            self.link.send({"t": "preview", "playing": ""}); return
+        self.previewing = voice
+        self.duck.floor = self.floor(); self.duck.down()
+        self.link.send({"t": "preview", "playing": voice})
+
+        def fin():
+            if self.previewing == voice:
+                self.previewing = ""
+                self.duck.up()
+                self.link.send({"t": "preview", "playing": ""})
+        self.voice.say(f"Hi, I'm {name or 'here'}. The living room's down to thirty percent.", done=fin, voice=voice)
+
     def command(self, m: dict):
-        if m.get("t") == "listen":
+        if m.get("t") == "preview":
+            self.preview(m.get("voice") or "", m.get("name") or "")
+        elif m.get("t") == "voice":
+            self.voice.set_voice(m.get("voice") or "")
+        elif m.get("t") == "listen":
             # "reminder": Room's + Add a reminder — what you say next is the reminder
             self.about = (m.get("about") or "", time.time())
             self.ears.tap.set()
@@ -108,10 +142,16 @@ class Assistant:
                 self.voice.stop()
                 self.state(state="idle", stage="idle")
                 self.duck.up()
+                self.talking = False
 
     def conversation(self):
         follow, turns = False, 0
         self.cancelled = False
+        self.talking = True
+        if self.previewing:                         # ("Alexa" over a voice's sample: the sample stops)
+            self.previewing = ""
+            self.link.send({"t": "preview", "playing": ""})
+        self.voice.set_voice(self.chosen())
         self.duck.floor = self.floor()
         self.duck.down()
         while True:
@@ -124,6 +164,7 @@ class Assistant:
                 break
             follow = True
         self.duck.up()
+        self.talking = False
 
     def turn(self, follow: bool) -> bool:
         """One request and its answer. True if it should listen again (it asked a question)."""

@@ -32,6 +32,7 @@ Item {
     readonly property var cc: Data.clips[who][clip]
     readonly property var fr: Data.frames[cc.s][cc.f[Math.min(fi, cc.f.length - 1)]]
     function free() { return plan.length === 0 && pend === null && (restClip || hidden) }     // nothing to do but rest
+    function idle() { return plan.length === 0 && (pend === null ? restClip || hidden : pend.rest === true) }   // (or about to)
     readonly property var rests: ({ stand: 1, sit: 1, loaf: 1, curl: 1, drape: 1, peek: 1, none: 1 })
 
     // running and trotting glide between drawings (walking steps from one to the next, so the paws stay put)

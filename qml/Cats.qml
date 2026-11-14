@@ -16,10 +16,11 @@ Item {
     property bool music: false                          // music playing: they nod along
     property bool listening: false                      // the assistant's listening: ears up
     property real kbTop: -1                             // the on-screen keyboard's top edge, while it's up
+    property Item voice: null                           // the assistant, while it's up over everything: they sit on its line
     property bool alarm: false                          // an alarm or timer's going off: they race about
     property real floorY: Theme.stageH                  // the screen's bottom edge, in the stage's coordinates
     property bool demoFast: false                       // (checks) everything happens sooner
-    readonly property string where: alarm ? "alert" : !scene ? "" : scene.catSheet ? "sheet"
+    readonly property string where: alarm ? "alert" : voice ? "voice" : !scene ? "" : scene.catSheet ? "sheet"
         : scene.sV ? (scene.m ? "musicstandby" : "standby") : scene.hV ? "home" : scene.pV ? "player" : scene.wV ? "weather"
         : scene.rV ? "lights" : scene.remV ? "reminders" : scene.cV ? "clock" : scene.setV ? "settings" : ""
     property var spots: []
@@ -50,6 +51,7 @@ Item {
     // ---------------------------------------------------------------- where they can be
     function readSpots() {
         if (where === "alert") { spots = [{ id: "floor", x0: 80, x1: Theme.stageW - 80, floor: true }]; return }    // over everything: the bottom edge
+        if (where === "voice") { spots = voice.catSpots(cats); return }
         spots = scene ? scene.catSpots() : []
         if (where === "sheet" && kbTop > 0) spots.push({ id: "kbtop", x0: 140, x1: Theme.stageW - 140, y: kbTop })
     }
@@ -221,6 +223,7 @@ Item {
         var s = spot(c.spotId), p = c.pose, calm = c === bebo, edge = s && !s.floor
         var f = spot("floor")
         if (alarm) { c.go(alarmed(c)); c.thinkAt = now; return }
+        if (where === "voice") { attend(c); return }
         if (night) {                                        // asleep, wherever they are
             if (p === "none" && f) c.go(popUp(c, f, placeOn(f, c), "sit").concat(route("sit", "curl")))
             else if (p === "peek") c.go(["peek.down"])
@@ -282,8 +285,8 @@ Item {
     }
 
     // ---------------------------------------------------------------- arriving on a screen
-    onWhereChanged: { bebo.shown = false; evan.shown = false; arrive.restart() }
-    Timer { id: arrive; interval: 1100; onTriggered: cats.place() }       // (after the screen has settled)
+    onWhereChanged: { bebo.shown = false; evan.shown = false; arrive.interval = where === "voice" ? 500 : 1100; arrive.restart() }
+    Timer { id: arrive; interval: 1100; onTriggered: cats.place() }       // (after the screen has settled; the assistant: at once)
     Component.onCompleted: arrive.restart()
     function put(c, s, p) {
         c.spotId = s.id; c.ax = placeOn(s, c); c.ay = yOn(s, c.ax)
@@ -319,6 +322,13 @@ Item {
             var se = more.length && (Math.random() < 0.65 || !f) ? pick(more) : f
             if (se) put(evan, se, night ? "curl" : pick(["sit", "loaf", "drape"]))
             if (se === f && !night && Math.random() < 0.5) { evan.spotId = "below"; evan.settle("none"); evan.go(peekPlan(evan, placeOn(f, evan))) }
+        } else if (where === "voice") {                    // onto the line of light, facing the words
+            bebo.size = 130; evan.size = 130
+            var ln = spot("line"); if (!ln) return
+            both.forEach(function (c) {
+                c.spotId = ln.id; c.ax = placeOn(ln, c); c.ay = yOn(ln, c.ax)
+                c.settle(restFor(ln, night ? "curl" : "sit"), c.ax > Theme.stageW / 2)
+            })
         } else if (where === "alert") {
             bebo.size = 160; evan.size = 160
             both.forEach(function (c, i) {
@@ -355,6 +365,7 @@ Item {
         var m = Math.min(28, wide(s) / 2)
         c.ax = Math.max(s.x0 + m, Math.min(s.x1 - m, c.ax))
     }
+    function landing() { for (var i = 0; i < spots.length; i++) if (!spots[i].use) return spot(spots[i].id); return null }
     function under(c) {
         for (var i = 0; i < spots.length; i++) {
             var t = spot(spots[i].id)
@@ -365,14 +376,14 @@ Item {
     function lost(c) {
         c.shown = false
         Qt.callLater(function () {
-            var f = spot("floor")
+            var f = spot("floor") || landing()
             if (!f) return
             relost.c = c; relost.restart()
         })
     }
     Timer {
         id: relost; property var c: null; interval: 600
-        onTriggered: { var f = cats.spot("floor"); if (c && f) { cats.put(c, f, cats.night ? "curl" : "sit"); c.shown = true } }
+        onTriggered: { var f = cats.spot("floor") || cats.landing(); if (c && f) { cats.put(c, f, cats.night ? "curl" : "sit"); c.shown = true } }
     }
     onFloorYChanged: both.forEach(function (c) { if (c.spotId === "floor" && !c.flying) c.ay = floorY })
     onNightChanged: both.forEach(function (c) { c.thinkAt = now })
@@ -380,13 +391,32 @@ Item {
     // ---------------------------------------------------------------- the assistant listening: ears up, a curious look
     onListeningChanged: hear()
     function hear() { if (listening && where !== "") both.forEach(function (c) {
-        if (!c.shown || !c.free()) return
+        if (!c.shown || !c.idle()) return
         var p = c.pose, held = { until: function () { return !cats.listening } }
         if (p === "sit" || p === "loaf" || p === "drape") { held.c = p + ".alert"; c.go([p + ".alert.in", held, p + ".alert.out"]) }
         else if (p === "stand") { held.c = "sit.alert"; c.go(["stand>sit", "sit.alert.in", held, "sit.alert.out"]) }
         else if (p === "curl") c.go(["curl.ear"])
         else if (p === "peek") c.go(["peek.look"])
     }) }
+
+    // ---------------------------------------------------------------- the assistant's up: they attend to it
+    // listening: ears up (hear, above), and they keep still. Thinking: they sit and look about (their resting
+    // glances). Answering: they settle, one lies down, and Evan hops up onto the card when one comes in.
+    function attend(c) {
+        var s = spot(c.spotId), p = c.pose, m = voice ? voice.mode : ""
+        c.thinkAt = later(1.5, 3)
+        if (listening || night || !s) return
+        var card = spot("cardtop")
+        if (m === "speak" || m === "done") {
+            if (c === evan && card && c.spotId !== "cardtop" && roomFor(card, c) && Math.random() < 0.7)
+                c.go(leapPlan(c, card, placeOn(card, c), pick(["loaf", "drape", "sit"])))
+            else if (p === "sit" && Math.random() < (c === bebo ? 0.5 : 0.3)) c.go(route(p, "loaf"))
+            else if (p === "sit" && Math.random() < 0.2) c.go(["sit.wash"])
+            c.thinkAt = later(2, 5)
+        } else if (m === "miss" && (p === "sit" || p === "loaf")) {
+            c.go([p + ".alert.in", { c: p + ".alert", n: 1 }, p + ".alert.out"])
+        }
+    }
 
     // ---------------------------------------------------------------- the minute changes: a cat on a number swats it
     property int minute: new Date(now * 1000).getMinutes()

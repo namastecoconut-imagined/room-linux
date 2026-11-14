@@ -150,6 +150,7 @@ Window {
                 night: win.lateNight && room.panel.catsSleep !== false && startScreen.indexOf("catsday") < 0
                 music: win.playing
                 listening: win.voiceState === "listening"
+                voice: win.voiceUp ? voiceO : null
                 alarm: win.alerting
                 kbTop: kbd.up ? kbd.keysTop : -1
                 floorY: Theme.stageH - win.shiftY          // the screen's bottom edge, wherever the drift has the stage

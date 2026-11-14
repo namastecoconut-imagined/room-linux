@@ -162,6 +162,7 @@ Item {
 
     // ---------------------------------------------------------------- the status line: ● Listening · Thinking · Room
     Row {
+        id: status
         x: 44; y: 130; height: 22; spacing: 12
         opacity: vo.mode === "gone" ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: 500 } }
@@ -220,6 +221,19 @@ Item {
         Behavior on opacity { NumberAnimation { duration: 500 } }
     }
     property bool cardIn: false
+
+    // where Room's cats can be while it's up (Cats.qml): along the line of light — clear of the card, and lying low
+    // if the words above come down near it — and, once a card's in, on its top edge, clear of the status line's words
+    function catSpots(to) {
+        var out = [], wordsLow = (mode === "listen" || mode === "think" ? you.y + you.textHeight : answering ? said.y + said.textHeight : 0) > 420
+        var cx = cardIn ? card.x - 40 : 1070
+        if (cx - 300 > 120) out.push({ id: "line", x0: mapToItem(to, 300, 0).x, x1: mapToItem(to, cx, 0).x, y: mapToItem(to, 0, 516).y, low: wordsLow })
+        if (cardIn) {
+            var a = Math.max(card.x + 36, status.x + status.childrenRect.width + 70), b = card.x + card.width - 36
+            if (b - a > 60) out.push({ id: "cardtop", x0: mapToItem(to, a, 0).x, x1: mapToItem(to, b, 0).x, y: mapToItem(to, 0, card.y).y })
+        }
+        return out
+    }
     property string shownKind: ""
     onCardKindChanged: {
         if (cardKind !== "") { shownKind = cardKind; if (replying && !cardIn) cardWait.restart() }
@@ -227,6 +241,7 @@ Item {
     }
     Timer { id: cardWait; interval: 380; onTriggered: vo.cardIn = vo.cardKind !== "" }
     VoiceCard {
+        id: card
         x: 812; y: 150
         kind: vo.shownKind
         lit: vo.lit

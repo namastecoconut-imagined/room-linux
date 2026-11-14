@@ -24,6 +24,7 @@ FILES=(
   "$HOME/room-ir-lit.jpg"         # 12 Nov · ir-capture.sh lit
   "$HOME/.cache/room-experiments" # 12 Nov · py-spy, for the assistant profile (a folder; the script is gone)
   "$HOME/rvc-test"                # 14 Nov · scripts/rvc-speed.sh, the voice-conversion speed test (Python, PyTorch, RVC's code)
+  "$HOME/piper-test"              # 14 Nov · scripts/piper-speed.sh, the light-voice speed test (Python, Piper, two voices)
 )
 # services an experiment added to your user (none)
 SERVICES=()

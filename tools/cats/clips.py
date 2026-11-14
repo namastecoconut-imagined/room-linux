@@ -22,7 +22,8 @@ from lib import lerp, ease
 TAU = 2 * math.pi
 
 # ---------------------------------------------------------------- the states and the life in them
-STATES = dict(stand=(STAND, 24), sit=(SIT, 24), loaf=(LOAF, 24), curl=(CURL, 34), drape=(DRAPE, 24), peek=(PEEK, 24))
+STATES = dict(stand=(STAND, 24), sit=(SIT, 24), loaf=(LOAF, 24), curl=(CURL, 34), drape=(DRAPE, 24), peek=(PEEK, 24),
+              side=(SIDE, 30), belly=(BELLY, 20))
 
 def wave_tail(G, w, lift=0.3, hang=False):
     if hang: G["tail"] = [(x + w * (i / 4), y) for i, (x, y) in enumerate(G["tail"])]
@@ -38,6 +39,10 @@ def alive(S, F, f, N):
         G["legs"] = [[a, (k[0] + 0.5 * s, k[1]), (p[0] + 1.3 * s, p[1])] if p[1] > 186 else [a, k, p] for a, k, p in G["legs"]]
     elif S == "peek":
         G["head"]["y"] -= 1.3 * G["breath"]
+    elif S == "belly":                  # on its back, paws in the air, curling and uncurling a little
+        G["legs"] = [[a, (k[0] + 1.2 * s * (1 if i % 2 else -1), k[1]), (p[0] + 2.0 * s * (1 if i < 2 else -1), p[1] + 1.5 * math.cos(TAU * ph + i))]
+                     for i, (a, k, p) in enumerate(G["legs"])]
+        wave_tail(G, 2.5 * s)
     else:
         wave_tail(G, (1.5 if asleep else 3.5) * s)
     return G
@@ -66,7 +71,7 @@ def event(kind, S, G, f):
     return G
 
 VARIANTS = dict(stand=("blink", "ear", "look", "tail"), sit=("blink", "ear", "look", "tail"), loaf=("blink", "ear", "look", "tail"),
-                curl=("ear", "tail"), drape=("blink", "ear", "look", "tail"), peek=("blink", "look"))
+                curl=("ear", "tail"), drape=("blink", "ear", "look", "tail"), peek=("blink", "look"), side=("blink", "tail"), belly=())
 
 # ---------------------------------------------------------------- building blocks
 def between(A, B, n, shape=ease, each=None):
@@ -126,7 +131,7 @@ def add(sheet, name, frames, loop=False, a=None, b=None, dx=None, seeds=None, gl
 
 def library():
     CLIPS.clear()
-    home = dict(stand="stand", sit="sit", loaf="loaf", curl="curl", drape="drape", peek="peek")
+    home = dict(stand="stand", sit="sit", loaf="loaf", curl="curl", drape="drape", peek="peek", side="flop", belly="belly")
     # resting loops and their variants (the same drawings except where something happens, so they share frames)
     for S, (F, N) in STATES.items():
         seeds = [seedbase(S) + i for i in range(N)]
@@ -270,6 +275,62 @@ def library():
             return G
         add(sheet, f"{S}.bob", [nodding(f) for f in range(10)], loop=True, a=f"{S}.bob", b=f"{S}.bob")
         add(sheet, f"{S}.bob.out", between(BO, F, 3), a=f"{S}.bob", b=S)
+
+    # ---------------------------------------------------------------- the two of them playing
+    # a play-fight: up on the back legs, swatting left, right, left (in time with the other one, a fixed length)
+    add("fight", "sit>rear", between(SIT, REAR, 5), a="sit", b="rear")
+    def batting(f):
+        sv = math.sin(TAU * f / 12); G = lerp(REAR, BAT1, abs(sv) ** 0.7) if sv >= 0 else lerp(REAR, BAT2, abs(sv) ** 0.7)
+        G["head"]["y"] -= 2 * abs(sv); G["breath"] = 0.5 - 0.5 * math.cos(TAU * f / 6)
+        wave_tail(G, 6 * math.sin(TAU * f / 12 + 1))
+        return G
+    add("fight", "rear.fight", [batting(f) for f in range(12)], loop=True, a="rear", b="rear")
+    add("fight", "rear>sit", between(REAR, SIT, 5), a="rear", b="sit")
+    # stalking the other one's tail: flat down, a bum wiggle, then the pounce (crouched → takeoff → air → land)
+    add("fight", "stand>stalk", between(STAND, STALK, 6), a="stand", b="stalk")
+    def stalking(f):
+        G = cp(STALK); sv = math.sin(TAU * f / 8)
+        G["body"] = [(x + (2.6 * sv if i >= 5 else 0.8 * sv if i == 4 else 0), y - (1.2 * abs(sv) if i >= 5 else 0)) for i, (x, y) in enumerate(G["body"])]
+        G["legs"] = [[a, k, p] if j < 2 else [(a[0] + 2 * sv, a[1]), (k[0] + 1.5 * sv, k[1]), p] for j, (a, k, p) in enumerate(G["legs"])]
+        G["tail"] = [(x + 1.5 * sv * i / 4, y - 5 * max(0, math.sin(TAU * f / 4)) * (i / 4) ** 3) for i, (x, y) in enumerate(G["tail"])]
+        return G
+    add("fight", "stalk", [stalking(f) for f in range(8)], loop=True, a="stalk", b="stalk")
+    add("fight", "stalk.go", [lerp(STALK, CROUCH, 0.5), CROUCH], a="stalk", b="crouched")
+    # pounced on: up in the air from sitting or lying (then it's off)
+    up = shift(ARCH, dy=-14)
+    def fast_breath2(G, j): G["breath"] = 0.5 - 0.5 * math.cos(TAU * j / 2)
+    for S, F in (("sit", SIT), ("loaf", LOAF)):
+        mid = lerp(F, up, 0.5)
+        add("fight", f"{S}.startle", upto(F, mid, 2) + upto(mid, up, 2) + hold(up, 1) + upto(up, ARCH, 2) + hold(ARCH, 3, fast_breath2)
+            + between(ARCH, STAND, 5), a=S, b="stand")
+    # a nose boop, standing face to face
+    def nuzzle(G, j): G["head"]["tilt"] += 5 * math.sin(TAU * j / 6); G["head"]["y"] += 1.0 * math.sin(TAU * j / 3)
+    add("pals", "stand.boop", upto(STAND, BOOP, 6) + hold(BOOP, 6, nuzzle) + between(BOOP, STAND, 6), a="stand", b="stand")
+    # grooming the other one's head, and being groomed (the same length, so they keep together)
+    def grooming(G, j):
+        sv = math.sin(TAU * j / 4); G["head"]["y"] += 2.5 * sv; G["head"]["tilt"] += 4 * sv; G["head"]["mouth"] = 0.25 + 0.15 * sv
+    def leaning(G, j): G["head"]["tilt"] += 3 * math.sin(TAU * j / 9); G["breath"] = 0.5 - 0.5 * math.cos(TAU * j / 9)
+    add("pals", "sit.groom", upto(SIT, GROOM, 5) + hold(GROOM, 18, grooming) + between(GROOM, SIT, 5), a="sit", b="sit")
+    add("pals", "sit.purr", upto(SIT, PURR, 5) + hold(PURR, 18, leaning) + between(PURR, SIT, 5), a="sit", b="sit")
+
+    # ---------------------------------------------------------------- flopping out: on its side, a stretch, belly up
+    mid = lerp(STAND, LOAF, 0.55)
+    def thud(G, j): G["squash"] = (0.94, 0.985)[j]
+    add("flop", "stand.flop", upto(STAND, mid, 3) + between(mid, SIDE, 2, shape=lambda t: t * t) + hold(SIDE, 2, thud), a="stand", b="side")
+    add("flop", "side>loaf", between(SIDE, LOAF, 7), a="side", b="loaf")
+    add("flop", "loaf>side", between(LOAF, SIDE, 8), a="loaf", b="side")
+    def tremble(G, j): G["legs"] = [[a, k, (p[0] + 0.8 * math.sin(j * 2.1 + i), p[1])] for i, (a, k, p) in enumerate(G["legs"])]; G["head"]["mouth"] = 0.55 - 0.1 * math.sin(j)
+    add("flop", "side.stretch", upto(SIDE, SIDE_S, 6) + hold(SIDE_S, 6, tremble) + between(SIDE_S, SIDE, 7), a="side", b="side")
+    add("belly", "side>belly", [lerp(SIDE, ROLLM, 0.35), lerp(SIDE, ROLLM, 0.7), ROLLM], a="side", b="belly")
+    add("belly", "belly>side", [ROLLM, lerp(ROLLM, SIDE, 0.35), lerp(ROLLM, SIDE, 0.7)], a="belly", b="side")
+    def wriggle2(G, j):
+        s_ = math.sin(TAU * j / 7)
+        G["head"]["tilt"] += 10 * s_
+        G["legs"] = [[an, (k[0] + 2 * s_ * (1 if i % 2 else -1), k[1]), (p[0] + 4 * s_ * (1 if i % 2 else -1), p[1] + 2 * math.cos(TAU * j / 7 + i))]
+                     for i, (an, k, p) in enumerate(G["legs"])]
+        G["body"] = [(x + 1.5 * s_, y) for x, y in G["body"]]
+        wave_tail(G, 5 * s_)
+    add("belly", "belly.wriggle", [BELLY] + hold(BELLY, 13, lambda G, j: wriggle2(G, j + 1)), a="belly", b="belly")
     return CLIPS
 
 # ---------------------------------------------------------------- drawing, packing, the manifest

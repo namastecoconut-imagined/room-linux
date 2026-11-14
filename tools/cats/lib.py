@@ -199,10 +199,50 @@ SHOVE["body"] = [(x + (3 if i in (0, 1, 2) else 0), y + (7 if i in (1, 2) else 3
 SHOVE["legs"][0] = P((128, 148), (134, 165), (140, 180)); SHOVE["legs"][1] = P((137, 146), (144, 163), (150, 180))
 SHOVE["legs"][2] = P((70, 146), (62, 162), (60, 180)); SHOVE["legs"][3] = P((79, 146), (72, 163), (70, 180))
 
+# ---------------------------------------------------------------- playing together, and flopping out
+# reared up on the back legs, front paws up (a play-fight), and the two swats from there, ears back
+REAR = norm(dict(
+    body=P((112, 150), (124, 118), (116, 94), (100, 92), (86, 106), (76, 130), (70, 160), (84, 180)),
+    haunch=1.0,
+    head=dict(x=120, y=70, r=25, tilt=-4, earL=3, earR=3, eye=1.15, mouth=0.0),
+    legs=[P((112, 116), (126, 110), (130, 96)), P((120, 114), (136, 108), (142, 94)),
+          P((92, 162), (98, 171), (104, 180)), P((96, 162), (101, 171), (107, 180))],
+    legv=[1, 1, 0.6, 0.3],
+    tail=P((72, 170), (58, 180), (44, 180), (34, 172), (34, 160)),
+    breath=0.0, squash=1.0))
+BAT1 = head(REAR, tilt=8, earL=-12, earR=-12, eye=1.2, mouth=0.3, x=123, y=73)
+BAT1["legs"][1] = P((120, 114), (140, 112), (154, 122)); BAT1["legs"][0] = P((112, 116), (122, 100), (128, 86))
+BAT2 = head(REAR, tilt=-8, earL=-12, earR=-12, eye=1.2, mouth=0.3, x=121, y=71)
+BAT2["legs"][0] = P((112, 116), (134, 118), (150, 128)); BAT2["legs"][1] = P((120, 114), (128, 98), (134, 84))
+# stalking: flat to the ground, eyes wide, ears forward, rump up a touch (it wiggles before the pounce)
+STALK = norm(dict(
+    body=P((132, 176), (144, 160), (136, 144), (112, 138), (86, 136), (64, 136), (52, 152), (62, 172)),
+    haunch=0.3,
+    head=dict(x=152, y=148, r=24, tilt=-4, earL=6, earR=6, eye=1.25, mouth=0.0),
+    legs=[P((130, 172), (140, 168), (146, 180)), P((138, 170), (150, 168), (156, 180)),
+          P((66, 164), (58, 170), (66, 180)), P((74, 164), (66, 172), (76, 180))],
+    legv=[1, 1, 1, 1],
+    tail=P((54, 146), (42, 152), (30, 158), (20, 160), (11, 156)),
+    breath=0.0, squash=1.0))
+# a nose boop: neck stretched out, eyes soft
+BOOP = head(STAND, x=158, y=103, tilt=-8, eye=0.35, earL=3, earR=3)
+BOOP["body"][1] = (143, 130); BOOP["body"][2] = (136, 110)
+# grooming the other one (licking its head), and being groomed (eyes shut, leaning in)
+GROOM = head(SIT, x=136, y=90, tilt=-16, eye=0.0, mouth=0.35, earL=-3, earR=-3)
+GROOM["body"][1] = (130, 140); GROOM["body"][2] = (124, 110)
+PURR = head(SIT, x=112, y=93, tilt=14, eye=0.0, earL=-5, earR=-5)
+# lying flat out on its side, and stretched out long that way
+SIDE_S = cp(SIDE)
+SIDE_S["legs"] = [P((132, 175), (152, 176), (172, 172)), P((138, 173), (160, 170), (180, 164)),
+                  P((66, 175), (52, 178), (38, 176)), P((74, 174), (60, 177), (46, 172))]
+SIDE_S["head"].update(tilt=44, eye=0.0, mouth=0.55, x=158, y=164)
+SIDE_S["tail"] = [(x - 6 * i / 4, y + 2 * i / 4) for i, (x, y) in enumerate(SIDE["tail"])]
+
 KEYS = dict(stand=STAND, sit=SIT, loaf=LOAF, curl=CURL, drape=DRAPE, peek=PEEK, stretch=STRETCH, crouch=CROUCH,
             air=AIR, land=LAND, turn=TURN, arch=ARCH, lick=LICK, wipe=WIPE, knead=KNEAD, swat_drape=SWAT_D2,
             swat_sit=SWAT_S1, yawn=YAWN, g_ext=G_EXT, g_front=G_FRONT, g_gather=G_GATHER, g_push=G_PUSH, skid=SKID,
-            side=SIDE, belly=BELLY, rollm=ROLLM, shove=SHOVE)
+            side=SIDE, belly=BELLY, rollm=ROLLM, shove=SHOVE,
+            rear=REAR, bat1=BAT1, bat2=BAT2, stalk=STALK, boop=BOOP, groom=GROOM, purr=PURR, side_s=SIDE_S)
 
 def svg(F, who, seed):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 {TOP} {CW} {CH}" width="{PXW}" height="{PXH}">'
@@ -237,7 +277,7 @@ const { chromium } = require('playwright'); const J = require(process.argv[1]);
 
 if __name__ == "__main__" and sys.argv[1] == "poses":
     from PIL import Image, ImageDraw
-    names = list(KEYS)
+    names = sys.argv[3].split(",") if len(sys.argv) > 3 else list(KEYS)
     svgs = [svg(KEYS[n], who, 1) for who in ("bebo", "evan") for n in names]
     tmp = tempfile.mkdtemp(prefix="cats-"); paths = render(svgs, tmp)
     cols = 6; rows = math.ceil(len(paths) / cols)

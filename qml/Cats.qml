@@ -1,12 +1,14 @@
 import QtQuick
 
-// Bebo and Evan, living on the panel (standby and Home for now). Two cats at most, each always on something real —
-// the top of a clock number, the line the clock stands on, the top of the music card, the bottom edge of the screen
-// (Scene.catSpots, read from the layout as it is) — or just below that bottom edge, out of sight, about to peek up.
-// Bebo is calm: sits, washes, yawns, kneads, lies down, naps, now and then strolls along what she's on. Evan is busy:
-// walks and trots along the bottom edge, leaps up onto things and down again, drapes himself over an edge and swats
-// at it, stretches, hops off the bottom of the screen and peeks back up somewhere else. At night they sleep. They
-// nod along to music, prick up their ears when the assistant listens, and a cat on a clock number swats it when the
+// Bebo and Evan, living on Room's screens. Two cats, each always on something real — the top of a clock number, the
+// top of a card, a line of words, the bottom edge of the screen (Scene.catSpots, read from the layout as it is) — or
+// just below that bottom edge, out of sight, about to peek up. Bebo is calm: sits, washes, yawns, kneads, lies down,
+// naps, strolls about. Evan is busy: walks, trots and gallops along the bottom edge, leaps up onto things and down
+// again, drapes himself over an edge and swats at it, hops off the bottom of the screen and peeks back up somewhere
+// else. They play together — one stalks the other's tail and pounces, then it's a chase; they rear up and box; they
+// touch noses and groom each other — and at night they sleep, often curled up together. Now and then, in the
+// daytime, one comes right up to the glass, big, and flops out across the bottom of the screen for a while. They nod
+// along to music, sit on the assistant's line of light when it's up, and a cat on a clock number swats it when the
 // minute changes. Nothing they do changes anything in Room, and they never take a touch.
 Item {
     id: cats
@@ -81,9 +83,10 @@ Item {
     function roomFor(s, c) { var o = other(c); return o.spotId !== s.id || wide(s) > 260 }
 
     // ---------------------------------------------------------------- getting from one pose to another
-    readonly property var edges: ({ stand: { sit: "stand>sit" }, sit: { stand: "sit>stand", loaf: "sit>loaf" },
-                                    loaf: { sit: "loaf>sit", curl: "loaf>curl", drape: "loaf>drape" }, curl: { loaf: "curl>loaf" },
-                                    drape: { loaf: "drape>loaf" }, peek: { none: "peek.down" }, none: { peek: "peek.up" } })
+    readonly property var edges: ({ stand: { sit: "stand>sit", side: "stand.flop" }, sit: { stand: "sit>stand", loaf: "sit>loaf" },
+                                    loaf: { sit: "loaf>sit", curl: "loaf>curl", drape: "loaf>drape", side: "loaf>side" }, curl: { loaf: "curl>loaf" },
+                                    drape: { loaf: "drape>loaf" }, peek: { none: "peek.down" }, none: { peek: "peek.up" },
+                                    side: { loaf: "side>loaf", belly: "side>belly" }, belly: { side: "belly>side" } })
     function route(a, b) {
         if (!b || a === b) return []
         var seen = {}, q = [[a, []]]; seen[a] = true
@@ -150,9 +153,9 @@ Item {
             { c: "run", early: true, until: function () { return (x - c.ax) * c.dir < 64 * c.k } }, "run.out"], route("stand", then))
     }
     // off the side of the screen, out of sight
-    function runOff(c, toRight) {
+    function runOff(c, toRight, from) {
         var x = toRight ? Theme.stageW + 130 : -130, strides = 0
-        return route(c.pose, "stand").concat(turnTo(c, x), ["run.in",
+        return route(from || c.pose, "stand").concat(turnTo(c, x), ["run.in",
             { c: "run", early: true, until: function () { return (toRight ? c.ax > x : c.ax < x) || ++strides > 400 } },
             { call: function () { c.pose = "none"; c.spotId = "below" } }])
     }
@@ -224,13 +227,16 @@ Item {
         var f = spot("floor")
         if (alarm) { c.go(alarmed(c)); c.thinkAt = now; return }
         if (where === "voice") { attend(c); return }
-        if (night) {                                        // asleep, wherever they are
-            if (p === "none" && f) c.go(popUp(c, f, placeOn(f, c), "sit").concat(route("sit", "curl")))
+        if (night) {                                        // asleep, wherever they are (often curled up together)
+            var nb = p !== "none" && p !== "peek" && Math.random() < 0.4 ? napBeside(c) : null
+            if (nb) c.go(nb)
+            else if (p === "none" && f) c.go(popUp(c, f, placeOn(f, c), "sit").concat(route("sit", "curl")))
             else if (p === "peek") c.go(["peek.down"])
             else if (p !== "curl") c.go(route(p, "curl"))
             c.thinkAt = later(30, 90); return
         }
         if (s && s.low && (p === "sit" || p === "stand")) { c.go(route(p, "loaf")); c.thinkAt = later(3, 8); return }
+        if (p === "side" || p === "belly") { c.go(route(p, "loaf")); c.thinkAt = later(3, 8); return }
         if (music && (p === "sit" || p === "loaf" || p === "drape") && Math.random() < 0.2) {
             var beats = Math.round(rnd(4, 10))
             c.go([p + ".bob.in", { c: p + ".bob", until: function () { return !cats.music || --beats <= 0 } }, p + ".bob.out"])
@@ -240,6 +246,11 @@ Item {
         var fl = s && s.floor, curve = s && s.yAt
         var zoom = function () { return zoomies(c) }
         var dash = function () { if (!f) return null; var x = placeOn(f, c); return Math.abs(x - c.ax) > 260 ? runPlan(c, x, null) : null }
+        // playing with the other one (these start the other one too, so they return [] once they have)
+        var pl = playable(c)
+        var pounceOn = function () { return pounce(c, other(c)) }
+        var box = function () { return fight(c, other(c)) }
+        var nuzzle = function () { return cuddle(c, other(c)) }
         if (calm) {                                         // Bebo: calmer, but up and about
             if (p === "curl") o = [[0.6, route(p, "loaf")], [0.2, elsewhere(c, s, "sit")], [0.2, []]]
             else if (p === "loaf") o = [[0.12, ["loaf.knead.in", { c: "loaf.knead", n: Math.round(rnd(3, 6)) }, "loaf.knead.out"]], [0.08, ["loaf.roll"]],
@@ -248,24 +259,28 @@ Item {
                                         [music ? 0.05 : 0, pushPlan(c)], [0.08, []]]
             else if (p === "sit") o = [[0.1, ["sit.yawn"]], [0.12, ["sit.wash"]], [0.1, route(p, "loaf")],
                                        [0.25, along(c, s, false, pick(["sit", "loaf"]))], [0.22, elsewhere(c, s, pick(["sit", "loaf"]))],
-                                       [fl ? 0.05 : 0, zoom], [fl ? 0.05 : 0, dash], [music ? 0.06 : 0, pushPlan(c)], [0.06, []]]
+                                       [fl ? 0.05 : 0, zoom], [fl ? 0.05 : 0, dash], [music ? 0.06 : 0, pushPlan(c)], [0.06, []],
+                                       [pl ? 0.1 : 0, nuzzle], [pl ? 0.04 : 0, box], [pl ? 0.03 : 0, pounceOn]]
             else if (p === "drape") o = [[0.25, route(p, "loaf")], [0.1, ["drape.swat"]], [0.25, elsewhere(c, s, "sit")],
                                          [curve ? 0.15 : 0, along(c, s, false, "drape")], [0.15, []]]
-            else if (p === "stand") o = [[0.3, route(p, "sit")], [0.3, along(c, s, false, "sit")], [0.3, elsewhere(c, s, "sit")], [0.1, ["stand.stretch"]]]
+            else if (p === "stand") o = [[0.3, route(p, "sit")], [0.3, along(c, s, false, "sit")], [0.3, elsewhere(c, s, "sit")], [0.1, ["stand.stretch"]],
+                                         [pl ? 0.1 : 0, nuzzle]]
             else if (p === "peek") o = [[1, f ? ["peek.down"].concat(popUp(c, f, c.ax, "sit")) : ["peek.down"]]]
             else if (p === "none") o = [[0.6, f ? popUp(c, f, placeOn(f, c), "sit") : null],
                                         [0.4, f ? runIn(c, placeOn(f, c), Math.random() < 0.5, "sit") : null]]
         } else {                                            // Evan: always up to something
             if (p === "stand") o = [[0.25, along(c, s, false, null)], [0.25, elsewhere(c, s, null)], [0.06, ["stand.stretch"]],
                                     [0.08, route(p, "sit")], [fl ? 0.12 : 0, along(c, s, true, null)], [fl ? 0.1 : 0, hopDown(c)],
-                                    [0.02, ["stand.startle"]], [fl ? 0.1 : 0, zoom], [music ? 0.12 : 0, pushPlan(c)], [fl ? 0.12 : 0, dash]]
+                                    [0.02, ["stand.startle"]], [fl ? 0.1 : 0, zoom], [music ? 0.12 : 0, pushPlan(c)], [fl ? 0.12 : 0, dash],
+                                    [pl ? 0.14 : 0, pounceOn], [pl ? 0.08 : 0, box], [pl ? 0.05 : 0, nuzzle]]
             else if (p === "sit") o = [[0.2, along(c, s, false, null)], [0.25, elsewhere(c, s, null)], [0.08, ["sit.wash"]], [0.05, ["sit.yawn"]],
                                        [0.06, ["sit.swat"]], [0.06, route(p, "loaf")], [fl ? 0.08 : 0, zoom], [fl ? 0.08 : 0, dash],
-                                       [music ? 0.1 : 0, pushPlan(c)], [0.04, []]]
+                                       [music ? 0.1 : 0, pushPlan(c)], [0.04, []],
+                                       [pl ? 0.12 : 0, pounceOn], [pl ? 0.08 : 0, box], [pl ? 0.04 : 0, nuzzle]]
             else if (p === "loaf") o = [[edge ? 0.12 : 0, route(p, "drape")], [0.06, ["loaf.knead.in", { c: "loaf.knead", n: Math.round(rnd(2, 5)) }, "loaf.knead.out"]],
                                         [0.08, route(p, "sit")], [0.03, route(p, "curl")], [0.1, ["loaf.roll"]],
                                         [curve ? 0.2 : 0, along(c, s, false, "loaf")], [music ? 0.12 : 0, pushPlan(c)],
-                                        [0.25, elsewhere(c, s, null)], [0.05, []]]
+                                        [0.25, elsewhere(c, s, null)], [0.05, []], [pl ? 0.1 : 0, pounceOn]]
             else if (p === "drape") o = [[0.2, route(p, "loaf")], [0.15, ["drape.swat"]], [0.25, elsewhere(c, s, null)],
                                          [curve ? 0.2 : 0, along(c, s, false, "drape")], [0.1, []]]
             else if (p === "curl") o = [[0.6, route(p, "loaf")], [0.25, elsewhere(c, s, null)], [0.15, []]]
@@ -285,10 +300,11 @@ Item {
     }
 
     // ---------------------------------------------------------------- arriving on a screen
-    onWhereChanged: { bebo.shown = false; evan.shown = false; arrive.interval = where === "voice" ? 500 : 1100; arrive.restart() }
+    onWhereChanged: { bebo.shown = false; evan.shown = false; hogIn.stop(); hogger = null; bebo.engaged = false; evan.engaged = false; arrive.interval = where === "voice" ? 500 : 1100; arrive.restart() }
     Timer { id: arrive; interval: 1100; onTriggered: cats.place() }       // (after the screen has settled; the assistant: at once)
     Component.onCompleted: arrive.restart()
     function put(c, s, p) {
+        c.engaged = false
         c.spotId = s.id; c.ax = placeOn(s, c); c.ay = yOn(s, c.ax)
         c.settle(restFor(s, p), Math.random() < 0.5)
     }
@@ -336,7 +352,9 @@ Item {
                 c.go(runIn(c, i ? rnd(700, 1000) : rnd(300, 600), i === 1, null).concat(i ? ["stand.startle"] : []))
             })
         } else return
+        if (night && where !== "voice" && where !== "alert" && Math.random() < 0.5) nest()
         bebo.shown = true; evan.shown = true
+        playAt = later(20, 60); hogAt = demoFast ? now + rnd(30, 60) : later(20 * 60, 30 * 60)
         hear()
         bebo.thinkAt = later(5, 12); evan.thinkAt = later(2, 6)
     }
@@ -352,6 +370,7 @@ Item {
                 cats.keepOn(c)
                 if (c.free() && cats.now >= c.thinkAt) cats.think(c)
             })
+            if (cats.now >= cats.hogAt) cats.hog()
         }
     }
     // the layout moved under a cat (a number changed width, the card went): back onto its edge, or somewhere else
@@ -400,6 +419,149 @@ Item {
         else if (p === "curl") c.go(["curl.ear"])
         else if (p === "peek") c.go(["peek.look"])
     }) }
+
+    // ---------------------------------------------------------------- the two of them together
+    // (distances are in drawing units, between where they stand: face to face, swatting; noses touching; one grooming
+    // the other; curled up nose to tail)
+    property real playAt: 0                             // not again before this (a game every minute or two at most)
+    function playable(c) {
+        var o = other(c)
+        return !night && now >= playAt && where !== "voice" && where !== "alert" && where !== "" && o.shown && o.free()
+            && o.pose !== "none" && o.spotId !== "below" && o.size === c.size && !o.hidden && !c.engaged && !o.engaged && !hogger
+    }
+    // where c could stand gap units from o (at ox, or where it is), on s: on c's side of o if there's room, else the other
+    function besideX(c, o, s, gap, ox) {
+        if (ox === undefined) ox = o.ax
+        var g = gap * o.k, m = Math.min(28, wide(s) / 2), side = c.spotId === s.id && c.ax < ox ? -1 : 1
+        for (var t = 0; t < 2; t++, side = -side) { var x = ox + side * g; if (x >= s.x0 + m && x <= s.x1 - m) return x }
+        return null
+    }
+    // where the two of them can meet, gap units apart: on b's spot if there's room there, else down on the bottom edge
+    // (b hops down too). Gives { s, xb, xa, prep } (prep: b's moves to get there, standing), or null
+    function meet(a, b, gap) {
+        var s = spot(b.spotId)
+        if (okFor(s) && ["sit", "stand", "loaf"].indexOf(b.pose) >= 0) {
+            var x = besideX(a, b, s, gap); if (x !== null) return { s: s, xb: b.ax, xa: x, prep: route(b.pose, "stand"), still: true }
+        }
+        var f = spot("floor"); if (!f || ["sit", "stand", "loaf", "drape", "curl"].indexOf(b.pose) < 0) return null
+        var m = Math.min(28, wide(f) / 2), xb = Math.max(f.x0 + m, Math.min(f.x1 - m, b.ax + rnd(-60, 60)))
+        var xa = besideX(a, b, f, gap, xb); if (xa === null) return null
+        return { s: f, xb: xb, xa: xa, prep: goTo(b, f, xb), still: false }
+    }
+    // c to x on s, standing there (walking along, or a leap if it's somewhere else); the walk stops up to a stride
+    // short, so it aims a little past
+    function goTo(c, s, x) {
+        if (c.spotId === s.id) {
+            if (Math.abs(x - c.ax) < 14 * c.k) return route(c.pose, "stand")
+            return walkPlan(c, x + (x > c.ax ? 1 : -1) * 20 * c.k, "stand")
+        }
+        return route(c.pose, "stand").concat(turnTo(c, x), ["crouch", "takeoff", { c: "air", leap: { x: x, y: yOn(s, x) } },
+            { call: function () { c.spotId = s.id } }, "land"])
+    }
+    // two plans in step: each phase's moves, then each waits for the other before the next phase
+    function duet(a, b, phases) {
+        var at = [0, 0], until = now + 60
+        playAt = later(60, 150); a.engaged = true; b.engaged = true
+        ;[a, b].forEach(function (c, i) {
+            var steps = []
+            phases.forEach(function (ph, p) {
+                steps = steps.concat(ph[i], [{ call: function () { at[i] = p + 1 } },
+                                             { wait: function () { return at[1 - i] > p || cats.now > until } }])
+            })
+            steps.push({ call: function () { c.thinkAt = cats.later(3, 8); c.engaged = false } })
+            c.thinkAt = now + 90
+            c.go(steps)
+        })
+        return []
+    }
+    function okFor(s) { return s && !s.use && !s.low && !s.yAt }
+
+    // rearing up and boxing, then one washes it off and the other has a roll or wanders off
+    function fight(a, b) {
+        var mt = meet(a, b, 165); if (!mt) return null
+        var act = ["sit>rear", { c: "rear.fight", n: Math.round(rnd(2, 4)) }, "rear>sit"]
+        var bp = mt.still && (mt.xa - b.ax) * b.dir > 0 ? route(b.pose, "sit") : mt.prep.concat([{ face: mt.xa }], route("stand", "sit"))
+        return duet(a, b, [[goTo(a, mt.s, mt.xa).concat([{ face: mt.xb }], route("stand", "sit")), bp],
+                           [act, act.slice()],
+                           [pick([["sit.wash"], route("sit", "loaf").concat(["loaf.roll"])]), pick([["sit.wash"], ["sit.yawn"], []])]])
+    }
+    // noses touching, and sometimes one steps in and grooms the other's head; then they sit together a while
+    function cuddle(a, b) {
+        var mt = meet(a, b, 156); if (!mt) return null
+        var ph = [[goTo(a, mt.s, mt.xa).concat([{ face: mt.xb }]), mt.prep.concat([{ face: mt.xa }])], [["stand.boop"], ["stand.boop"]]]
+        if (Math.random() < 0.6) ph.push([["walk.in", { c: "walk", n: 1 }, "walk.out", "stand>sit"], ["stand>sit"]], [["sit.groom"], ["sit.purr"]])
+        else ph.push([["stand>sit"], ["stand>sit"]])
+        ph.push([pick([[], route("sit", "loaf")]), pick([[], route("sit", "loaf"), ["sit.wash"]])])
+        return duet(a, b, ph)
+    }
+    // stalking up behind the other one, a wiggle, a pounce on its tail — it leaps up and bolts, and the chase is on
+    function pounce(a, b) {
+        var f = spot("floor"), T = { sit: 55, loaf: 85, stand: 50 }[b.pose]
+        if (!f || b.spotId !== "floor" || !T) return null
+        var tail = b.ax - b.dir * T * b.k, land = tail - b.dir * 30 * a.k, from = land - b.dir * 150 * a.k
+        var m = Math.min(28, wide(f) / 2)
+        if (from < f.x0 + m || from > f.x1 - m || land < f.x0 + m || land > f.x1 - m) return null
+        var away = b.dir > 0, fright = b.pose === "stand" ? "stand.startle" : b.pose + ".startle"
+        b.thinkAt = now + 90; b.load(b.sheetOf(fright))          // (its fright, ready to go)
+        playAt = later(60, 150); a.engaged = true; b.engaged = true
+        a.thinkAt = now + 90
+        var free = function () { a.engaged = false; b.engaged = false }
+        a.go(goTo(a, f, from).concat([{ face: land }, "stand>stalk", { c: "stalk", n: Math.round(rnd(2, 4)) }, "stalk.go", "takeoff",
+            { c: "air", leap: { x: land, y: floorY } },
+            { call: function () { if (b.free() && b.spotId === "floor") b.go([fright].concat(runOff(b, away, "stand")), true); free() } },
+            "land", { c: "stand", n: 1 }], runOff(a, away, "stand")))
+        return []
+    }
+    // at night: over to the other one and curl up beside it, facing the same way
+    function napBeside(c) {
+        var o = other(c), s = spot(o.spotId)
+        if (!o.shown || o.pose !== "curl" || !s || s.use || (c.spotId === o.spotId && Math.abs(c.ax - o.ax) < 120 * c.k)) return null
+        var x = besideX(c, o, s, 80); if (x === null) return null
+        return goTo(c, s, x).concat([{ face: x + o.dir * 500 }], route("stand", "curl"))
+    }
+    // arriving at night: half the time they're already curled up together, on the widest thing there is
+    function nest() {
+        var w = spots.map(function (t) { return spot(t.id) }).filter(function (t) { return !t.use && wide(t) >= 260 })
+                     .sort(function (a, b) { return wide(b) - wide(a) })[0]
+        if (!w) return
+        bebo.spotId = w.id; bebo.ax = (w.x0 + w.x1) / 2 + rnd(-80, 80); bebo.ay = yOn(w, bebo.ax); bebo.settle("curl", Math.random() < 0.5)
+        var x = besideX(evan, bebo, w, 80); if (x === null) return
+        evan.spotId = w.id; evan.ax = x; evan.ay = yOn(w, x); evan.settle("curl", bebo.mirror)
+    }
+
+    // ---------------------------------------------------------------- hogging the screen: big, right up at the glass
+    // in the daytime on standby and Home, every 20–30 minutes: one strolls in big along the bottom, flops over, has a
+    // stretch, rolls belly up and wriggles, lies there a while, then gets up and strolls off the other side
+    property real hogAt: Date.now() / 1000 + 1200
+    property var hogger: null
+    function hog() {
+        if (night || (where !== "standby" && where !== "home") || !spot("floor")) { hogAt = now + 60; return }
+        var c = Math.random() < 0.5 ? bebo : evan
+        if (!c.free()) c = other(c)
+        if (!c.free() || bebo.engaged || evan.engaged) { hogAt = now + 5; return }      // (busy: in a moment)
+        hogAt = demoFast ? now + rnd(60, 90) : later(20 * 60, 30 * 60)
+        hogger = c; c.thinkAt = now + 300
+        c.shown = false; hogIn.restart()                    // (gone, then back big)
+    }
+    Timer {
+        id: hogIn; interval: 700
+        onTriggered: {
+            var c = cats.hogger; if (!c || (cats.where !== "standby" && cats.where !== "home")) return
+            var small = c.size, big = small * 2.5, fromRight = Math.random() < 0.5
+            var x = Theme.stageW * cats.rnd(0.35, 0.6), off = fromRight ? -260 : Theme.stageW + 260
+            c.settle("none"); c.size = big
+            c.ax = fromRight ? Theme.stageW + 220 : -220; c.ay = cats.floorY; c.spotId = "floor"; c.mirror = fromRight
+            c.shown = true
+            var o = cats.other(c)
+            c.go([{ call: function () { c.pose = "stand" } }, "walk.in",
+                  { c: "walk", until: function () { return (x - c.ax) * c.dir < 51 * c.k } }, "walk.out",
+                  { call: function () { if (o.shown && o.free() && (o.pose === "sit" || o.pose === "loaf")) o.go([o.pose + ".alert.in", { c: o.pose + ".alert", n: 2 }, o.pose + ".alert.out"]) } },
+                  "stand.flop", { c: "side", n: 2 }, "side.stretch", { c: "side", n: 1 }, "side>belly", "belly.wriggle", { c: "belly", n: 3 },
+                  "belly.wriggle", "belly>side", { c: "side", n: 2 }, "side>loaf", "loaf>sit", "sit>stand", { face: off }, "walk.in",
+                  { c: "walk", until: function () { return fromRight ? c.ax < off : c.ax > off } },
+                  { call: function () { c.pose = "none"; c.spotId = "below"; c.size = small; c.thinkAt = cats.later(4, 12); cats.hogger = null } }])
+        }
+    }
 
     // ---------------------------------------------------------------- the assistant's up: they attend to it
     // listening: ears up (hear, above), and they keep still. Thinking: they sit and look about (their resting

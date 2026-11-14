@@ -19,6 +19,7 @@ Item {
     property bool shown: false
     property string spotId: ""                       // (Cats.qml's: what it's on)
     property real thinkAt: 0                         // (Cats.qml's: when it next decides something)
+    property bool engaged: false                     // (Cats.qml's: in a game with the other one)
 
     // ---------------------------------------------------------------- what it's playing
     property string clip: "sit"
@@ -33,7 +34,7 @@ Item {
     readonly property var fr: Data.frames[cc.s][cc.f[Math.min(fi, cc.f.length - 1)]]
     function free() { return plan.length === 0 && pend === null && (restClip || hidden) }     // nothing to do but rest
     function idle() { return plan.length === 0 && (pend === null ? restClip || hidden : pend.rest === true) }   // (or about to)
-    readonly property var rests: ({ stand: 1, sit: 1, loaf: 1, curl: 1, drape: 1, peek: 1, none: 1 })
+    readonly property var rests: ({ stand: 1, sit: 1, loaf: 1, curl: 1, drape: 1, peek: 1, side: 1, belly: 1, none: 1 })
 
     // running and trotting glide between drawings (walking steps from one to the next, so the paws stay put)
     Behavior on ax { enabled: cat.cc.g === true && !arcA.running; NumberAnimation { duration: 100; easing.type: Easing.Linear } }
@@ -83,11 +84,13 @@ Item {
     // a plan: clip names, or steps — { c: "walk", to: x } walks until near x; { c: "air", leap: { x, y }, from } flies
     // there; { c, n } plays a loop n times; { c, until: fn } loops until fn() says so; { flip: true } turns the
     // drawing round; { face: x } turns round (standing) if it's facing away from x — decided when it gets there, not
-    // when the plan was made, as a leap before it may have turned it; { call: fn } runs fn. A resting cat takes it
-    // near the bottom of a breath (no jump).
-    function go(steps) {
+    // when the plan was made, as a leap before it may have turned it; { wait: fn } rests in whatever pose it's in until
+    // fn() says go (the two of them keeping together); { call: fn } runs fn. A resting cat takes it near the bottom of
+    // a breath (no jump) — or at once, given now (a fright).
+    function go(steps, now) {
         plan = steps.map(function (st) { return typeof st === "string" ? { c: st } : st })
         load(sheetOf(firstClip()))
+        if (now && pend === null && (restClip || hidden)) next()
     }
     // straight into a resting pose, no transition (arriving on a screen)
     function settle(p, m) {
@@ -133,6 +136,7 @@ Item {
             if (st.flip) mirror = !mirror
             if (st.call) st.call()
             if (st.face !== undefined && (st.face - ax) * dir < 0) plan.unshift({ c: "turn" }, { flip: true }, { c: "turn.back" })
+            if (st.wait && !st.wait()) plan.unshift({ c: pose, early: true, until: st.wait })
         }
         if (plan.length) pend = plan.shift()
         else if (pose === "none") { hidden = true; restClip = true; item = null; return }

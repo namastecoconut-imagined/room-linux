@@ -111,9 +111,12 @@ exercises every pixel. A tap stops it.
 Bebo and Evan live on Room's screens, always on something real: the tops of the clock's numbers, the music card's
 top, the forecast's curve, a list's lines, a sheet's top edge, the bottom edge of the screen (or just below it, about
 to peek up). They breathe and blink, wash, yawn, knead, roll over, nap, walk and leap between edges, now and then
-chase each other off the side of the screen, push the song's playhead along, nod to music, prick up their ears when
-the assistant listens, swat the clock when the minute changes, race about when an alarm goes off, and sleep at night.
-They never take a touch. Settings → More settings → Cats turns them off (not loaded at all) or keeps them awake
+chase each other off the side of the screen, push the song's playhead along, nod to music, sit on the assistant's
+line of light when it's up (ears up while it listens), swat the clock when the minute changes, race about when an
+alarm goes off, and sleep at night, often curled up together. They play together: one stalks the other's tail and
+pounces (then it's a chase), they rear up and box, they touch noses and one grooms the other. Every 20–30 minutes in
+the daytime, on standby and Home, one comes right up to the glass, big, flops out across the bottom of the screen,
+rolls belly up, and wanders off again. They never take a touch. Settings → More settings → Cats turns them off (not loaded at all) or keeps them awake
 at night. To check them:
 `ROOM_SCREEN=catsdayhome` / `catsdaystandby` (everything happens sooner).
 

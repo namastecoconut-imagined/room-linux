@@ -59,6 +59,7 @@ Item {
     readonly property bool m: sV ? musicFace : live                      // "music" for this view
     readonly property bool spotify: music.source !== "airplay"
     readonly property var field: music.field || ({})
+    readonly property Item backdrop: bg              // the background (the cats step on its frames)
     // the song's place: after a seek, hold the new place until the player reports it (Spotify takes a second or two)
     property real seekTo: -1
     property real seekAt: 0

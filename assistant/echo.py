@@ -96,12 +96,24 @@ class EchoCanceller:
         self.next_delay = 5.0
         self.said = 0.0
         self.removed = []
+        self.quiet = 0.0                                   # seconds since anything was last played
+        self.resting = False
 
     def process(self, mic: np.ndarray, ref: np.ndarray) -> np.ndarray:
         """One frame of mic and of what's playing (float, in step) → the mic with it taken out (int16)."""
         m = len(mic)
         self.clock += m / RATE
         self.hist = np.concatenate([self.hist[m:], ref])
+        # Nothing playing for longer than the canceller's memory (200 ms): there's nothing to take out and nothing to
+        # learn — its output would be the mic, unchanged — so it rests and the mic goes straight through. It picks up
+        # again on the first frame anything plays (music, Room's voice, an alarm), with what it learned kept.
+        self.quiet = 0.0 if float(np.max(np.abs(ref))) > 1e-4 else self.quiet + m / RATE
+        if self.quiet > 0.3:
+            if not self.resting:
+                self.resting = True
+                self.aec.X[:] = 0; self.aec.prev[:] = 0     # its record of what was just played: silence now
+            return (np.clip(mic, -1, 1) * 32767).astype(np.int16)
+        self.resting = False
         d = self.hist[len(self.hist) - m - self.shift:len(self.hist) - self.shift]
         B = self.aec.B
         out = np.empty(m, np.float32)

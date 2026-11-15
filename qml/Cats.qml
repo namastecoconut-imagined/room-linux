@@ -32,19 +32,32 @@ Item {
     Cat { id: evan; who: "evan" }
     readonly property var both: [bebo, evan]
 
-    // one tick steps both cats, so the screen's redrawn once for the two of them (10 a second)
+    // one tick steps both cats, so the screen's redrawn once for the two of them (10 a second). When the background
+    // redraws at 20 or 30 a second, the cats step on every 2nd or 3rd of its frames instead of on a clock of their own:
+    // the same 10 steps a second, but no frames in between the background's (two clocks out of step had home redrawn
+    // ~25–30 times a second instead of 20). Otherwise (standby's 8–12) they keep their own timer.
+    property int beat: 0
+    function step() {
+        cats.both.forEach(function (c) {
+            if (c.item && c.item.follow && cats.scene) c.ax = cats.scene.catKnob() - 64 * c.k
+            if (c.spotId === "curve" && !c.flying && !(c.item && c.item.leap)) { var s = cats.spot("curve"); if (s) c.ay = s.yAt(c.ax) }
+        })
+        beat++
+        bebo.tick(beat % 2 === 0); evan.tick(beat % 2 === 0)
+    }
+    readonly property bool stepping: cats.visible && (cats.where !== "" || bebo.visible || evan.visible)
+    readonly property var bg: scene && scene.backdrop ? scene.backdrop : null
+    readonly property int bgRate: bg ? (bg.external ? 30 : bg.fps) : 0
+    readonly property bool onBg: bg !== null && bg.active && bg.visible && bgRate >= 20 && bgRate % 10 === 0
+    property int bgBeat: 0
+    Connections {
+        target: cats.stepping && cats.onBg ? cats.bg : null
+        function onTicked() { if (++cats.bgBeat >= cats.bgRate / 10) { cats.bgBeat = 0; cats.step() } }
+    }
     Timer {
-        property int beat: 0
         interval: 100; repeat: true
-        running: cats.visible && (cats.where !== "" || bebo.visible || evan.visible)
-        onTriggered: {
-            cats.both.forEach(function (c) {
-                if (c.item && c.item.follow && cats.scene) c.ax = cats.scene.catKnob() - 64 * c.k
-                if (c.spotId === "curve" && !c.flying && !(c.item && c.item.leap)) { var s = cats.spot("curve"); if (s) c.ay = s.yAt(c.ax) }
-            })
-            beat++
-            bebo.tick(beat % 2 === 0); evan.tick(beat % 2 === 0)
-        }
+        running: cats.stepping && !cats.onBg
+        onTriggered: cats.step()
     }
 
     function rnd(a, b) { return a + Math.random() * (b - a) }

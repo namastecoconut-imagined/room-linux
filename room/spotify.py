@@ -1,10 +1,17 @@
 """Spotify Web API — the same login as the iPhone panel (config "spotify": clientId + refreshToken).
 Spotify can't push changes, so we ask: every 1.5 s while playing, less when idle or on standby.
-A rotated refresh token is saved in ~/.local/state/room/spotify.json so the login survives restarts."""
+A rotated refresh token is saved in ~/.local/state/room/spotify.json so the login survives restarts.
+
+Room's own speaker (Soloist, room-spotify) logs what it plays — on every change and every 10 s. Spotify's servers
+can lag behind it: on 15 Nov they said "That Good Ship" for over a minute after the speaker had moved on to the next
+song, until a tap on Pause. So Room follows the speaker's log too (Speaker below): a new song there → ask Spotify at
+once; Spotify still on the old one while Room's speaker plays → the speaker's song is shown (its details fetched once)
+until Spotify catches up, and that's logged."""
 import json
+import re
 import time
 
-from PySide6.QtCore import QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QProcess, QTimer, Signal
 from PySide6.QtGui import QColor, QImage
 
 from . import net
@@ -12,6 +19,47 @@ from .config import State
 from .art import field, wash
 
 API = "https://api.spotify.com/v1"
+LINE = re.compile(r'(playing|paused) (spotify:(?:track|episode):[A-Za-z0-9]+) "(.*)" by "(.*)" \[(\d+):(\d\d) / (\d+):(\d\d)\]')
+FRESH = 25.0            # the speaker logs every 10 s while playing: older than this, it's not trusted
+
+
+class Speaker(QObject):
+    """Follows Room's own Spotify speaker through its log (journalctl -f): what it's playing, where, since when."""
+    moved = Signal()                                  # a different song (or play/pause) on the speaker
+
+    def __init__(self):
+        super().__init__()
+        self.now: dict = {}                           # uri, title, artist, playing, pos, dur, at (monotonic)
+        self.p = None
+        self._buf = b""
+
+    def start(self):
+        self.p = QProcess(self)
+        self.p.readyReadStandardOutput.connect(self._read)
+        self.p.finished.connect(lambda *_: QTimer.singleShot(10000, self.start))     # (journald restarted: again)
+        self.p.start("journalctl", ["--user", "-u", "room-spotify", "-f", "-n", "1", "-o", "cat", "--no-pager"])
+
+    def _read(self):
+        self._buf += bytes(self.p.readAllStandardOutput().data())
+        *lines, self._buf = self._buf.split(b"\n")
+        for raw in lines:
+            m = LINE.search(raw.decode("utf-8", "replace"))
+            if not m:
+                continue
+            st, uri, title, artist, pm, ps, dm, ds = m.groups()
+            new = {"uri": uri, "title": title, "artist": artist, "playing": st == "playing",
+                   "pos": int(pm) * 60 + int(ps), "dur": int(dm) * 60 + int(ds), "at": time.monotonic()}
+            old, self.now = self.now, new
+            if (old.get("uri"), old.get("playing")) != (uri, new["playing"]):
+                self.moved.emit()
+
+    def current(self) -> dict | None:
+        """What the speaker is playing now (position moved on since it logged), if it logged recently."""
+        n = self.now
+        if not n or time.monotonic() - n["at"] > FRESH:
+            return None
+        pos = n["pos"] + (time.monotonic() - n["at"] if n["playing"] else 0)
+        return dict(n, pos=min(pos, n["dur"]))
 
 
 class Spotify(QObject):
@@ -54,6 +102,10 @@ class Spotify(QObject):
         self._paused_at = 0.0
         self.last_store = State("spotify-last")
         self.last: dict = self.last_store.read()        # {name, art, uri, kind}
+        self.speaker = Speaker()
+        self.speaker.moved.connect(self._speaker_moved)
+        self._items: dict = {}                          # songs fetched by uri (when Spotify lags behind the speaker)
+        self._lag_logged = ""
 
     @property
     def enabled(self):
@@ -64,6 +116,7 @@ class Spotify(QObject):
             return
         self.poll()
         self.timer = QTimer(self); self.timer.timeout.connect(self._tick); self.timer.start(1500)
+        self.speaker.start()
 
     def _tick(self):
         self.ticks += 1
@@ -136,7 +189,7 @@ class Spotify(QObject):
                 self.player = None
             elif status == 200:
                 try:
-                    self.player = json.loads(data)
+                    self.player = self._behind(json.loads(data))
                     self.fetched_at = time.time()
                     if self.player.get("is_playing"):
                         self._paused_at = 0.0
@@ -151,6 +204,59 @@ class Spotify(QObject):
             self.refresh_devices()
         if time.monotonic() - self._playlists_at > (600 if self.playlists else 30):
             self.refresh_playlists()
+
+    # ---- Room's own speaker, when Spotify's servers lag behind it
+    def _speaker_moved(self):
+        self.poll()                                     # a new song there: ask now, not at the next tick
+        self._soon()
+
+    def _behind(self, p: dict) -> dict:
+        """Spotify's answer, with the speaker's song put in when Spotify still has the one before on Room's speaker."""
+        sp = self.speaker.current()
+        dev = ((p.get("device") or {}).get("name") or "").lower()
+        item = p.get("item") or {}
+        stub = item.get("_stub") and sp and item.get("uri") == sp["uri"] and sp["uri"] in self._items
+        if not stub and (not sp or dev != self.home or not item or item.get("uri") == sp["uri"]):
+            if sp and item.get("uri") == sp["uri"] and not item.get("_stub") and self._lag_logged == sp["uri"]:
+                print(f'[room] spotify: Spotify caught up ("{sp["title"]}")', flush=True)
+                self._lag_logged = ""
+            return p
+        if self._lag_logged != sp["uri"]:
+            self._lag_logged = sp["uri"]
+            print(f'[room] spotify: Spotify still says "{item.get("name", "")}" — Room\'s speaker is playing '
+                  f'"{sp["title"]}" ({int(sp["pos"])} s in); showing the speaker\'s', flush=True)
+        known = self._items.get(sp["uri"])
+        if known is None:
+            self._fetch_item(sp["uri"])
+            known = self._items.get(sp["uri"])          # (it may already be here)
+        if known is None:
+            known = {"name": sp["title"], "uri": sp["uri"], "id": "stub:" + sp["uri"], "_stub": True,
+                     "artists": [{"name": sp["artist"]}], "duration_ms": sp["dur"] * 1000}
+            for t in self.next_up:                      # the cover, from the queue, until the song's details come
+                if t.get("uri") == sp["uri"] and t.get("art"):
+                    known["album"] = {"images": [{"url": t["art"], "width": 300}]}
+        p = dict(p, item=known, progress_ms=int(sp["pos"] * 1000), is_playing=sp["playing"])
+        return p
+
+    def _fetch_item(self, uri):
+        if uri in self._items or uri + ":asked" in self._items:
+            return
+        self._items[uri + ":asked"] = True
+        kind, iid = uri.split(":")[1], uri.split(":")[-1]
+
+        def got(status, data, uri=uri):
+            if status == 200:
+                try:
+                    self._items[uri] = json.loads(data)
+                    if len(self._items) > 40:
+                        self._items = {}
+                    if self.player:
+                        self.player = self._behind(self.player)
+                        self._update_art()
+                        self.changed.emit()
+                except Exception:
+                    pass
+        self._api("GET", f"/{kind}s/{iid}", got)
 
     # ---- what's around the current song, and what you can play
     @staticmethod
@@ -219,7 +325,7 @@ class Spotify(QObject):
 
     def _refresh_liked(self, tid):
         self.liked = None
-        if not tid:
+        if not tid or tid.startswith("stub:"):
             return
         def got(status, data, tid=tid):
             if status == 200 and ((self.player or {}).get("item") or {}).get("id") == tid:

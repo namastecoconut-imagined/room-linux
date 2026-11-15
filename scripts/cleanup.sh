@@ -46,7 +46,11 @@ printf '# Room (cleanup.sh, 15 Nov): crash reports kept small — 200 MB at most
 echo "▸ 5 Firefox's cache"
 if pgrep -u "$U" -x firefox >/dev/null; then echo "  Firefox is open — skipped (close it and run this again)"; else rm -rf "$H/.cache/mozilla"; fi
 echo "▸ 6 the older standard kernel"
-if [ -n "$OLDK" ]; then dnf remove -y -q $OLDK >/dev/null && echo "  removed: $(echo $OLDK | wc -w) packages"; else echo "  already gone"; fi
+if [ -n "$OLDK" ]; then
+  dnf remove -y -q $OLDK >/dev/null 2>&1
+  left=$(rpm -qa 'kernel*' | grep -c -- '-7\.2\.11-300\.fc45')
+  [ "$left" = 0 ] && echo "  removed" || echo "  kept — dnf is set to leave the standard kernel alone (an exclude in its settings); harmless, ~100 MB"
+else echo "  already gone"; fi
 echo
 echo "After: $(df -h / | awk 'NR==2 {print $3 " used, " $4 " free"}') · kernels left: $(rpm -q kernel kernel-surface 2>/dev/null | tr '\n' ' ')"
 echo "Room is untouched — nothing restarted."

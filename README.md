@@ -14,6 +14,8 @@ The Room panel as a native Qt Quick app. The screens are drawn on the GPU, and t
    Room keeps those in `~/.config/room/settings.json`; it never writes config.json, and what's set on the panel wins.
    **Display font:** the clock, big numbers and Alexa's words are set in Kasero when `~/.config/room/fonts/Kasero.otf`
    is there. It's a licensed font, so it isn't in this public repo; without it Room uses Instrument Serif, which ships here.
+   **Room's voice:** the assistant speaks with Room's own Piper voice, `en_US-room-medium.onnx` and its `.onnx.json`
+   in `~/.local/share/room/voices/`. It isn't in this public repo either; without it answers are shown, not spoken.
 4. **Room — everything, in one go:**
    ```bash
    git clone https://github.com/namastecoconut-imagined/room-linux ~/room && bash ~/room/scripts/install.sh

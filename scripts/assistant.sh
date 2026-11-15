@@ -25,7 +25,9 @@ else
 fi
 
 # (the wake word and end-of-speech models ship with Room, in assistant/models)
-# (Room's voice is Sarvam's, made online: nothing to download for it)
+# Room's voice (Piper, made here): its files aren't in the repo — ~/.local/share/room/voices/en_US-room-medium.onnx(.json)
+mkdir -p "$HOME/.local/share/room/voices"
+[ -s "$HOME/.local/share/room/voices/en_US-room-medium.onnx" ] || echo "  ! Room's voice isn't on the Surface yet: answers will be shown, not spoken"
 rm -rf "$HOME/.local/share/room/assistant/kokoro"
 
 echo "▸ Assistant: its service (starts with the Surface, restarts if it stops)"

@@ -4,6 +4,7 @@ sounddevice>=0.5
 soxr>=0.5
 onnxruntime>=1.17
 requests
+piper-tts==1.8.0       # Room's voice (tts.py)
 # openWakeWord (the stock "alexa", only if Room's own model is missing) needs these; it and livekit-wakeword are
 # installed without their dependency lists (scripts/assistant.sh)
 scipy

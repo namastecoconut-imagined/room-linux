@@ -382,10 +382,15 @@ class Room(QObject):
              "nightStart": (23, 0, 23), "nightEnd": (7, 0, 23),
              "homeIdleSec": (300, 60, 1800), "homePlayingSec": (300, 60, 1800), "musicSec": (300, 60, 1800),
              "menuStandbySec": (180, 60, 1800),
-             "roomMic": (True,), "wakeAbove": (10, 3, 25), "airplayToBluetooth": (True,), "speakerHeadroomDb": (4, 0, 12)}
+             "roomMic": (True,), "wakeAbove": (10, 3, 25), "airplayToBluetooth": (True,), "speakerHeadroomDb": (4, 0, 12),
+             "assistantVolume": (85, 10, 100)}      # the speaker while Room talks, % (the assistant reads it)
 
     def _panel_value(self, k):
         d = self.PANEL[k]
+        if k == "assistantVolume" and k not in self.cfg:      # (the night fix in config.json, 15 Nov, until set here)
+            f = (self.cfg.get("assistant") or {}).get("voiceFloor")
+            if isinstance(f, (int, float)):
+                return max(d[1], min(d[2], int(round(f * 20)) * 5))
         v = self.cfg.get(k, d[0])
         if isinstance(d[0], bool):
             return bool(v) if k == "clock24" else v is not False

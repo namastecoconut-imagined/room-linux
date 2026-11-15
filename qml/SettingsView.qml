@@ -497,6 +497,10 @@ Item {
                    Step { value: sv.pget("wakeAbove", 10) + " dB"
                           onLess: sv.pset("wakeAbove", Math.max(3, sv.pget("wakeAbove", 10) - 1))
                           onMore: sv.pset("wakeAbove", Math.min(25, sv.pget("wakeAbove", 10) + 1)) } }
+            Line { label: "Assistant's voice"; sub: "While Room talks · then back"
+                   Step { value: sv.pget("assistantVolume", 85) + " %"
+                          onLess: sv.pset("assistantVolume", Math.max(10, sv.pget("assistantVolume", 85) - 5))
+                          onMore: sv.pset("assistantVolume", Math.min(100, sv.pget("assistantVolume", 85) + 5)) } }
         }
         Column {
             visible: more.page === "sound"; x: 36 + 572 + 64; y: 92

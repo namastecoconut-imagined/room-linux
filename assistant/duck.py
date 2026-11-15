@@ -10,11 +10,11 @@ import subprocess
 import threading
 
 LEVEL = 0.15            # music at 15 % of where it was while you talk and Room answers
-FLOOR = 0.86            # while Room talks, the speaker is lifted to at least this (wpctl's scale; 0.86 is the chip's
-                        # 4 dB crackle cap — the assistant works it out from the cap, __main__.floor): Room's voice shares
-                        # the speaker with the music, so a speaker turned down for music (the slider, or the phone's
-                        # AirPlay volume) left the voice too quiet — 40 % was, and 70 % still was. Put back exactly after
-                        # the conversation; the music, ducked to 15 % of its own level meanwhile, stays quiet under it.
+FLOOR = 0.86            # while Room talks, the speaker is set to this (wpctl's scale) — Settings → More settings → Sound →
+                        # Assistant's voice (__main__.floor), up or down from where the music had it: Room's voice shares
+                        # the speaker with the music, so a speaker turned down for music left the voice too quiet, and
+                        # one turned up for it was too loud at night. Put back exactly after the conversation; the music,
+                        # ducked to 15 % of its own level meanwhile, stays quiet under it.
 
 
 class Duck:
@@ -24,7 +24,7 @@ class Duck:
         import queue
         self.saved: dict = {}
         self.floor = floor
-        self.sink_was = None        # the speaker's level before it was lifted to the floor
+        self.sink_was = None        # the speaker's level before it was set for the conversation
         self.q = queue.Queue()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -40,7 +40,7 @@ class Duck:
             try:
                 if want == "down" and self.sink_was is None:
                     v = self._sink()
-                    if v is not None and v < self.floor - 0.005:
+                    if v is not None and abs(v - self.floor) > 0.005:
                         self.sink_was = v
                         subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{self.floor:.2f}"], timeout=2,
                                        stderr=subprocess.DEVNULL)

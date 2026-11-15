@@ -69,15 +69,21 @@ class Assistant:
             log("no anthropicKey in config.json — it can't answer")
 
     def floor(self) -> float:
-        """How loud the speaker is while Room talks (wpctl's scale): as loud as Room ever lets the chip go — the crackle
-        cap, "speakerHeadroomDb" in Settings → More settings → Sound (4 dB unless changed). It was 70 %, about a third
-        of full loudness, so on a speaker turned down for music the voice was quiet."""
-        if self.floor_set is not None:
-            return float(self.floor_set)
+        """How loud the speaker is while Room talks (wpctl's scale, the panel's volume %): Settings → More settings →
+        Sound → Assistant's voice ("assistantVolume", 10–100 %), read at every conversation. Before it's set there:
+        config.json's "voiceFloor" if any, else as loud as Room lets the chip go — the crackle cap, "speakerHeadroomDb"
+        (4 dB unless changed). The chip's own cap (room/output.py) keeps even 100 % from crackling."""
         try:
             s = json.load(open(os.path.expanduser("~/.config/room/settings.json")))
         except (OSError, ValueError):
             s = {}
+        try:
+            if s.get("assistantVolume") is not None:
+                return round(max(0.10, min(1.0, float(s["assistantVolume"]) / 100)), 2)
+        except (TypeError, ValueError):
+            pass
+        if self.floor_set is not None:
+            return float(self.floor_set)
         db = abs(float(s.get("speakerHeadroomDb", self.cfg.get("speakerHeadroomDb", 4)) or 0))
         return round((10 ** (-db / 20)) ** (1 / 3), 2)
 

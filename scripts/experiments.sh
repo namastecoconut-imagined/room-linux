@@ -26,6 +26,7 @@ FILES=(
   "$HOME/rvc-test"                # 14 Nov · scripts/rvc-speed.sh, the voice-conversion speed test (Python, PyTorch, RVC's code)
   "$HOME/piper-test"              # 14 Nov · scripts/piper-speed.sh, the light-voice speed test (Python, Piper, two voices)
   "$HOME/gemini-test"             # 14 Nov · scripts/gemini-test.sh, the Gemini Live ear test (Python, google-genai, answers)
+  "$HOME/voice-recordings"        # 14 Nov · assistant/voice/record.py, recording lines for Room's own voice (not used: Fish made them)
 )
 # services an experiment added to your user (none)
 SERVICES=()
@@ -46,6 +47,8 @@ ROOM_PIP=("numpy")                # 12 Nov · gestures (reverted)
 # lives in ~/.config/room/fonts — keep that).
 # The camera, IR and gesture scripts, and assistant-profile.sh, left the repo when those experiments ended (12 Nov). Gone by themselves at the
 # next restart: the IR camera's pipeline link and the i2c-dev kernel module.
+# Today's voice experiments (14 Nov: the Sarvam and rough-voice ear tests, RVC, the Piper speed test, Gemini, the
+# recording tool) left the repo on 15 Nov, once Room's own Piper voice was in; their folders are listed above.
 
 # ---------------------------------------------------------------- packages
 echo "== Packages"

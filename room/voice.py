@@ -148,7 +148,10 @@ class VoiceLink(QObject):
         if r.airplay.showing:
             snap["music"]["note"] = ("playing from their phone over AirPlay to this panel: music and volume actions control "
                                      "it; to play something new, use play (Spotify)")
-        snap["my_playlists"] = [{"name": p["name"], "uri": p["uri"]} for p in (sp.get("playlists") or [])][:40]
+        # Liked Songs isn't a playlist to Spotify, so it was never on this list — "play my liked songs" searched
+        # Spotify for "liked songs" and played a stranger's playlist (15 Nov)
+        snap["my_playlists"] = [{"name": "Liked Songs", "uri": "liked"}] + \
+            [{"name": p["name"], "uri": p["uri"]} for p in (sp.get("playlists") or [])][:40]
         snap["calendar"] = [f"{e['title']} — {e['when']}{(' ' + e['extra']) if e.get('extra') else ''}" for e in r.events[:5]]
         return snap
 
@@ -202,7 +205,9 @@ class VoiceLink(QObject):
                         r.spotify.transfer(d["id"]); parts.append(f"on {d['name'].lower()}")
                 elif k == "play":
                     uri = a.get("uri") or ""
-                    if uri.startswith("spotify:"):
+                    if uri == "liked":
+                        r.spotify.play_liked(); parts.append("playing liked songs")
+                    elif uri.startswith("spotify:"):
                         r.spotify.play_uri(uri, speaker=a.get("speaker"))
                         name = next((p["name"] for p in r.spotify.playlists if p.get("uri") == uri), a.get("query") or "that")
                         parts.append(f"playing {name.lower()}")

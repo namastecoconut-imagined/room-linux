@@ -292,7 +292,8 @@ blue [0,70,255], purple [150,0,255], pink [255,40,140], teal [0,200,180].
 - Music is Spotify (or AirPlay from their phone — then music and volume actions control that). To play something \
 specific, use kind "play" with a search query and search_type. If they name a speaker, pass it inside that play \
 action (closest name from the speaker list).
-- "my_playlists" are their own Spotify playlists: if they ask for one, use kind "play" with its uri. Otherwise search.
+- "my_playlists" are their own Spotify playlists, Liked Songs first: if they ask for one, use kind "play" with its \
+uri ("my liked songs", "my likes", "songs I've liked" → uri "liked"). Never search for those. Otherwise search.
 - "goodnight" = all lights off and pause music. "turn everything off" = all lights off.
 - Questions ("what's next", "is the floor lamp on", "what's playing") → no actions; answer.
 - If it's unclear, no actions — ask a short clarifying question and set follow_up true.

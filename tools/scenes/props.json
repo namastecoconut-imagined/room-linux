@@ -1,9 +1,187 @@
 {
  "_": "Pieces drawn again over the cats, so a cat can be in or behind them. match: how each piece's strokes start (their path data, from scenes.js); box: the area (stage units) the piece is cut from.",
  "room": [
-  {"name": "armchair", "match": ["M920,850 V742", "M1185,850 V742", "M975,766 H1185 M975,808"], "box": [900, 700, 1260, 860]}
+  {
+   "name": "armchair",
+   "match": [
+    "M920,850 V742",
+    "M1185,850 V742",
+    "M975,766 H1185 M975,808"
+   ],
+   "box": [
+    900,
+    700,
+    1260,
+    860
+   ]
+  }
  ],
  "wall": [
-  {"name": "box", "match": ["M1196,450 v-66"], "box": [1170, 350, 1330, 462]}
- ]
+  {
+   "name": "box",
+   "match": [
+    "M1196,450 v-66"
+   ],
+   "box": [
+    1170,
+    350,
+    1330,
+    462
+   ]
+  }
+ ],
+ "_toys": "Things the cats play with (Cats.qml toyPlan). match: which moving piece it is (its pivot, its path's start, or its kind). spot · x: where a cat goes for it; pose: drape (lies over the edge and swats down), swat (sits and swats), watch (lies facing it, ears up), flyer (sits up and swipes when it comes close), inside (sits in it); kick: how far (degrees) a swat swings it; brush: a stretch of the spot where walking past stirs it.",
+ "toys": {
+  "wall": [
+   {
+    "name": "yarn",
+    "match": {
+     "origin": [
+      1010,
+      462
+     ]
+    },
+    "spot": "shelfMid",
+    "x": 1016,
+    "pose": "drape",
+    "kick": 16
+   },
+   {
+    "name": "treetoy",
+    "match": {
+     "origin": [
+      1068,
+      782
+     ]
+    },
+    "spot": "treePerch",
+    "x": 1080,
+    "pose": "drape",
+    "kick": 18
+   },
+   {
+    "name": "moth",
+    "match": {
+     "path": "M1150,120"
+    },
+    "spot": "shelfTop",
+    "pose": "flyer"
+   },
+   {
+    "name": "box",
+    "spot": "box",
+    "pose": "inside"
+   }
+  ],
+  "room": [
+   {
+    "name": "fish",
+    "match": {
+     "kind": "swim"
+    },
+    "spot": "armL",
+    "x": 950,
+    "pose": "watch",
+    "face": 850
+   },
+   {
+    "name": "curtainL",
+    "match": {
+     "origin": [
+      134,
+      62
+     ]
+    },
+    "spot": "sill",
+    "brush": [
+     120,
+     180
+    ],
+    "kick": 2.4
+   },
+   {
+    "name": "curtainR",
+    "match": {
+     "origin": [
+      667,
+      62
+     ]
+    },
+    "spot": "sill",
+    "brush": [
+     610,
+     670
+    ],
+    "kick": 2.4
+   }
+  ],
+  "garden": [
+   {
+    "name": "lantern",
+    "match": {
+     "origin": [
+      950,
+      187
+     ]
+    },
+    "spot": "curve",
+    "x": 958,
+    "pose": "drape",
+    "kick": 14
+   },
+   {
+    "name": "butterfly1",
+    "match": {
+     "path": "M680,580"
+    },
+    "spot": "wall",
+    "pose": "flyer"
+   },
+   {
+    "name": "butterfly2",
+    "match": {
+     "path": "M900,560"
+    },
+    "spot": "wall",
+    "pose": "flyer"
+   }
+  ],
+  "roofs": [
+   {
+    "name": "washing",
+    "match": {
+     "origin": [
+      1073,
+      452
+     ]
+    },
+    "spot": "washroof",
+    "x": 1073,
+    "pose": "swat",
+    "kick": 7
+   }
+  ]
+ },
+ "_spots": "Platforms added for the toys (beside scenes.json's): inside — in it, the cat cut off below cut (Cat.qml cutY); use: toy — only for its toy (cats don't otherwise go there).",
+ "spots": {
+  "wall": [
+   {
+    "id": "box",
+    "x0": 1222,
+    "x1": 1270,
+    "y": 450,
+    "inside": true,
+    "cut": 388
+   }
+  ],
+  "roofs": [
+   {
+    "id": "washroof",
+    "x0": 992,
+    "x1": 1154,
+    "y": 520,
+    "use": "toy"
+   }
+  ]
+ }
 }

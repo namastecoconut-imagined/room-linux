@@ -250,7 +250,8 @@ Item {
     readonly property real scnK: scnTime.size / 250                                  // the clock's scale (a 250 px serif)
     readonly property real scnTop: scnTime.base !== undefined ? scnTime.base - (clockT.shift + clockT.baselineOffset) * scnK : scnTime.y
     readonly property real scnFacts: scnTop + scnTime.size + 14 + 56 + 20             // the statuses' top
-    // (checks) ROOM_SCREEN=sb-<scene>-<sky>[-<% drawn>]: that scene, drawn that far, and held there; sbdemo: changing
+    // (checks) ROOM_SCREEN=sb-<scene>-<sky>[-<% drawn>][-toys]: that scene, drawn that far, and held there (-toys: the
+    // cats playing with its things nearly every time they think); sbdemo: changing
     // every 12 s; sbtour (scripts/scene-tour.sh): the four in order, 20 s each once drawn
     readonly property var scnFixed: startScreen.indexOf("sb-") === 0 ? startScreen.split("-") : null
     function scnSky() {
@@ -291,7 +292,7 @@ Item {
         scnSlot = 1 - scnSlot
         if (scnSlot === 0) scnKeyB = ""; else scnKeyA = ""
         scnId = scnNext
-        console.log("[room] standby scene: " + scnKey)
+        if (!windowed) console.log("[room] standby scene: " + scnKey)        // (the journal; scene-tour.sh follows it)
         var man = SceneData.baked[scnKey], sky = scnKey.split("-")[1]
         var k = scnL.drawSeconds[sky] / man.total                                       // seconds per build unit
         scnEnd = Math.max(man.lineEnd, man.fillLast + 0.9 / k)
@@ -323,7 +324,7 @@ Item {
             // the time and statuses on their way (1 s); the new pictures in (or, at worst, 4 s on without them)
             if (scnFixed || (e >= c.timeTravels && (scnArt.ready || e > 4))) scnGo("draw")
         } else if (scnStage === "draw") {
-            var g = scnFixed ? (scnFixed.length > 3 ? Number(scnFixed[3]) / 100 : 1) : Math.min(1, e / scnDraw)
+            var g = scnFixed ? (scnFixed.length > 3 && !isNaN(Number(scnFixed[3])) ? Number(scnFixed[3]) / 100 : 1) : Math.min(1, e / scnDraw)
             scnNow = g * scnEnd
             if (g >= 1 || scnFixed) {
                 scnGo("")
@@ -760,7 +761,7 @@ Item {
             if (p.id === "digits") { if (scnTime.size >= 250) catDigits(clockT, "digit", false, out); return }
             if (p.curve) { var cv = scnCurve(p.curve); out.push({ id: "curve", x0: p.x0, x1: p.x1, y: cv(p.x0), yAt: cv }); return }
             var x0 = typeof p.x0 === "string" ? clock.x + clock.width * clock.scale + 40 : p.x0
-            out.push({ id: p.id, x0: x0, x1: p.x1, y: p.y, low: p.low === true })
+            out.push({ id: p.id, x0: x0, x1: p.x1, y: p.y, low: p.low === true, inside: p.inside === true, cut: p.cut, use: p.use })
         })
     }
     function scnCurve(d) {                   // "M x,y C x1,y1 x2,y2 x3,y3" → y at x

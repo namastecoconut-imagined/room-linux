@@ -14,6 +14,7 @@ Item {
     function unit(n) { return n && Data.sheets[n] ? Data.sheets[n][2] : 1 }     // a sheet's px a unit (each its own)
     readonly property real s: k / unit(cc.s)         // stage px a pixel of the sheet showing
     property real ax: 0
+    property real cutY: -1                           // inside something (a box): nothing of it below this (stage y)
     property real ay: 0
     property bool mirror: false                      // the drawings face right; mirrored, the cat faces left
     readonly property int dir: mirror ? -1 : 1
@@ -73,7 +74,8 @@ Item {
             readonly property string sheet: cat.slots[index]
             readonly property bool ready: img.status === Image.Ready
             visible: cat.showing === index && ready
-            x: cat.fr[4] * cat.s; y: cat.fr[5] * cat.s; width: cat.fr[2] * cat.s; height: cat.fr[3] * cat.s
+            x: cat.fr[4] * cat.s; y: cat.fr[5] * cat.s; width: cat.fr[2] * cat.s
+            height: cat.cutY < 0 ? cat.fr[3] * cat.s : Math.max(0, Math.min(cat.fr[3] * cat.s, cat.cutY - cat.y - cat.fr[5] * cat.s))
             clip: true
             Image {
                 id: img

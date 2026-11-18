@@ -343,6 +343,10 @@ def write_data():
     """qml/scenesdata.js: the layout and timings (scenes.json) and every baked scene's pieces, for Scene.qml and
     SceneArt.qml (QML can't read a file by itself)."""
     layout = json.load(open(os.path.join(HERE, "scenes.json")))
+    props = json.load(open(os.path.join(HERE, "props.json")))
+    for sc in layout["scenes"]:                         # the toys, and the platforms added for them
+        sc["toys"] = props.get("toys", {}).get(sc["id"], [])
+        sc["spots"] = sc["spots"] + props.get("spots", {}).get(sc["id"], [])
     baked = {}
     for d in sorted(os.listdir(OUT)):
         f = os.path.join(OUT, d, "scene.json")
@@ -350,6 +354,14 @@ def write_data():
             m = json.load(open(f))
             for lay in [m["base"]] + m["sprites"] + m["front"]:
                 lay.pop("unstamped", None)
+            for t in props.get("toys", {}).get(m["scene"], []):        # the toys' pieces, by name
+                mt = t.get("match")
+                for sp in m["sprites"] if mt else []:
+                    o = sp.get("origin")
+                    if ("origin" in mt and o and abs(o[0] - mt["origin"][0]) < 1 and abs(o[1] - mt["origin"][1]) < 1) \
+                            or ("path" in mt and (sp.get("path") or "").startswith(mt["path"])) \
+                            or ("kind" in mt and sp.get("kind") == mt["kind"]):
+                        sp["name"] = t["name"]
             baked[d] = m
     with open(os.path.join(HERE, "..", "..", "qml", "scenesdata.js"), "w") as f:
         f.write("// The standby scenes (made by tools/scenes/bake.py from tools/scenes/scenes.json and the baked pictures in\n"

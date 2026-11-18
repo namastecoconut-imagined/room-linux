@@ -20,7 +20,7 @@ Item {
     // all its pictures are in (the draw waits for them: a piece arriving late would skip its part of the draw)
     readonly property bool ready: man !== null && loaded >= (front ? man.front.length : 1 + man.sprites.length)
     property int loaded: 0
-    onKeyChanged: loaded = 0
+    onKeyChanged: { loaded = 0; kicks = ({}) }
     visible: man !== null && now > 0
 
     // ---------------------------------------------------------------- the movements (index.html's keyframes)
@@ -29,6 +29,25 @@ Item {
         return m.kind === "cloud" ? x : 0.5 - 0.5 * Math.cos(Math.PI * x)
     }
     function cycle(m) { var u = (sa.t - (m.delay || 0)) / m.dur; return u - Math.floor(u) }
+
+    // ---------------------------------------------------------------- the cats playing with things (Cats.qml)
+    // a swat: the piece swings out `amp` degrees (a curtain: leans) after `delay` s, and settles back over ~3 s
+    property var kicks: ({})
+    function kick(name, amp, delay) { var k = Object.assign({}, kicks); k[name] = { at: t + (delay || 0), amp: amp }; kicks = k }
+    function kicked(m) {
+        var k = m.name ? kicks[m.name] : null
+        if (!k || t < k.at) return 0
+        var e = t - k.at
+        return e > 6 ? 0 : k.amp * Math.exp(-e / 1.4) * Math.sin(2 * Math.PI * e / 1.3)
+    }
+    // where a moth or butterfly is now (stage units), and whether it's out
+    function at(name) {
+        for (var i = 0; i < sprites.count; i++) {
+            var it = sprites.itemAt(i)
+            if (it && it.m.name === name) return { x: it.fx, y: it.fy, on: it.visible && it.opacity > 0.3 }
+        }
+        return null
+    }
 
     component Layer: ShaderEffect {
         id: ly
@@ -52,10 +71,14 @@ Item {
         Layer { lay: modelData }
     }
     Repeater {
+        id: sprites
         model: sa.man && !sa.front ? sa.man.sprites : []
         Layer {
             id: sp
             readonly property var m: modelData
+            readonly property real fx: interp.x
+            readonly property real fy: interp.y
+            readonly property real kk: sa.kicked(m)
             lay: modelData
             readonly property real ox: (m.origin ? m.origin[0] : m.x + m.w / 2) - m.x
             readonly property real oy: (m.origin ? m.origin[1] : m.y + m.h / 2) - m.y
@@ -67,10 +90,10 @@ Item {
             transform: [
                 Scale { origin.x: 60; origin.y: 60; xScale: sp.m.kind === "path" && sp.m.flap ? path.flapNow : 1 },
                 Rotation { origin.x: sp.ox; origin.y: sp.oy
-                           angle: sp.m.kind === "sway" ? -5 + 10 * sp.s : sp.m.kind === "sway2" ? -2.2 + 4.4 * sp.s
+                           angle: sp.m.kind === "sway" ? -5 + 10 * sp.s + sp.kk : sp.m.kind === "sway2" ? -2.2 + 4.4 * sp.s + sp.kk
                                 : sp.m.kind === "spin" ? 360 * sa.cycle(sp.m) : sp.m.kind === "path" && sp.m.rotate ? path.angle : 0 },
                 Matrix4x4 {                          // the curtains: a sideways lean from the rail
-                    readonly property real k: sp.m.kind === "curt" ? Math.tan((-1.6 + 3.2 * sp.s) * Math.PI / 180) : 0
+                    readonly property real k: sp.m.kind === "curt" ? Math.tan((-1.6 + 3.2 * sp.s + sp.kk) * Math.PI / 180) : 0
                     matrix: Qt.matrix4x4(1, k, 0, -k * sp.oy, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
                 },
                 Translate { x: sp.m.kind === "swim" ? -9 + 18 * sp.s : sp.m.kind === "cloud" ? -70 + 180 * sp.s

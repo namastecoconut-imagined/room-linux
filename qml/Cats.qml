@@ -39,6 +39,7 @@ Item {
     property int beat: 0
     function step() {
         cats.both.forEach(function (c) {
+            if (cats.where === "standby") cats.scenery(c); else c.cutY = -1
             if (c.item && c.item.follow && cats.scene) c.ax = cats.scene.catKnob() - 64 * c.k
             if (c.spotId === "curve" && !c.flying && !(c.item && c.item.leap)) { var s = cats.spot("curve"); if (s) c.ay = s.yAt(c.ax) }
         })
@@ -76,6 +77,7 @@ Item {
     function yOn(s, x) { return s.floor ? floorY : s.yAt ? s.yAt(x) : s.y }
     // the pose to rest in on s: something just above a "low" edge, so lying down there; no draping over the bottom edge
     function restFor(s, p) {
+        if (s && s.inside) return "sit"                   // in the box: sitting up, its head over the rim
         if (s && s.low && (!p || p === "sit" || p === "stand")) return "loaf"
         if (s && s.floor && p === "drape") return "loaf"
         return p
@@ -238,9 +240,20 @@ Item {
         return ok[ok.length - 1]
     }
     function think(c) {
-        var s = spot(c.spotId), p = c.pose, calm = c === bebo, edge = s && !s.floor
+        var s = spot(c.spotId), p = c.pose, calm = c === bebo, edge = s && !s.floor && !s.inside
         var f = spot("floor")
         if (where === "standby" && scene && scene.scnAway) { c.thinkAt = now + 1; return }      // a standby scene changing: away
+        if (!alarm && !night && !music && where === "standby" && Math.random() < (startScreen.indexOf("-toys") > 0 ? 0.9 : calm ? 0.07 : 0.1)) {        // a standby scene: playing with its things
+            var tp = toyPlan(c)
+            if (tp) { c.go(tp); c.thinkAt = later(4, 9); return }
+        }
+        if (s && s.inside) {                                // in the box: in no hurry — a look about, a blink, then out
+            var r = Math.random(), out = r < 0.3 ? elsewhere(c, s, null) : null
+            if (out) c.go(out)
+            else if (p !== "sit") c.go(route(p, "sit"))
+            else if (r < 0.6) c.go([pick(["sit.look", "sit.blink", "sit.ear"])])
+            c.thinkAt = later(4, 10); return
+        }
         if (alarm) { c.go(alarmed(c)); c.thinkAt = now; return }
         if (where === "voice") { attend(c); return }
         if (night) {                                        // asleep, wherever they are (often curled up together)
@@ -313,6 +326,60 @@ Item {
         if (ch && typeof ch[1] === "function") ch = [ch[0], ch[1]() || []]
         if (ch && ch[1] && ch[1].length) c.go(ch[1])
         c.thinkAt = calm ? later(3, 8) : later(2, 5)
+    }
+
+    // ---------------------------------------------------------------- a standby scene's things (props.json "toys")
+    // Batting the yarn or the tree toy or the lantern (lying over the edge above it, swatting down: it swings),
+    // swatting the washing, watching the fish (lying on the armchair's arm facing the bowl, ears up), sitting in the
+    // box, swiping at the moth or a butterfly when it comes close, and stirring the curtains walking past them.
+    function toys() { return where === "standby" && scene && scene.scnBlock && scene.scnInfo.toys ? scene.scnInfo.toys : [] }
+    function kickLater(c, t, d) { return { call: function () { if (scene && scene.scnArt) scene.scnArt.kick(t.name, (t.kick || 10) * (Math.random() < 0.5 ? 1 : -1), d) } } }
+    function toyPlan(c) {
+        var art = scene.scnArt, ts = toys().filter(function (t) { return t.pose })
+        for (var n = ts.length - 1; n > 0; n--) { var j = Math.floor(Math.random() * (n + 1)), q = ts[n]; ts[n] = ts[j]; ts[j] = q }
+        for (var i = 0; i < ts.length; i++) {
+            var t = ts[i], s = spot(t.spot)
+            if (!s || (c.spotId !== s.id && !roomFor(s, c))) continue
+            if (t.pose === "flyer") {                       // only when it's close, and the cat's already there
+                var f = art ? art.at(t.name) : null
+                if (c.spotId !== s.id || !f || !f.on || Math.abs(f.x - c.ax) > 240 || f.y > c.ay || ["sit", "stand", "loaf"].indexOf(c.pose) < 0) continue
+                return route(c.pose, "stand").concat([{ face: f.x }], route("stand", "sit"), ["sit.alert.in", { c: "sit.alert", n: 1 }, "sit.alert.out", "sit.swat"],
+                                                      Math.random() < 0.5 ? ["sit.swat"] : [])
+            }
+            if (t.pose === "inside") {
+                if (c.spotId === s.id) continue
+                var bx = placeOn(s, c)
+                return route(c.pose, "stand").concat(turnTo(c, bx), ["crouch", "takeoff", { c: "air", leap: { x: bx, y: yOn(s, bx) } },
+                                                      { call: function () { c.spotId = s.id } }, "land"], route("stand", "sit"))
+            }
+            // lying over the edge, its front paws hang ~35 px ahead of it (at 170): so it lies that far short of the toy,
+            // facing it (it faces the way it came)
+            var d = t.x === c.ax ? c.dir : t.x > c.ax ? 1 : -1
+            var x = Math.max(s.x0 + 28, Math.min(s.x1 - 28, t.x - (t.pose === "drape" ? d * 35 * c.size / 170 : 0)))
+            if (other(c).spotId === s.id && Math.abs(other(c).ax - x) < 140) continue
+            var get = goTo(c, s, x)
+            if (t.pose === "drape")
+                return get.concat(route("stand", "loaf"), ["loaf>drape", kickLater(c, t, 0.5), "drape.swat"],
+                                  Math.random() < 0.6 ? [kickLater(c, t, 0.5), "drape.swat"] : [])
+            if (t.pose === "swat")
+                return get.concat(route("stand", "sit"), [kickLater(c, t, 0.45), "sit.swat"], Math.random() < 0.5 ? [kickLater(c, t, 0.45), "sit.swat"] : [])
+            if (t.pose === "watch")
+                return get.concat([{ face: t.face }], route("stand", "loaf"), ["loaf.alert.in", { c: "loaf.alert", n: Math.round(rnd(3, 6)) }, "loaf.alert.out"])
+        }
+        return null
+    }
+    // every step: a cat in something is cut off at its rim; one walking past a curtain stirs it
+    property var brushed: ({})
+    function scenery(c) {
+        var s = c.spotId ? spot(c.spotId) : null
+        c.cutY = s && s.inside && !c.flying && !(c.item && c.item.leap) ? s.cut : -1
+        if (!s || !scene || !scene.scnArt) return
+        toys().forEach(function (t) {
+            if (!t.brush || t.spot !== s.id || c.ax < t.brush[0] || c.ax > t.brush[1] || c.pose !== "stand") return
+            if (now - (brushed[t.name] || 0) < 4) return
+            brushed[t.name] = now
+            scene.scnArt.kick(t.name, (t.kick || 2) * c.dir, 0)
+        })
     }
 
     // ---------------------------------------------------------------- arriving on a screen

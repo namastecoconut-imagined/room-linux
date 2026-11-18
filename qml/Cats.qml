@@ -240,6 +240,7 @@ Item {
     function think(c) {
         var s = spot(c.spotId), p = c.pose, calm = c === bebo, edge = s && !s.floor
         var f = spot("floor")
+        if (where === "standby" && scene && scene.scnAway) { c.thinkAt = now + 1; return }      // a standby scene changing: away
         if (alarm) { c.go(alarmed(c)); c.thinkAt = now; return }
         if (where === "voice") { attend(c); return }
         if (night) {                                        // asleep, wherever they are (often curled up together)
@@ -317,16 +318,53 @@ Item {
     // ---------------------------------------------------------------- arriving on a screen
     onWhereChanged: { bebo.shown = false; evan.shown = false; hogIn.stop(); hogger = null; bebo.engaged = false; evan.engaged = false; arrive.interval = where === "voice" ? 500 : 1100; arrive.restart() }
     Timer { id: arrive; interval: 1100; onTriggered: cats.place() }       // (after the screen has settled; the assistant: at once)
+    // a standby scene: they go when it changes (hopping off, out of sight — or at once, the screen having been off),
+    // and come back 0.6 s after the next one's drawn
+    Connections {
+        target: cats.scene
+        function onScnAwayChanged() {
+            if (!cats.scene.scnAway || cats.where !== "standby") return
+            hogIn.stop(); cats.hogger = null
+            cats.both.forEach(function (c) {
+                c.engaged = false; c.thinkAt = cats.now + 3600
+                if (cats.scene.scnSnap || !c.shown || c.pose === "none" || c.spotId === "below") { c.spotId = "below"; c.settle("none") }
+                else c.go(cats.hopDown(c), true)
+            })
+        }
+        function onScnReadyChanged() { if (cats.scene.scnReady && cats.where === "standby") { arrive.interval = 600; arrive.restart() } }
+    }
     Component.onCompleted: arrive.restart()
     function put(c, s, p) {
         c.engaged = false
         c.spotId = s.id; c.ax = placeOn(s, c); c.ay = yOn(s, c.ax)
         c.settle(restFor(s, p), Math.random() < 0.5)
     }
+    // a standby scene's place for a cat: the platform at (x, y) (scenes.json gives where each sits, strolls, sleeps)
+    function spotAt(x, y) {
+        for (var i = 0; i < spots.length; i++) {
+            var t = spot(spots[i].id)
+            if (!t.use && x >= t.x0 - 30 && x <= t.x1 + 30 && Math.abs(yOn(t, x) - y) < 24) return t
+        }
+        return null
+    }
     function place() {
         readSpots(); now = Date.now() / 1000
         var f = spot("floor")
-        if (where === "standby") {
+        if (where === "standby" && scene.scnBlock) {         // a standby scene: once it's drawn, where it puts them
+            if (!scene.scnReady) return
+            bebo.size = 170; evan.size = 170
+            ;(night ? scene.scnInfo.sleep : scene.scnInfo.cats).forEach(function (p) {
+                var c = p.who === "bebo" ? bebo : evan
+                var x = p.x !== undefined ? p.x : rnd(p.x0, p.x1), s = spotAt(x, p.y)
+                if (!s) return
+                var pose = night ? "curl" : p.mode === "walk" ? "stand" : "sit"
+                c.engaged = false
+                if (scene.scnBack) {                          // back after a change: up from below, onto it
+                    c.spotId = "below"; c.settle("none")
+                    c.go(popUp(c, s, x, night ? "sit" : pose).concat(night ? route("sit", "curl") : []))
+                } else { c.spotId = s.id; c.ax = x; c.ay = yOn(s, x); c.settle(restFor(s, pose), p.mirror === true) }
+            })
+        } else if (where === "standby") {
             bebo.size = 170; evan.size = 170
             var d = spots.filter(function (s) { return s.id.indexOf("digit") === 0 }).sort(function (a, b) { return wide(b) - wide(a) })
             if (d.length < 2 || !f) return
@@ -367,7 +405,7 @@ Item {
                 c.go(runIn(c, i ? rnd(700, 1000) : rnd(300, 600), i === 1, null).concat(i ? ["stand.startle"] : []))
             })
         } else return
-        if (night && where !== "voice" && where !== "alert" && Math.random() < 0.5) nest()
+        if (night && where !== "voice" && where !== "alert" && !(where === "standby" && scene.scnBlock) && Math.random() < 0.5) nest()
         bebo.shown = true; evan.shown = true
         playAt = later(20, 60); hogAt = demoFast ? now + rnd(30, 60) : later(20 * 60, 30 * 60)
         hear()
@@ -550,7 +588,8 @@ Item {
     property real hogAt: Date.now() / 1000 + 1200
     property var hogger: null
     function hog() {
-        if (night || (where !== "standby" && where !== "home") || !spot("floor")) { hogAt = now + 60; return }
+        // (not on a standby scene: there the bottom edge is the scene's — its ground, grass, buildings)
+        if (night || (where !== "standby" && where !== "home") || !spot("floor") || (scene && scene.scnBlock)) { hogAt = now + 60; return }
         var c = Math.random() < 0.5 ? bebo : evan
         if (!c.free()) c = other(c)
         if (!c.free() || bebo.engaged || evan.engaged) { hogAt = now + 5; return }      // (busy: in a moment)

@@ -430,6 +430,9 @@ Item {
             Line { label: "Sleep at night"; sub: "Curled up from " + sv.hourText(sv.pget("nightStart", room.timing.nightStart)) + " to " + sv.hourText(sv.pget("nightEnd", room.timing.nightEnd))
                    opacity: sv.pget("cats", true) ? 1 : 0.4
                    Toggle { on: sv.pget("catsSleep", true); onTapped: sv.pset("catsSleep", !on) } }
+            Line { label: "Standby scenes"; sub: "Their world drawn on standby · a new one every 5 min"
+                   opacity: sv.pget("cats", true) ? 1 : 0.4
+                   Toggle { on: sv.pget("standbyScenes", true); onTapped: sv.pset("standbyScenes", !on) } }
         }
         // the clock, and when night is
         Column {

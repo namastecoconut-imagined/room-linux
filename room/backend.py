@@ -226,7 +226,8 @@ class Room(QObject):
     def music(self):
         if self.demo:
             m = dict(demo.MUSIC); m["at"] = time.time() - 4; m["canSeek"] = True
-            m["playing"] = os.environ.get("ROOM_SCREEN") not in ("standby", "catsstandby", "catsdaystandby"); m["exists"] = m["playing"]
+            scr = os.environ.get("ROOM_SCREEN", "")
+            m["playing"] = scr not in ("standby", "catsstandby", "catsdaystandby") and not scr.startswith("sb"); m["exists"] = m["playing"]
             if os.environ.get("ROOM_DEMO_ART"):          # a cover to check layouts with
                 if not getattr(self, "_demo_art", None):
                     from PySide6.QtGui import QImage
@@ -378,7 +379,7 @@ class Room(QObject):
     # ---------------------------------------------------------------- Settings → More settings
     # What can be set on the panel, its default and its range. Set there, it's kept in settings.json (config.py) and
     # takes effect at once; config.json keeps the rest (keys, logins, the rooms) and is never written.
-    PANEL = {"cats": (True,), "catsSleep": (True,), "clock24": (False,),
+    PANEL = {"cats": (True,), "catsSleep": (True,), "standbyScenes": (True,), "clock24": (False,),
              "nightStart": (23, 0, 23), "nightEnd": (7, 0, 23),
              "homeIdleSec": (300, 60, 1800), "homePlayingSec": (300, 60, 1800), "musicSec": (300, 60, 1800),
              "menuStandbySec": (180, 60, 1800),
@@ -472,6 +473,12 @@ class Room(QObject):
     @Slot(result=float)
     def lastInput(self):
         return self.input_at
+
+    @Slot(result=float)
+    def soundAgo(self):
+        """Seconds since someone was last heard in the room (the standby scenes change less often at night when it's
+        been quiet; with the room's mic off, it's always been quiet)."""
+        return time.monotonic() - self.sleep.sound_at if self.cfg.get("roomMic") is not False else 1e9
 
     @Slot(bool, bool)
     def setScreenState(self, standby, dim):

@@ -35,7 +35,7 @@ Window {
     // the screen you're on while awake, and whether standby is showing over it
     property string screen: startScreen === "catshome" || startScreen === "catsdayhome" ? "home" : startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" || startScreen.indexOf("setw") === 0 || startScreen.indexOf("setj") === 0 || startScreen.indexOf("setmore") === 0 ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : "home"
     property string roomName: room.rooms.length ? room.rooms[0].name : ""
-    property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby" || startScreen === "catsstandby" || startScreen === "catsdaystandby"
+    property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby" || startScreen === "catsstandby" || startScreen === "catsdaystandby" || startScreen.indexOf("sb") === 0
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing
     readonly property Item sceneItem: scene             // (for the cats, inside their loader)
@@ -147,7 +147,7 @@ Window {
             z: win.alerting || win.voiceUp || kbd.up ? 5 : 0      // racing about over an alarm, ears up over the assistant, on the keyboard
             sourceComponent: Cats {
                 scene: win.sceneItem
-                night: win.lateNight && room.panel.catsSleep !== false && startScreen.indexOf("catsday") < 0
+                night: (startScreen.indexOf("sb-") === 0 ? startScreen.indexOf("-night") > 0 : win.lateNight) && room.panel.catsSleep !== false && startScreen.indexOf("catsday") < 0
                 music: win.playing
                 listening: win.voiceState === "listening"
                 voice: win.voiceUp ? voiceO : null
@@ -158,6 +158,8 @@ Window {
                 demoFast: startScreen.indexOf("cats") >= 0
             }
         }
+        // a standby scene's pieces that go in front of the cats (the armchair, the box: SceneArt, props.json)
+        SceneArt { front: true; key: scene.scnKey; now: scene.scnNow; fadeU: scene.scnFade; visible: room.cats && key !== "" && now > 0 }
         // an alarm, timer or reminder going off — over everything, standby included
         Alert {}
         VoiceOverlay {

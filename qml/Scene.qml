@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import "scenesdata.js" as SceneData
 
 // Room in the redesign (room-motion.html, HANDOFF.md): Home, the player, standby and the Room screen are one scene,
 // so things travel between them rather than cutting — the song card grows into the player, the clock shrinks into
@@ -123,7 +124,7 @@ Item {
     Timer { id: swipeBack; interval: 3000; onTriggered: { sc.swipeWait = false; sc.slideIn(sc.swipeDir) } }
     onSongKeyChanged: if (sTitle === "" && sArtist === "") commitSong(); else if (songKey !== "") swap.restart()
     Connections { target: sc; function onMusicChanged() { if (!swap.running && sc.songKey !== "" && (sc.music.art || "") !== sc.sArt) sc.sArt = sc.music.art || "" } }
-    Component.onCompleted: commitSong()
+    Component.onCompleted: { commitSong(); if (scn) scnStart() }
     component In: NumberAnimation { to: 1; duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease }
     SequentialAnimation {
         id: swap
@@ -210,6 +211,137 @@ Item {
         glassRect: card.opacity > 0.01 ? Qt.rect(card.x, card.y, card.width, card.height) : Qt.rect(0, 0, 0, 0)
         glassA: card.opacity
     }
+
+    // ================================================================= standby scenes (HANDOFF.md, tools/scenes)
+    // Standby without music: a pen-line scene draws itself on, the time and the statuses sit in the place it leaves
+    // for them, and the cats live in it. Four scenes, shuffled, each shown once before any repeats (never the same
+    // twice running); the sky follows the hour. A change every 5 minutes — every 30 at night in a quiet room: the
+    // cats go (1.5 s), the scene rubs out (0.6 s), the time and statuses travel (1 s), the next draws on (6 s, 10 at
+    // night), the cats come back. It waits while an alert or the assistant is up, or a timer's in its last minute.
+    // A fresh one as standby starts and when the screen comes back on. Off (Settings · Cats), or the cats off:
+    // standby exactly as it was. The drawing itself: SceneArt.qml (two of them: the one showing, the next one loading).
+    readonly property var scnL: SceneData.layout
+    readonly property bool scenesOn: room.cats && room.panel.standbyScenes !== false
+    readonly property bool scn: sV && !m && scenesOn
+    property string scnId: ""                 // the scene the time and statuses are placed for
+    property int scnSlot: 0                   // which SceneArt is showing
+    property string scnKeyA: ""
+    property string scnKeyB: ""
+    readonly property string scnKey: scnSlot === 0 ? scnKeyA : scnKeyB     // the scene and sky showing
+    readonly property Item scnArt: scnSlot === 0 ? artA : artB
+    property real scnNow: 0                   // how much of it is drawn (build units)
+    property real scnFade: 0.5                // a fill's fade, in build units at this pace
+    property real scnClock: 0                 // the scenery's movements' clock (seconds), stepped with the background
+    property bool scnReady: false             // drawn: the cats come (Cats.qml)
+    property bool scnAway: false              // the cats go (a change)
+    property bool scnSnap: false              // …at once (the screen was off: nothing to see them go)
+    property bool scnBack: false              // they come back from a change (up from below) rather than just appear
+    property real scnDue: 0
+    property var scnBag: []
+    property string scnStage: ""              // leave · rub · travel · draw · out ("" resting)
+    property real scnAt: 0                    // when the stage began
+    property string scnNext: ""
+    property real scnFrom: 0
+    property real scnEnd: 1                   // the build's end (units), and how long its draw takes (s)
+    property real scnDraw: 6
+    readonly property var scnInfo: { for (var i = 0; i < scnL.scenes.length; i++) if (scnL.scenes[i].id === scnId) return scnL.scenes[i]; return null }
+    readonly property bool scnBlock: scn && scnInfo !== null
+    readonly property var scnTime: scnInfo ? scnInfo.time : ({ x: 52, y: 150, size: 320, cols: 5 })
+    readonly property real scnK: scnTime.size / 250                                  // the clock's scale (a 250 px serif)
+    readonly property real scnTop: scnTime.base !== undefined ? scnTime.base - (clockT.shift + clockT.baselineOffset) * scnK : scnTime.y
+    readonly property real scnFacts: scnTop + scnTime.size + 14 + 56 + 20             // the statuses' top
+    // (checks) ROOM_SCREEN=sb-<scene>-<sky>[-<% drawn>]: that scene, drawn that far, and held there; sbdemo: changing
+    // every 12 s
+    readonly property var scnFixed: startScreen.indexOf("sb-") === 0 ? startScreen.split("-") : null
+    function scnSky() {
+        if (scnFixed) return scnFixed[2]
+        var h = date.getHours()
+        return night ? "night" : h >= 6 && h < 18 ? "day" : "eve"
+    }
+    function scnPick() {
+        if (scnFixed) return scnFixed[1]
+        var b = scnBag.slice()
+        if (!b.length) {
+            b = scnL.scenes.map(function (e) { return e.id })
+            for (var i = b.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = b[i]; b[i] = b[j]; b[j] = t }
+            if (b[b.length - 1] === scnId) b.unshift(b.pop())          // (never the same one twice running)
+        }
+        var n = b.pop(); scnBag = b
+        return n
+    }
+    // how long until the next: 5 minutes, or 30 at night with nothing heard in the room for 5 minutes
+    function scnPace() {
+        if (startScreen === "sbdemo") return 12                       // (checks: every 12 s)
+        var e = scnL.changeEverySeconds
+        return night && room.soundAgo() > 300 ? e.night : e.day
+    }
+    readonly property bool scnHold: hush || (room.alert && room.alert.kind !== undefined)
+                                    || (timers.length > 0 && timers[0].left > 0 && timers[0].left <= 60)
+    function scnGo(stage) { scnStage = stage; scnAt = Date.now() / 1000; if (stage !== "") scnStep() }
+    // a scene to come: into the slot that isn't showing (its pictures start loading)
+    function scnLoad(id) {
+        scnNext = id
+        var key = id + "-" + scnSky()
+        if (scnSlot === 0) scnKeyB = key; else scnKeyA = key
+    }
+    function scnSwap() {                       // the loaded one shows; the other is let go (its memory freed)
+        scnSlot = 1 - scnSlot
+        if (scnSlot === 0) scnKeyB = ""; else scnKeyA = ""
+        scnId = scnNext
+        var man = SceneData.baked[scnKey], sky = scnKey.split("-")[1]
+        var k = scnL.drawSeconds[sky] / man.total                                       // seconds per build unit
+        scnEnd = Math.max(man.lineEnd, man.fillLast + 0.9 / k)
+        scnDraw = scnEnd * k
+        scnFade = 0.9 / k
+    }
+    function scnStart() {                 // standby starting, the screen back on: a fresh one, drawn at once
+        scnStage = ""; scnAway = true; scnSnap = true; scnReady = false; scnBack = false
+        scnNow = 0
+        scnLoad(scnPick()); scnSwap()
+        scnGo("travel")
+    }
+    function scnChange() {                     // the next one: the cats go first
+        scnAway = true; scnSnap = false; scnReady = false; scnBack = true
+        scnLoad(scnPick())
+        scnGo("leave")
+    }
+    function scnStep() {
+        var e = Date.now() / 1000 - scnAt, c = scnL.change
+        if (scnStage === "leave") { if (e >= c.catsLeave) { scnFrom = scnNow; scnGo("rub") } }
+        else if (scnStage === "rub" || scnStage === "out") {
+            var f = Math.min(1, e / c.rubOut)
+            scnNow = scnFrom * (1 - f * f)
+            if (f >= 1) {
+                if (scnStage === "out") { scnKeyA = ""; scnKeyB = ""; scnId = ""; scnGo("") }
+                else { scnSwap(); scnGo("travel") }
+            }
+        } else if (scnStage === "travel") {
+            // the time and statuses on their way (1 s); the new pictures in (or, at worst, 4 s on without them)
+            if (scnFixed || (e >= c.timeTravels && (scnArt.ready || e > 4))) scnGo("draw")
+        } else if (scnStage === "draw") {
+            var g = scnFixed ? (scnFixed.length > 3 ? Number(scnFixed[3]) / 100 : 1) : Math.min(1, e / scnDraw)
+            scnNow = g * scnEnd
+            if (g >= 1 || scnFixed) {
+                scnGo("")
+                scnDue = Date.now() / 1000 + scnPace()
+                scnAway = false; scnReady = true
+            }
+        }
+    }
+    Timer { interval: 33; repeat: true; running: sc.scnStage !== ""; onTriggered: sc.scnStep() }     // 30 a second, only while it moves
+    onScnChanged: {
+        if (scn) scnStart()
+        else if (scnId !== "") { scnAway = false; scnReady = false; scnFrom = scnNow; scnGo("out") }   // waking: it rubs out as the clock goes
+    }
+    Connections {
+        target: room
+        // the screen off: nothing drawn; back on: a fresh scene straight away
+        function onAsleepChanged() { if (!sc.scn) return; if (room.asleep) { sc.scnStage = ""; sc.scnNow = 0; sc.scnReady = false; sc.scnAway = true; sc.scnSnap = true } else sc.scnStart() }
+    }
+    onNowChanged: if (scn && scnStage === "" && scnReady && !scnFixed && Date.now() / 1000 >= scnDue && !scnHold && !room.asleep) scnChange()
+    Connections { target: bg; enabled: sc.scnNow > 0; function onTicked() { sc.scnClock = Date.now() / 1000 % 100000 } }
+    SceneArt { id: artA; key: sc.scnKeyA; now: sc.scnSlot === 0 ? sc.scnNow : 0; fadeU: sc.scnFade; t: sc.scnClock }
+    SceneArt { id: artB; key: sc.scnKeyB; now: sc.scnSlot === 1 ? sc.scnNow : 0; fadeU: sc.scnFade; t: sc.scnClock }
 
     // ---------------------------------------------------------------- the pieces
     component Mover: Item {
@@ -528,9 +660,9 @@ Item {
     Mover {
         id: clock
         order: 10
-        x: sc.hV ? 40 : (sc.pV || sc.rV || sc.scV) ? 652 : sc.sV ? (sc.m ? 56 : 52) : 652
-        y: sc.hV ? 120 : (sc.pV || sc.rV || sc.scV) ? 38 : sc.sV ? (sc.m ? 52 : 150) : 38
-        scale: sc.hV ? 1 : (sc.pV || sc.rV || sc.scV) ? 0.2 : sc.sV ? (sc.m ? 0.38 : 1.28) : 0.2
+        x: sc.hV ? 40 : (sc.pV || sc.rV || sc.scV) ? 652 : sc.sV ? (sc.m ? 56 : sc.scnBlock ? sc.scnTime.x : 52) : 652
+        y: sc.hV ? 120 : (sc.pV || sc.rV || sc.scV) ? 38 : sc.sV ? (sc.m ? 52 : sc.scnBlock ? sc.scnTop : 150) : 38
+        scale: sc.hV ? 1 : (sc.pV || sc.rV || sc.scV) ? 0.2 : sc.sV ? (sc.m ? 0.38 : sc.scnBlock ? sc.scnK : 1.28) : 0.2
         opacity: (sc.oV ? 0 : 1) * sc.hk
         width: clockT.implicitWidth; height: clockT.implicitHeight
         Serif {
@@ -574,7 +706,8 @@ Item {
                                       "5": [0.4, 0.95], "6": [0.4, 0.75], "7": [0.08, 0.92], "8": [0.3, 0.7], "9": [0.3, 0.7] })
     function catSpots() {
         var out = []
-        if (sV && !m) {                      // standby: the top of each number
+        if (sV && !m && scnBlock) scnSpots(out)
+        else if (sV && !m) {                 // standby: the top of each number
             var t = clockT.text
             for (var i = 0; i < t.length; i++) {
                 if (t[i] === ":") continue
@@ -614,6 +747,26 @@ Item {
         if (prog.opacity > 0.5 && (hV || pV || (sV && m)))
             out.push({ id: "seek", x0: prog.x, x1: prog.x + prog.width, y: prog.y, use: "push" })
         return out
+    }
+    // a scene's platforms (scenes.json): as given, the shelf wall's time shelf starting past the clock's numbers (read
+    // from the layout, like the numbers' tops — which stay spots there, where the time is big), the garden's branch
+    // a curve (its height worked out along it, like the forecast's)
+    function scnSpots(out) {
+        scnInfo.spots.forEach(function (p) {
+            if (p.id === "digits") { if (scnTime.size >= 250) catDigits(clockT, "digit", false, out); return }
+            if (p.curve) { var cv = scnCurve(p.curve); out.push({ id: "curve", x0: p.x0, x1: p.x1, y: cv(p.x0), yAt: cv }); return }
+            var x0 = typeof p.x0 === "string" ? clock.x + clock.width * clock.scale + 40 : p.x0
+            out.push({ id: p.id, x0: x0, x1: p.x1, y: p.y, low: p.low === true })
+        })
+    }
+    function scnCurve(d) {                   // "M x,y C x1,y1 x2,y2 x3,y3" → y at x
+        var n = d.match(/-?[0-9.]+/g).map(Number)
+        function at(u, a, b, c, e) { var v = 1 - u; return v * v * v * a + 3 * v * v * u * b + 3 * v * u * u * c + u * u * u * e }
+        return function (x) {
+            var lo = 0, hi = 1, up = n[6] > n[0]
+            for (var i = 0; i < 24; i++) { var mid = (lo + hi) / 2; if ((at(mid, n[0], n[2], n[4], n[6]) < x) === up) lo = mid; else hi = mid }
+            return at((lo + hi) / 2, n[1], n[3], n[5], n[7])
+        }
     }
     function catKnob() { return prog.x + seek.shown * prog.width }
 
@@ -831,7 +984,7 @@ Item {
     Mover {
         id: sbTop
         order: 23 + sc.rooms.length
-        x: sc.m ? 1324 - 600 : 56; y: sc.m ? 54 : 520
+        x: sc.m ? 1324 - 600 : sc.scnBlock ? sc.scnTime.x + 6 : 56; y: sc.m ? 54 : sc.scnBlock ? sc.scnTop + sc.scnTime.size + 14 : 520
         width: 600; height: 60
         opacity: (sc.sV ? 1 : 0) * sc.hk
         Column {
@@ -844,15 +997,22 @@ Item {
         id: sbMods
         order: 24 + sc.rooms.length
         readonly property var mods: sc.facts.filter(function (f) { return f.k !== "wx" }).slice(0, sc.m ? 4 : 5)
-        readonly property int cols: sc.m ? 2 : Math.max(1, mods.length)
-        readonly property real mw: sc.m ? 240 : Math.min(300, 1256 / Math.max(1, mods.length) - 24)
-        x: sc.sV ? (sc.m ? 820 : 56) : 56; y: sc.sV ? (sc.m ? 700 : 640) : 760
+        readonly property int cols: sc.m ? 2 : sc.scnBlock ? sc.scnTime.cols : Math.max(1, mods.length)
+        readonly property real mw: sc.m ? 240 : sc.scnBlock ? 250 : Math.min(300, 1256 / Math.max(1, mods.length) - 24)
+        // on a scene: rows as tall as what's in them (the timer's row is taller), 18 apart (HANDOFF)
+        function rowY(r) {
+            if (!sc.scnBlock || sc.m) return r * 84
+            var y = 0
+            for (var i = 0; i < r; i++) y += (mods.slice(i * cols, i * cols + cols).some(function (f) { return f.k === "timer" }) ? 90 : 72) + 18
+            return y
+        }
+        x: sc.sV ? (sc.m ? 820 : sc.scnBlock ? sc.scnTime.x + 6 : 56) : 56; y: sc.sV ? (sc.m ? 700 : sc.scnBlock ? sc.scnFacts : 640) : 760
         width: sc.m ? 504 : 1256; height: 170
         opacity: sc.sV ? 1 : 0
         Repeater {
             model: sbMods.mods
             Item {
-                x: (index % sbMods.cols) * (sbMods.mw + 24); y: Math.floor(index / sbMods.cols) * 84
+                x: (index % sbMods.cols) * (sbMods.mw + 24); y: sbMods.rowY(Math.floor(index / sbMods.cols))
                 width: sbMods.mw; height: 80
                 Mono { size: 12; color: Theme.w42; text: modelData.label; width: parent.width }
                 Text {

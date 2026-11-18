@@ -25,6 +25,7 @@ class Duck:
         self.saved: dict = {}
         self.floor = floor
         self.sink_was = None        # the speaker's level before it was set for the conversation
+        self.target = "@DEFAULT_AUDIO_SINK@"   # which speaker that is: the Surface's own (speaker.py), set at down()
         self.q = queue.Queue()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -39,16 +40,17 @@ class Duck:
             want = self.q.get()
             try:
                 if want == "down" and self.sink_was is None:
+                    self.target = self._target()
                     v = self._sink()
                     if v is not None and abs(v - self.floor) > 0.005:
                         self.sink_was = v
-                        subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{self.floor:.2f}"], timeout=2,
+                        subprocess.run(["wpctl", "set-volume", self.target, f"{self.floor:.2f}"], timeout=2,
                                        stderr=subprocess.DEVNULL)
                         print(f"[assistant] speaker {v:.2f} → {self.floor:.2f} for the conversation", flush=True)
                 if want == "up" and self.sink_was is not None:
                     v = self._sink()
                     if v is not None and abs(v - self.floor) < 0.015:        # not changed meanwhile ("volume 20")
-                        subprocess.run(["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", f"{self.sink_was:.2f}"], timeout=2,
+                        subprocess.run(["wpctl", "set-volume", self.target, f"{self.sink_was:.2f}"], timeout=2,
                                        stderr=subprocess.DEVNULL)
                     self.sink_was = None
                 if want == "down" and not self.saved:
@@ -73,9 +75,15 @@ class Duck:
                 print("[assistant] duck:", repr(e), flush=True)
 
     @staticmethod
-    def _sink():
+    def _target():
+        """The Surface's own speakers (where Room's voice plays, speaker.py) — the default speaker if not found."""
+        from .speaker import surface
+        s = surface()
+        return str(s[0]) if s else "@DEFAULT_AUDIO_SINK@"
+
+    def _sink(self):
         try:
-            out = subprocess.run(["wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@"], capture_output=True, text=True,
+            out = subprocess.run(["wpctl", "get-volume", self.target], capture_output=True, text=True,
                                  timeout=2).stdout
             return float(out.split()[1])
         except Exception:

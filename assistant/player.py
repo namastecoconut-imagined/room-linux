@@ -55,7 +55,11 @@ class Player:
     # ---------------------------------------------------------------- the stream
     def start(self):
         import os
-        os.environ.setdefault("PIPEWIRE_PROPS", '{ application.name = "Room assistant" media.role = "Assistant" }')
+        from .speaker import surface
+        s = surface()                        # the Surface's own speakers, whatever the default is (speaker.py)
+        tgt = f' target.object = "{s[1]}"' if s else ""
+        os.environ["PIPEWIRE_PROPS"] = '{ application.name = "Room assistant" media.role = "Assistant"' + tgt + ' }'
+        self._pinned_at = 0.0
         import sounddevice as sd
         self.stream = sd.OutputStream(samplerate=self.rate, blocksize=self.block, channels=1, dtype="float32",
                                       latency=0.25, device=self.device, callback=self._callback)
@@ -103,6 +107,10 @@ class Player:
         """A new answer is starting (whatever was playing stops)."""
         if self.dead:
             self.heal()
+        if time.monotonic() - getattr(self, "_pinned_at", 0.0) > 20:      # still on the Surface's speakers? (speaker.py)
+            self._pinned_at = time.monotonic()
+            from .speaker import pin
+            threading.Thread(target=lambda: pin(lambda m: print(m, flush=True)), daemon=True).start()
         with self.lock:
             self.r = self.w
             self.playing, self.ended, self.need, self.dry = False, False, self.prebuffer, 0

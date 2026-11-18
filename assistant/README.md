@@ -28,7 +28,7 @@ What it runs on (each chosen by a test on this Surface):
 | voice | Room's own Piper voice (`en_US-room-medium`), made on the Surface sentence by sentence and played by `player.py` as each is ready; levelled to one loudness; short lines kept | 15 Nov: trained on a 5080 from 16 min of Fish Audio speech, fine-tuned from Piper's Lessac voice (2,000 epochs). About 10× faster than it's spoken on the Surface; offline and free. Before: Sarvam Bulbul (online, paid, 14 Nov), and before that Kokoro (made here, but too slow once the screen got busier) |
 
 Files: `__main__.py` the loop · `listen.py` mic, wake word, end of speech, Sarvam · `turn.py` + `whisper_features.py` finished or just pausing · `brain.py` Claude · `tts.py` +
-`player.py` the voice · `echo.py` echo cancelling · `duck.py` music down/up · `link.py` the line to Room (`room/voice.py` on the other end).
+`player.py` the voice · `speaker.py` the Surface's own speakers (the voice always plays there) · `echo.py` echo cancelling · `duck.py` music down/up · `link.py` the line to Room (`room/voice.py` on the other end).
 Settings in config.json: `"assistant": {"wakeThreshold": 0.5, "micLevel": 0.65, "echoCancel": true, "enabled": true}`.
 The voice files (not in this public repo): `~/.local/share/room/voices/en_US-room-medium.onnx` and `.onnx.json`.
 While Room talks the speaker is lifted to the chip's crackle cap (Settings → More settings → Sound), then put back.

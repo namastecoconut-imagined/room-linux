@@ -338,6 +338,13 @@ class Listener:
     CHECKS = (0.24, 0.72, 1.36)   # Smart Turn is asked at these points of a pause (one 80 ms frame each, ~40 ms of work)
     DONE = 0.5              # …and this sure that you've finished ends the request
     PATIENT = 2.5           # it heard you trail off: at most this much silence before it ends anyway
+    # Smart Turn can't judge a word or two: it called "Right" finished (and the answer after it was lost) and "Yes"
+    # unfinished (2.5 s wait) — 18 Nov. So for short replies a plain pause decides:
+    FILLER = 0.5            # less speech than this ("um", "right", "so"): a filler — keep listening up to FILLER_WAIT
+    FILLER_WAIT = 1.5
+    BRIEF = 1.0             # less than this ("yes", "no", "four AM"): ends after BRIEF_WAIT of pause (or sooner if
+    BRIEF_WAIT = 0.8        # Smart Turn is BRIEF_SURE)
+    BRIEF_SURE = 0.9
     MAX = 15.0
     PRE = 0.15              # audio kept from just before the request starts (not the "Alexa" before it)
     TAIL = 0.25             # the end of "Alexa" itself is still in the first moment: not the start of a request
@@ -435,7 +442,12 @@ class Listener:
                     self.on_level(0.0)
                 return None, {"onset": None, "took": time.time() - t0}
             finished = False
-            if started is not None and self.turn is not None:
+            spoke = (t - quiet - started) if started is not None else 0.0
+            if started is not None and self.turn is not None and spoke < self.FILLER:
+                finished = quiet >= self.FILLER_WAIT               # (a filler: no Smart Turn)
+                if finished:
+                    said.append(f"{spoke:.1f}s of speech: a filler rule, {self.FILLER_WAIT}s")
+            elif started is not None and self.turn is not None:
                 # the check runs on its own thread while the mic keeps being read: listening never waits on it, and
                 # its answer counts only if you're still in the same pause when it comes
                 if job is not None and job[0].done():
@@ -444,7 +456,7 @@ class Listener:
                         sure, took = fut.result()
                         if jp == pause:
                             said.append(f"{at:.2f}s→{sure:.2f}")
-                            finished = sure >= self.DONE
+                            finished = sure >= (self.BRIEF_SURE if spoke < self.BRIEF else self.DONE)
                         if took > 0.6:
                             log(f"end of turn: the model took {took:.2f} s")
                     except Exception as e:
@@ -454,7 +466,7 @@ class Listener:
                 if due and job is None and self.turn is not None:
                     asked.update(due)
                     job = (self._pool().submit(self.turn.done, np.concatenate(frames)[int(started * RATE):]), pause, quiet)
-                finished = finished or quiet >= self.PATIENT
+                finished = finished or quiet >= (self.BRIEF_WAIT if spoke < self.BRIEF else self.PATIENT)
             if started is not None and self.turn is None and not finished:
                 finished = quiet >= self.END_QUIET
             if started is not None and (finished or t > self.MAX):

@@ -31,6 +31,8 @@ class Output:
         self.headroom = abs(float(cfg.get("speakerHeadroomDb", 4)))
         self.on_airplay_audio = None   # called (from this thread) when AirPlay's sound is seen flowing
         self.browser_open = False      # Room's Firefox is open: look every 3 s, so its sound moves over quickly
+        self.missing_since = 0.0       # the Surface's speakers not in the sound system since (see speakers())
+        self.healed_at = 0.0
 
     def poke(self):
         """Something changed (AirPlay started, a speaker came or went): look now, and again over the next few seconds
@@ -49,6 +51,7 @@ class Output:
                 nodes = json.loads(subprocess.run(["pw-dump"], capture_output=True, text=True, timeout=5).stdout or "[]")
                 if n % 15 == 0:                 # at start, then every ~5 minutes
                     self.levels(nodes, heal=(n == 0))
+                self.speakers(nodes)
                 if self.airplay_bt:
                     self.airplay(nodes)
             except Exception as e:
@@ -117,6 +120,37 @@ class Output:
                 self.moved[sid] = ""
         live = {n["id"] for n in nodes}
         self.moved = {k: v for k, v in self.moved.items() if k in live}
+
+    HEAL_AFTER = 40.0                  # the Surface's speakers missing this long → restart the sound system
+    HEAL_EVERY = 1800.0                # …at most once in this long (if it doesn't help, it isn't tried over and over)
+
+    def speakers(self, nodes):
+        """The Surface's own speakers still in the sound system? On 18 Nov they weren't, after a restart: PipeWire
+        found them busy for a moment as it started ("Device or resource busy"), gave up on them for good, and Room's
+        voice and chime went to the Bluetooth speaker — the only one left. Missing for HEAL_AFTER while the chip is
+        there: the sound system is restarted (what fixed it by hand), at most once every HEAL_EVERY; logged."""
+        there = any(((n.get("info") or {}).get("props") or {}).get("media.class") == "Audio/Sink"
+                    and ((n.get("info") or {}).get("props") or {}).get("node.name", "").startswith("alsa_output.pci")
+                    and "hdmi" not in ((n.get("info") or {}).get("props") or {}).get("node.name", "") for n in nodes)
+        import os
+        if there or not os.path.exists("/proc/asound/card0/pcm0p"):
+            if self.missing_since and there:
+                print("[room] output: the Surface's speakers are back", flush=True)
+            self.missing_since = 0.0
+            return
+        now = time.monotonic()
+        if not self.missing_since:
+            self.missing_since = now
+            print("[room] output: the Surface's speakers aren't in the sound system", flush=True)
+            self.burst = max(self.burst, 3)
+            return
+        if now - self.missing_since >= self.HEAL_AFTER and (not self.healed_at or now - self.healed_at > self.HEAL_EVERY):
+            self.healed_at = now
+            print("[room] output: the Surface's speakers still missing — restarting the sound system", flush=True)
+            subprocess.run(["systemctl", "--user", "restart", "wireplumber", "pipewire", "pipewire-pulse"], timeout=30,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            self.missing_since = 0.0
+            self.burst = max(self.burst, 4)
 
     def levels(self, nodes, heal=False):
         """The Surface's speakers never left muted, the chip never above its crackle cap, and (at start) music streams

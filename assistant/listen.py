@@ -377,6 +377,12 @@ class Listener:
                 self.wake.reset()
                 return s
 
+    def _pool(self):
+        if getattr(self, "_turn_pool", None) is None:
+            from concurrent.futures import ThreadPoolExecutor
+            self._turn_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="turn")
+        return self._turn_pool
+
     def voice_level(self, f, p) -> float:
         """How loud *your voice* is, 0…1, for the screen. Only speech counts (Silero's probability gates it), and only
         what's above the room's own hum: a silent room used to read as a fair level — the raw mic at 65 % hears the
@@ -400,6 +406,7 @@ class Listener:
             self.on_level(0.0)
         frames, started, quiet, t0 = [], None, 0.0, time.time()
         asked, said = set(), []             # this pause's Smart Turn checks; every check this request (for the log)
+        job, pause = None, 0                # a Smart Turn check running beside the listening (and for which pause)
         while True:
             if self.abort.is_set():
                 return None, {"onset": None, "took": time.time() - t0, "aborted": True}
@@ -417,6 +424,7 @@ class Listener:
                     started = max(0.0, t - FRAME / RATE - self.PRE)
                 quiet = 0.0
                 asked = set()
+                pause += 1                          # (a check still running for the pause before: its answer is dropped)
             elif started is not None:
                 quiet += FRAME / RATE
             if started is None and t > onset:
@@ -425,20 +433,26 @@ class Listener:
                 return None, {"onset": None, "took": time.time() - t0}
             finished = False
             if started is not None and self.turn is not None:
-                due = [c for c in self.CHECKS if quiet >= c - 1e-6 and c not in asked]
-                if due:
-                    asked.update(due)
+                # the check runs on its own thread while the mic keeps being read: listening never waits on it, and
+                # its answer counts only if you're still in the same pause when it comes
+                if job is not None and job[0].done():
+                    fut, jp, at = job; job = None
                     try:
-                        sure, took = self.turn.done(np.concatenate(frames)[int(started * RATE):])
-                        said.append(f"{quiet:.2f}s→{sure:.2f}")
-                        finished = sure >= self.DONE
-                        if took > 0.15:
+                        sure, took = fut.result()
+                        if jp == pause:
+                            said.append(f"{at:.2f}s→{sure:.2f}")
+                            finished = sure >= self.DONE
+                        if took > 0.6:
                             log(f"end of turn: the model took {took:.2f} s")
                     except Exception as e:
                         log("end of turn: Smart Turn failed — back to the silence rule:", repr(e))
                         self.turn = None
+                due = [c for c in self.CHECKS if quiet >= c - 1e-6 and c not in asked]
+                if due and job is None and self.turn is not None:
+                    asked.update(due)
+                    job = (self._pool().submit(self.turn.done, np.concatenate(frames)[int(started * RATE):]), pause, quiet)
                 finished = finished or quiet >= self.PATIENT
-            elif started is not None:
+            if started is not None and self.turn is None and not finished:
                 finished = quiet >= self.END_QUIET
             if started is not None and (finished or t > self.MAX):
                 if said:

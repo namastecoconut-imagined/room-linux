@@ -23,7 +23,8 @@ class Turn:
     def __init__(self, path=MODEL):
         import onnxruntime as ort
         o = ort.SessionOptions()
-        o.intra_op_num_threads = 1; o.inter_op_num_threads = 1         # one core, no spinning: it runs only at a pause
+        o.intra_op_num_threads = 2; o.inter_op_num_threads = 1         # two cores, no spinning: it runs only at a pause
+                                                                       # (one core: ~0.35 s a check on the Surface)
         o.add_session_config_entry("session.intra_op.allow_spinning", "0")
         o.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         self.s = ort.InferenceSession(path, sess_options=o, providers=["CPUExecutionProvider"])

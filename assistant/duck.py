@@ -25,7 +25,7 @@ class Duck:
         self.saved: dict = {}
         self.floor = floor
         self.sink_was = None        # the speaker's level before it was set for the conversation
-        self.target = "@DEFAULT_AUDIO_SINK@"   # which speaker that is: the Surface's own (speaker.py), set at down()
+        self.target = None          # which speaker that is: the Surface's own (speaker.py), set at down()
         self.q = queue.Queue()
         threading.Thread(target=self._worker, daemon=True).start()
 
@@ -39,26 +39,29 @@ class Duck:
         while True:
             want = self.q.get()
             try:
-                if want == "down" and self.sink_was is None:
-                    self.target = self._target()
-                    v = self._sink()
-                    if v is not None and abs(v - self.floor) > 0.005:
-                        self.sink_was = v
-                        subprocess.run(["wpctl", "set-volume", self.target, f"{self.floor:.2f}"], timeout=2,
-                                       stderr=subprocess.DEVNULL)
-                        print(f"[assistant] speaker {v:.2f} → {self.floor:.2f} for the conversation", flush=True)
-                if want == "up" and self.sink_was is not None:
-                    v = self._sink()
-                    if v is not None and abs(v - self.floor) < 0.015:        # not changed meanwhile ("volume 20")
-                        subprocess.run(["wpctl", "set-volume", self.target, f"{self.sink_was:.2f}"], timeout=2,
-                                       stderr=subprocess.DEVNULL)
-                    self.sink_was = None
+                # the music down FIRST, then the speaker up: the other way round, the music blared for a moment
                 if want == "down" and not self.saved:
                     for sid, app, v in self._streams():
                         self.saved[sid] = (app, v)
                         subprocess.run(["wpctl", "set-volume", str(sid), f"{v * LEVEL:.3f}"], timeout=2,
                                        stderr=subprocess.DEVNULL)
-                elif want == "up" and self.saved:
+                if want == "down" and self.sink_was is None:
+                    self.target = self._target()
+                    if self.target is None:
+                        print("[assistant] the Surface's speakers aren't there — no speaker's volume is changed", flush=True)
+                    v = self._sink() if self.target else None
+                    if v is not None and abs(v - self.floor) > 0.005:
+                        self.sink_was = v
+                        subprocess.run(["wpctl", "set-volume", self.target, f"{self.floor:.2f}"], timeout=2,
+                                       stderr=subprocess.DEVNULL)
+                        print(f"[assistant] speaker {v:.2f} → {self.floor:.2f} for the conversation", flush=True)
+                if want == "up" and self.sink_was is not None and self.target:
+                    v = self._sink()
+                    if v is not None and abs(v - self.floor) < 0.015:        # not changed meanwhile ("volume 20")
+                        subprocess.run(["wpctl", "set-volume", self.target, f"{self.sink_was:.2f}"], timeout=2,
+                                       stderr=subprocess.DEVNULL)
+                    self.sink_was = None
+                if want == "up" and self.saved:
                     # put back by stream, and by app for streams that weren't there before: an app that started a new
                     # stream meanwhile (the Surface's Spotify does, per song) got the lowered level from PipeWire's
                     # memory of that app — and stayed quiet ("it went back to a lower volume and stayed there")
@@ -76,10 +79,11 @@ class Duck:
 
     @staticmethod
     def _target():
-        """The Surface's own speakers (where Room's voice plays, speaker.py) — the default speaker if not found."""
+        """The Surface's own speakers (where Room's voice plays, speaker.py) — None if they aren't there: then no
+        speaker is touched (18 Nov: with them missing, the default was the Bluetooth speaker, and it was raised to 85 %)."""
         from .speaker import surface
         s = surface()
-        return str(s[0]) if s else "@DEFAULT_AUDIO_SINK@"
+        return str(s[0]) if s else None
 
     def _sink(self):
         try:

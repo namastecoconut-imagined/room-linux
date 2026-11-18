@@ -264,10 +264,14 @@ class Assistant:
             if not show["started"] and show["final"]:
                 show["started"] = True
                 self.state(**show["final"])
-        asked = spoken.strip().endswith("?")
-        again = bool(out.get("follow_up", True)) and asked and not self.cancelled
+        # Listen again after every answer (you can just carry on: "and tomorrow?") — unless Claude says the exchange
+        # is over (thanks / goodnight / bye). A question anywhere in the answer always gets listened for: it used to
+        # need the answer to END in "?", and since the character adds a quip after its question ("What time? I'm not
+        # a mind reader.") it never listened for the answer (18 Nov).
+        asked = "?" in spoken
+        again = bool(spoken) and not self.cancelled and (asked or out.get("follow_up", True) is not False)
         log(f"follow-up: {'listening again' if again else 'not listening again'} "
-            f"(ends with a question: {'yes' if asked else 'no'} · Claude's follow_up: {out.get('follow_up')})")
+            f"(asked a question: {'yes' if asked else 'no'} · Claude's follow_up: {out.get('follow_up')})")
         if not again:
             self.state(state="idle", stage="done", heard=text, reply=spoken or line, line=line.lower() if line else "", card=card)
         return again

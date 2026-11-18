@@ -398,9 +398,12 @@ class Listener:
         "Alexa" — whatever you started saying straight after it is already queued, and is wanted."""
         onset = onset or self.ONSET
         self.abort.clear()
+        dropped = 0
         while fresh and not self.mic.q.empty():
-            try: self.mic.q.get_nowait()
+            try: self.mic.q.get_nowait(); dropped += 1
             except queue.Empty: break
+        if fresh:
+            log(f"follow-up: listening (up to {onset:.0f} s to start) · {dropped * FRAME / RATE:.2f} s of sound from before dropped")
         self.vad.reset()
         if self.on_level:
             self.on_level(0.0)

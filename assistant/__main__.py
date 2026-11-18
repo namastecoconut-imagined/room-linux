@@ -159,6 +159,8 @@ class Assistant:
         if self.cancelled:
             self.state(state="idle", stage="idle"); return False
         if audio is None:
+            if not self.cancelled:
+                log(("follow-up: " if follow else "") + f"nothing heard in {6.0 if follow else Listener.ONSET:.0f} s — back to idle")
             self.state(state="idle", stage="idle" if follow else "miss")
             return False
         self.state(state="thinking", stage="think")
@@ -174,6 +176,7 @@ class Assistant:
         heard_at = time.time()
         log(f"heard {text!r} · {info.get('spoke', 0):.1f} s of speech · words {heard_at - t0 - info.get('took', 0):.2f} s after you stopped")
         if not text:
+            log(("follow-up: " if follow else "") + "Sarvam found no words in it — back to idle")
             self.state(state="idle", stage="idle" if follow else "miss")
             return False
         self.state(state="thinking", stage="think", heard=text)
@@ -206,6 +209,7 @@ class Assistant:
         if not out:
             self.answer("Sorry, I couldn't reach my brain just now — try again in a moment."); return False
         if follow and out.get("for_me") is False:
+            log(f"follow-up: {text!r} — Claude decided it wasn't for Room · back to idle")
             self.voice.stop(); self.state(state="idle", stage="idle"); return False
 
         actions = out.get("actions") or []
@@ -262,6 +266,8 @@ class Assistant:
                 self.state(**show["final"])
         asked = spoken.strip().endswith("?")
         again = bool(out.get("follow_up", True)) and asked and not self.cancelled
+        log(f"follow-up: {'listening again' if again else 'not listening again'} "
+            f"(ends with a question: {'yes' if asked else 'no'} · Claude's follow_up: {out.get('follow_up')})")
         if not again:
             self.state(state="idle", stage="done", heard=text, reply=spoken or line, line=line.lower() if line else "", card=card)
         return again

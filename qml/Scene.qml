@@ -124,7 +124,7 @@ Item {
     Timer { id: swipeBack; interval: 3000; onTriggered: { sc.swipeWait = false; sc.slideIn(sc.swipeDir) } }
     onSongKeyChanged: if (sTitle === "" && sArtist === "") commitSong(); else if (songKey !== "") swap.restart()
     Connections { target: sc; function onMusicChanged() { if (!swap.running && sc.songKey !== "" && (sc.music.art || "") !== sc.sArt) sc.sArt = sc.music.art || "" } }
-    Component.onCompleted: { commitSong(); if (scn) scnStart() }
+    Component.onCompleted: { commitSong(); if (scn && scnId === "") scnStart() }
     component In: NumberAnimation { to: 1; duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease }
     SequentialAnimation {
         id: swap
@@ -251,15 +251,17 @@ Item {
     readonly property real scnTop: scnTime.base !== undefined ? scnTime.base - (clockT.shift + clockT.baselineOffset) * scnK : scnTime.y
     readonly property real scnFacts: scnTop + scnTime.size + 14 + 56 + 20             // the statuses' top
     // (checks) ROOM_SCREEN=sb-<scene>-<sky>[-<% drawn>]: that scene, drawn that far, and held there; sbdemo: changing
-    // every 12 s
+    // every 12 s; sbtour (scripts/scene-tour.sh): the four in order, 20 s each once drawn
     readonly property var scnFixed: startScreen.indexOf("sb-") === 0 ? startScreen.split("-") : null
     function scnSky() {
         if (scnFixed) return scnFixed[2]
         var h = date.getHours()
         return night ? "night" : h >= 6 && h < 18 ? "day" : "eve"
     }
+    property int scnTour: 0
     function scnPick() {
         if (scnFixed) return scnFixed[1]
+        if (startScreen === "sbtour") return scnL.scenes[scnTour++ % scnL.scenes.length].id     // (scene-tour.sh: in order)
         var b = scnBag.slice()
         if (!b.length) {
             b = scnL.scenes.map(function (e) { return e.id })
@@ -272,6 +274,7 @@ Item {
     // how long until the next: 5 minutes, or 30 at night with nothing heard in the room for 5 minutes
     function scnPace() {
         if (startScreen === "sbdemo") return 12                       // (checks: every 12 s)
+        if (startScreen === "sbtour") return 20                       // (scene-tour.sh)
         var e = scnL.changeEverySeconds
         return night && room.soundAgo() > 300 ? e.night : e.day
     }
@@ -288,6 +291,7 @@ Item {
         scnSlot = 1 - scnSlot
         if (scnSlot === 0) scnKeyB = ""; else scnKeyA = ""
         scnId = scnNext
+        console.log("[room] standby scene: " + scnKey)
         var man = SceneData.baked[scnKey], sky = scnKey.split("-")[1]
         var k = scnL.drawSeconds[sky] / man.total                                       // seconds per build unit
         scnEnd = Math.max(man.lineEnd, man.fillLast + 0.9 / k)

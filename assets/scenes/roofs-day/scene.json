@@ -1,0 +1,77 @@
+{
+ "scene": "roofs",
+ "sky": "day",
+ "total": 5.485,
+ "lineEnd": 5.95,
+ "fillLast": 4.58,
+ "tmax": 12.0,
+ "px": 2,
+ "sprites": [
+  {
+   "x": 1010,
+   "y": 456,
+   "w": 122,
+   "h": 54,
+   "art": "s0.png",
+   "map": "s0.map.png",
+   "unstamped": 0,
+   "kind": "sway2",
+   "dur": 4.6,
+   "delay": 0,
+   "origin": [
+    1073,
+    452
+   ]
+  },
+  {
+   "x": 1004,
+   "y": 74,
+   "w": 172,
+   "h": 172,
+   "art": "s1.png",
+   "map": "s1.map.png",
+   "unstamped": 0,
+   "kind": "spin",
+   "dur": 90,
+   "delay": 0,
+   "origin": [
+    1090,
+    160
+   ]
+  },
+  {
+   "x": 651,
+   "y": 105,
+   "w": 163,
+   "h": 53,
+   "art": "s2.png",
+   "map": "s2.map.png",
+   "unstamped": 0,
+   "kind": "cloud",
+   "dur": 70,
+   "delay": -20
+  },
+  {
+   "x": 871,
+   "y": 255,
+   "w": 123,
+   "h": 43,
+   "art": "s3.png",
+   "map": "s3.map.png",
+   "unstamped": 0,
+   "kind": "cloud",
+   "dur": 70,
+   "delay": -45
+  }
+ ],
+ "front": [],
+ "base": {
+  "x": 0,
+  "y": 0,
+  "w": 1368,
+  "h": 912,
+  "art": "base.png",
+  "map": "base.map.png",
+  "unstamped": 15
+ }
+}

@@ -1,0 +1,176 @@
+{
+ "scene": "room",
+ "sky": "eve",
+ "total": 8.041,
+ "lineEnd": 8.26,
+ "fillLast": 7.86,
+ "tmax": 12.0,
+ "px": 2,
+ "sprites": [
+  {
+   "x": 207,
+   "y": 147,
+   "w": 26,
+   "h": 26,
+   "art": "s0.png",
+   "map": "s0.map.png",
+   "unstamped": 1,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": -1
+  },
+  {
+   "x": 288,
+   "y": 228,
+   "w": 24,
+   "h": 24,
+   "art": "s1.png",
+   "map": "s1.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": 0
+  },
+  {
+   "x": 438,
+   "y": 128,
+   "w": 24,
+   "h": 24,
+   "art": "s2.png",
+   "map": "s2.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": 0
+  },
+  {
+   "x": 568,
+   "y": 258,
+   "w": 24,
+   "h": 24,
+   "art": "s3.png",
+   "map": "s3.map.png",
+   "unstamped": 1,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": -1
+  },
+  {
+   "x": 218,
+   "y": 378,
+   "w": 24,
+   "h": 24,
+   "art": "s4.png",
+   "map": "s4.map.png",
+   "unstamped": 1,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": -2
+  },
+  {
+   "x": 222,
+   "y": 195,
+   "w": 122,
+   "h": 43,
+   "art": "s5.png",
+   "map": "s5.map.png",
+   "unstamped": 0,
+   "kind": "cloud",
+   "dur": 50,
+   "delay": 0
+  },
+  {
+   "x": 98,
+   "y": 54,
+   "w": 72,
+   "h": 506,
+   "art": "s6.png",
+   "map": "s6.map.png",
+   "unstamped": 0,
+   "kind": "curt",
+   "dur": 6,
+   "delay": 0,
+   "origin": [
+    134,
+    62
+   ]
+  },
+  {
+   "x": 642,
+   "y": 54,
+   "w": 50,
+   "h": 506,
+   "art": "s7.png",
+   "map": "s7.map.png",
+   "unstamped": 0,
+   "kind": "curt",
+   "dur": 6,
+   "delay": -2,
+   "origin": [
+    667,
+    62
+   ]
+  },
+  {
+   "x": 720,
+   "y": 592,
+   "w": 88,
+   "h": 82,
+   "art": "s8.png",
+   "map": "s8.map.png",
+   "unstamped": 0,
+   "kind": "sway2",
+   "dur": 4.6,
+   "delay": 0,
+   "origin": [
+    762,
+    666
+   ]
+  },
+  {
+   "x": 826,
+   "y": 662,
+   "w": 48,
+   "h": 28,
+   "art": "s9.png",
+   "map": "s9.map.png",
+   "unstamped": 0,
+   "kind": "swim",
+   "dur": 7,
+   "delay": 0
+  },
+  {
+   "x": 1136,
+   "y": 592,
+   "w": 232,
+   "h": 316,
+   "art": "s10.png",
+   "map": "s10.map.png",
+   "unstamped": 0,
+   "kind": "breathe",
+   "dur": 5,
+   "delay": 0
+  }
+ ],
+ "front": [
+  {
+   "x": 900,
+   "y": 700,
+   "w": 360,
+   "h": 160,
+   "art": "f0.png",
+   "map": "f0.map.png",
+   "unstamped": 1,
+   "name": "armchair"
+  }
+ ],
+ "base": {
+  "x": 0,
+  "y": 0,
+  "w": 1368,
+  "h": 912,
+  "art": "base.png",
+  "map": "base.map.png",
+  "unstamped": 14
+ }
+}

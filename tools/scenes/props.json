@@ -1,0 +1,9 @@
+{
+ "_": "Pieces drawn again over the cats, so a cat can be in or behind them. match: how each piece's strokes start (their path data, from scenes.js); box: the area (stage units) the piece is cut from.",
+ "room": [
+  {"name": "armchair", "match": ["M920,850 V742", "M1185,850 V742", "M975,766 H1185 M975,808"], "box": [900, 700, 1260, 860]}
+ ],
+ "wall": [
+  {"name": "box", "match": ["M1196,450 v-66"], "box": [1170, 350, 1330, 462]}
+ ]
+}

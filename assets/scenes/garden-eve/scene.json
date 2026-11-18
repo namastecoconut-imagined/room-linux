@@ -1,0 +1,297 @@
+{
+ "scene": "garden",
+ "sky": "eve",
+ "total": 7.82,
+ "lineEnd": 8.05,
+ "fillLast": 8.42,
+ "tmax": 12.0,
+ "px": 2,
+ "sprites": [
+  {
+   "x": 722,
+   "y": 0,
+   "w": 594,
+   "h": 328,
+   "art": "s0.png",
+   "map": "s0.map.png",
+   "unstamped": 0,
+   "kind": "sway2",
+   "dur": 4.6,
+   "delay": 0,
+   "origin": [
+    1000,
+    190
+   ]
+  },
+  {
+   "x": 922,
+   "y": 179,
+   "w": 56,
+   "h": 153,
+   "art": "s1.png",
+   "map": "s1.map.png",
+   "unstamped": 4,
+   "kind": "sway",
+   "dur": 3.4,
+   "delay": 0,
+   "origin": [
+    950,
+    187
+   ]
+  },
+  {
+   "x": 77,
+   "y": 57,
+   "w": 26,
+   "h": 26,
+   "art": "s2.png",
+   "map": "s2.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": 0
+  },
+  {
+   "x": 348,
+   "y": 48,
+   "w": 24,
+   "h": 24,
+   "art": "s3.png",
+   "map": "s3.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": 0
+  },
+  {
+   "x": 408,
+   "y": 188,
+   "w": 24,
+   "h": 24,
+   "art": "s4.png",
+   "map": "s4.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": 0
+  },
+  {
+   "x": 587,
+   "y": 77,
+   "w": 26,
+   "h": 26,
+   "art": "s5.png",
+   "map": "s5.map.png",
+   "unstamped": 1,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": 0
+  },
+  {
+   "x": 688,
+   "y": 258,
+   "w": 24,
+   "h": 24,
+   "art": "s6.png",
+   "map": "s6.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": -1
+  },
+  {
+   "x": 118,
+   "y": 218,
+   "w": 24,
+   "h": 24,
+   "art": "s7.png",
+   "map": "s7.map.png",
+   "unstamped": 2,
+   "kind": "tw",
+   "dur": 3.2,
+   "delay": -1
+  },
+  {
+   "x": 441,
+   "y": 65,
+   "w": 163,
+   "h": 53,
+   "art": "s8.png",
+   "map": "s8.map.png",
+   "unstamped": 0,
+   "kind": "cloud",
+   "dur": 70,
+   "delay": -10
+  },
+  {
+   "x": 631,
+   "y": 325,
+   "w": 123,
+   "h": 43,
+   "art": "s9.png",
+   "map": "s9.map.png",
+   "unstamped": 0,
+   "kind": "cloud",
+   "dur": 70,
+   "delay": -40
+  },
+  {
+   "x": 1210,
+   "y": 552,
+   "w": 88,
+   "h": 82,
+   "art": "s10.png",
+   "map": "s10.map.png",
+   "unstamped": 0,
+   "kind": "sway2",
+   "dur": 4.6,
+   "delay": 0,
+   "origin": [
+    1252,
+    626
+   ]
+  },
+  {
+   "x": 574,
+   "y": 804,
+   "w": 36,
+   "h": 84,
+   "art": "s11.png",
+   "map": "s11.map.png",
+   "unstamped": 0,
+   "kind": "sway2",
+   "dur": 4.6,
+   "delay": -1.5,
+   "origin": [
+    592,
+    880
+   ]
+  },
+  {
+   "x": 678,
+   "y": 548,
+   "w": 24,
+   "h": 24,
+   "art": "s12.png",
+   "map": "s12.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 2,
+   "delay": 0
+  },
+  {
+   "x": 748,
+   "y": 458,
+   "w": 24,
+   "h": 24,
+   "art": "s13.png",
+   "map": "s13.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3,
+   "delay": -0.7
+  },
+  {
+   "x": 868,
+   "y": 578,
+   "w": 24,
+   "h": 24,
+   "art": "s14.png",
+   "map": "s14.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 4,
+   "delay": -1.4
+  },
+  {
+   "x": 998,
+   "y": 508,
+   "w": 24,
+   "h": 24,
+   "art": "s15.png",
+   "map": "s15.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 2,
+   "delay": -2.1
+  },
+  {
+   "x": 1108,
+   "y": 588,
+   "w": 24,
+   "h": 24,
+   "art": "s16.png",
+   "map": "s16.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 3,
+   "delay": -2.8
+  },
+  {
+   "x": 588,
+   "y": 688,
+   "w": 24,
+   "h": 24,
+   "art": "s17.png",
+   "map": "s17.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 4,
+   "delay": -3.5
+  },
+  {
+   "x": 808,
+   "y": 368,
+   "w": 24,
+   "h": 24,
+   "art": "s18.png",
+   "map": "s18.map.png",
+   "unstamped": 0,
+   "kind": "tw",
+   "dur": 2,
+   "delay": -4.2
+  },
+  {
+   "x": 0,
+   "y": 0,
+   "w": 120,
+   "h": 120,
+   "art": "s19.png",
+   "map": "s19.map.png",
+   "unstamped": 0,
+   "anchor": [
+    60,
+    60
+   ],
+   "kind": "path",
+   "dur": 12,
+   "delay": 6,
+   "path": "M820,240 c40,80 -50,150 0,230 c40,70 -40,130 -10,190",
+   "rotate": true,
+   "fade": {
+    "values": [
+     0,
+     0.8,
+     0.8,
+     0
+    ],
+    "times": [
+     0,
+     0.1,
+     0.85,
+     1
+    ]
+   }
+  }
+ ],
+ "front": [],
+ "base": {
+  "x": 0,
+  "y": 0,
+  "w": 1368,
+  "h": 912,
+  "art": "base.png",
+  "map": "base.map.png",
+  "unstamped": 9
+ }
+}

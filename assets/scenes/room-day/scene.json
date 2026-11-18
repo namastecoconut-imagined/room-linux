@@ -1,0 +1,120 @@
+{
+ "scene": "room",
+ "sky": "day",
+ "total": 7.882,
+ "lineEnd": 8.1,
+ "fillLast": 5.88,
+ "tmax": 12.0,
+ "px": 2,
+ "sprites": [
+  {
+   "x": 448,
+   "y": 128,
+   "w": 144,
+   "h": 144,
+   "art": "s0.png",
+   "map": "s0.map.png",
+   "unstamped": 0,
+   "kind": "spin",
+   "dur": 90,
+   "delay": 0,
+   "origin": [
+    520,
+    200
+   ]
+  },
+  {
+   "x": 222,
+   "y": 195,
+   "w": 122,
+   "h": 43,
+   "art": "s1.png",
+   "map": "s1.map.png",
+   "unstamped": 0,
+   "kind": "cloud",
+   "dur": 50,
+   "delay": 0
+  },
+  {
+   "x": 98,
+   "y": 54,
+   "w": 72,
+   "h": 506,
+   "art": "s2.png",
+   "map": "s2.map.png",
+   "unstamped": 0,
+   "kind": "curt",
+   "dur": 6,
+   "delay": 0,
+   "origin": [
+    134,
+    62
+   ]
+  },
+  {
+   "x": 642,
+   "y": 54,
+   "w": 50,
+   "h": 506,
+   "art": "s3.png",
+   "map": "s3.map.png",
+   "unstamped": 0,
+   "kind": "curt",
+   "dur": 6,
+   "delay": -2,
+   "origin": [
+    667,
+    62
+   ]
+  },
+  {
+   "x": 720,
+   "y": 592,
+   "w": 88,
+   "h": 82,
+   "art": "s4.png",
+   "map": "s4.map.png",
+   "unstamped": 0,
+   "kind": "sway2",
+   "dur": 4.6,
+   "delay": 0,
+   "origin": [
+    762,
+    666
+   ]
+  },
+  {
+   "x": 826,
+   "y": 662,
+   "w": 48,
+   "h": 28,
+   "art": "s5.png",
+   "map": "s5.map.png",
+   "unstamped": 0,
+   "kind": "swim",
+   "dur": 7,
+   "delay": 0
+  }
+ ],
+ "front": [
+  {
+   "x": 900,
+   "y": 700,
+   "w": 360,
+   "h": 160,
+   "art": "f0.png",
+   "map": "f0.map.png",
+   "unstamped": 1,
+   "name": "armchair"
+  }
+ ],
+ "base": {
+  "x": 0,
+  "y": 0,
+  "w": 1368,
+  "h": 912,
+  "art": "base.png",
+  "map": "base.map.png",
+  "unstamped": 14
+ }
+}

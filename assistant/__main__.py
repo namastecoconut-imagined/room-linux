@@ -47,6 +47,13 @@ class Assistant:
         self.ears = Listener(self.mic, Wake(a.get("wakeThreshold")), VAD())
         if a.get("endQuiet"):
             self.ears.END_QUIET = float(a["endQuiet"])
+        if a.get("smartTurn", True) is not False:          # (turn.py; false: the 1.4 s silence rule, as before)
+            try:
+                from .turn import Turn
+                self.ears.turn = Turn()
+                log("end of turn: Smart Turn v3.2")
+            except Exception as e:
+                log("end of turn: Smart Turn couldn't load — the silence rule instead:", repr(e))
         self.talking = False
         self.voice = Voice()
         # the echo canceller pauses while Room speaks unless "echoWhileSpeaking" (default on): with it working, Room's own

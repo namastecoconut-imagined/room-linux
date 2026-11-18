@@ -6,8 +6,9 @@ Built on step 3 and 4's measurements on this Surface:
     "Surface Mic" was no better for the wake word, and worse for every speech-to-text option);
   • Sarvam, sent the whole request once you've finished (7.1 % word errors, all the Hinglish right, 0.4 s) — not
     streamed: its live guesses were the garbage on screen last time;
-  • you've finished when, after you've started talking, there's END_QUIET of silence (Silero VAD); before you
-    start, it waits up to ONSET for you (a pause after "Alexa" is fine).
+  • you've finished when you pause and Smart Turn (turn.py) hears a finished sentence — asked after CHECKS of silence;
+    an unfinished one ("set a timer for…") gets up to PATIENT. Without the model: END_QUIET of silence (Silero VAD).
+    Before you start, it waits up to ONSET for you (a pause after "Alexa" is fine).
 
 Wake word: Room's own "Alexa" (assistant/models/alexa.onnx, LiveKit WakeWord); openWakeWord's stock "alexa" only
 if that's missing.
@@ -334,12 +335,16 @@ class Listener:
     STILL_SPEECH = 0.35     # once you've started, a frame this likely to be speech still counts as you talking (Silero's
                             # own advice: start at 0.5, carry on down to ~0.35) — soft or trailing words between
                             # louder ones no longer read as silence
+    CHECKS = (0.24, 0.72, 1.36)   # Smart Turn is asked at these points of a pause (one 80 ms frame each, ~40 ms of work)
+    DONE = 0.5              # …and this sure that you've finished ends the request
+    PATIENT = 2.5           # it heard you trail off: at most this much silence before it ends anyway
     MAX = 15.0
     PRE = 0.15              # audio kept from just before the request starts (not the "Alexa" before it)
     TAIL = 0.25             # the end of "Alexa" itself is still in the first moment: not the start of a request
 
     def __init__(self, mic: Mic, wake: Wake, vad: VAD):
         self.mic, self.wake, self.vad = mic, wake, vad
+        self.turn = None                    # Smart Turn (turn.py), set by the assistant; None: the END_QUIET rule
         self.last_wake = 0.0
         self.tap = threading.Event()        # a tap on the panel: listen now, no wake word needed
         self.abort = threading.Event()      # stop listening to this request (a tap to cancel)
@@ -394,6 +399,7 @@ class Listener:
         if self.on_level:
             self.on_level(0.0)
         frames, started, quiet, t0 = [], None, 0.0, time.time()
+        asked, said = set(), []             # this pause's Smart Turn checks; every check this request (for the log)
         while True:
             if self.abort.is_set():
                 return None, {"onset": None, "took": time.time() - t0, "aborted": True}
@@ -410,13 +416,33 @@ class Listener:
                 if started is None:
                     started = max(0.0, t - FRAME / RATE - self.PRE)
                 quiet = 0.0
+                asked = set()
             elif started is not None:
                 quiet += FRAME / RATE
             if started is None and t > onset:
                 if self.on_level:
                     self.on_level(0.0)
                 return None, {"onset": None, "took": time.time() - t0}
-            if started is not None and (quiet >= self.END_QUIET or t > self.MAX):
+            finished = False
+            if started is not None and self.turn is not None:
+                due = [c for c in self.CHECKS if quiet >= c - 1e-6 and c not in asked]
+                if due:
+                    asked.update(due)
+                    try:
+                        sure, took = self.turn.done(np.concatenate(frames)[int(started * RATE):])
+                        said.append(f"{quiet:.2f}s→{sure:.2f}")
+                        finished = sure >= self.DONE
+                        if took > 0.15:
+                            log(f"end of turn: the model took {took:.2f} s")
+                    except Exception as e:
+                        log("end of turn: Smart Turn failed — back to the silence rule:", repr(e))
+                        self.turn = None
+                finished = finished or quiet >= self.PATIENT
+            elif started is not None:
+                finished = quiet >= self.END_QUIET
+            if started is not None and (finished or t > self.MAX):
+                if said:
+                    log(f"end of turn after {quiet:.2f} s of pause (Smart Turn: {' · '.join(said)})")
                 if self.on_level:
                     self.on_level(0.0)
                 a = np.concatenate(frames)[int(started * RATE):]

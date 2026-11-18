@@ -1,7 +1,8 @@
 # Models (shipped with Room — nothing to download)
 
 - `alexa.onnx` — Room's wake word (below)
-- `silero_vad.onnx` — when you've finished talking (Silero VAD)
+- `silero_vad.onnx` — speech or silence, frame by frame (Silero VAD)
+- `smart-turn-v3.2-cpu.onnx` — finished talking, or just pausing? (Smart Turn v3.2 by Daily, from pipecat-ai 1.16.0, BSD-2-Clause; assistant/turn.py)
 - `alexa_v0.1.onnx`, `melspectrogram.onnx`, `embedding_model.onnx` — openWakeWord's stock "alexa", only a fallback
 
 ## The wake word

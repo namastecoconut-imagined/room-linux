@@ -84,9 +84,13 @@ class Lights(QObject):
         out = []
         for i, d in enumerate(room.get("devices", [])):
             b = self.wiz.bulbs.get(norm_mac(d.get("mac", ""))) if d.get("type") == "wiz" else None
+            on = bool(b and b.reachable and b.on)
             out.append({"id": norm_mac(d.get("mac", "")) or str(i), "name": d.get("name") or f"Lamp {i + 1}",
-                        "reachable": bool(b and b.reachable), "on": bool(b and b.reachable and b.on),
-                        "level": b.dimming if b else 0})
+                        "reachable": bool(b and b.reachable), "on": on,
+                        "level": b.dimming if b else 0,
+                        # its own light (the Room screen's drawing lights each lamp in it)
+                        "kelvin": (b.temp if b and b.temp else 2700), "rgb": list(b.rgb) if b and b.rgb else [],
+                        "glow": glow_of(b.temp if b else None, b.rgb if b else None)})
         return out
 
     def lamps_now(self) -> list[dict]:

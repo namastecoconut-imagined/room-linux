@@ -578,6 +578,15 @@ class Room(QObject):
         else:
             self.lights.set_lamps([mac], on=True, level=level)
 
+    @Slot(str, int)
+    def setLampKelvin(self, mac, k):
+        """One lamp's warmth (the Room screen's drawing: a lamp picked in it)."""
+        self.lights.set_lamps([mac], on=True, kelvin=k)
+
+    @Slot(str, int, int, int)
+    def setLampColour(self, mac, r, g, b):
+        self.lights.set_lamps([mac], on=True, rgb=[r, g, b])
+
     @Slot(str)
     def roomOff(self, name):
         """A room's lights off (its brightness line dragged right down)."""

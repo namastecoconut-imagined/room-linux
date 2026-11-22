@@ -34,7 +34,7 @@ Window {
 
     // the screen you're on while awake, and whether standby is showing over it
     property string screen: startScreen === "catshome" || startScreen === "catsdayhome" ? "home" : startScreen === "clockedit" ? "clock" : startScreen === "setconfirm" || startScreen.indexOf("setw") === 0 || startScreen.indexOf("setj") === 0 || startScreen.indexOf("setmore") === 0 ? "settings" : startScreen.indexOf("music") === 0 && startScreen !== "musicstandby" ? "music" : ["music", "room", "clock", "weather", "reminders", "settings"].indexOf(startScreen) >= 0 ? startScreen : startScreen.indexOf("roommap") === 0 ? "room" : "home"
-    property string roomName: startScreen.indexOf("roommap") === 0 ? "Aviral" : room.rooms.length ? room.rooms[0].name : ""
+    property string roomName: startScreen.indexOf("roommap") === 0 ? "Aviral's bedroom" : room.rooms.length ? room.rooms[0].name : ""
     property bool standbyOn: startScreen === "standby" || startScreen === "musicstandby" || startScreen === "catsstandby" || startScreen === "catsdaystandby" || startScreen.indexOf("sb") === 0
     property real lastTouch: standbyOn ? 0 : Date.now() / 1000
     readonly property bool playing: room.music.exists && room.music.playing

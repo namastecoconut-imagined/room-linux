@@ -1,13 +1,14 @@
-// Aviral's room (from his photos and his sketch, 23 Nov): seen from the doorway — the desk wall ahead, the bed against
+// Aviral's bedroom (from his photos and his sketch, 23 Nov): seen from the doorway — the desk wall ahead, the bed against
 // the window wall on the right, the carpet and the lounge chair at the far left, the bench by the way in.
 // Five WiZ lamps; match: words in their names in config.json (lights.py), so each drawn lamp is tied to its bulb.
+// Left and right are as you face the bed (the left one is by the wardrobe, on the desk side).
 setup({ S: 0.72, OX: 1095, OY: 306, W: 620, D: 360, H: 290 });
 const L = [
- {n:1, name:'Bedside · desk', at:[20,80,78],    match:['bedside 1', 'bedside left', 'left bedside', 'bedside']},
- {n:2, name:'Bedside · door', at:[20,297,78],   match:['bedside 2', 'bedside right', 'right bedside', 'bedside']},
- {n:3, name:'Desk lamp',      at:[452,36,118],  match:['desk', 'uplight']},
- {n:4, name:'Floor lamp',     at:[578,126,148], match:['lounge', 'chair', 'floor', 'reading']},
- {n:5, name:'Bench lamp',     at:[304,348,112], match:['bench', 'ceiling', 'table']},
+ {n:1, name:'Bedside left',  at:[20,80,78],    match:['bedside lamp left', 'bedside left', 'left']},
+ {n:2, name:'Bedside right', at:[20,297,78],   match:['bedside lamp right', 'bedside right', 'right']},
+ {n:3, name:'Desk lamp',     at:[452,36,118],  match:['desk', 'uplight']},
+ {n:4, name:'Lounge chair',  at:[578,126,148], match:['lounge', 'chair', 'floor']},
+ {n:5, name:'Bench lamp',    at:[304,348,112], match:['bench']},
 ];
 // floor, the two real walls, the carpet
 add(-100, () => {

@@ -11,19 +11,34 @@ Item {
     width: 1368; height: 912
     property var r: null                          // the room (room.rooms[…])
     readonly property string name: r ? r.name : ""
-    readonly property bool on: r ? r.on > 0 : false
-    readonly property int level: r && r.on > 0 ? r.level : 0
+    // a room with a drawing (RoomMap: tools/rooms): the drawing instead of the big level and the lamp list, and a lamp
+    // picked in it takes the controls below (brightness, warmth, colour) for itself alone
+    readonly property bool mapped: rmap.has
+    property int pick: 0
+    property int shownPick: 0                      // (the name stays while it fades out)
+    onPickChanged: if (pick > 0) shownPick = pick
+    onNameChanged: pick = startScreen.indexOf("roommap-") === 0 ? Number(startScreen.slice(8)) : 0     // (checks: roommap-<n>)
+    // (checks: roommapdemo — picks lamp 1, then 5, then the whole room again)
+    Timer {
+        running: startScreen === "roommapdemo"; interval: 2200; repeat: true
+        property int i: 0
+        onTriggered: { rv.pick = [1, 5, 0][i % 3]; i++ }
+    }
+    readonly property var lamp: mapped && pick > 0 ? rmap.bulb(pick) : null
+    readonly property bool on: lamp ? rmap.lit(lamp) : r ? r.on > 0 : false
+    readonly property int level: lamp ? (rmap.lit(lamp) ? lamp.level : 0) : r && r.on > 0 ? r.level : 0
 
     readonly property var ks: [["Candle", 2200, "#ffab5e"], ["Warm", 2700, "#ffc98f"], ["Neutral", 4000, "#fff1dc"], ["Daylight", 6500, "#dbe8ff"]]
     readonly property var cs: ["#ff6b4a", "#ffa53a", "#ffd84a", "#ff5fa2", "#a46bff", "#4a8dff", "#3ad6a0"]
-    readonly property bool coloured: r && r.rgb && r.rgb.length === 3
+    readonly property var src: lamp ? lamp : r                    // what the controls show: the lamp picked, or the room
+    readonly property bool coloured: src && src.rgb && src.rgb.length === 3
     readonly property var kn: {
-        var k = r && r.kelvin ? r.kelvin : 2700, best = ks[0]
+        var k = src && src.kelvin ? src.kelvin : 2700, best = ks[0]
         for (var i = 1; i < ks.length; i++) if (Math.abs(ks[i][1] - k) < Math.abs(best[1] - k)) best = ks[i]
         return best
     }
     // the room's light: its colour, or its warmth
-    readonly property color light: coloured ? Theme.rgb(r.rgb) : kn[2]
+    readonly property color light: coloured ? Theme.rgb(src.rgb) : kn[2]
     function same(hex, rgb) {
         var c = Qt.color(hex)
         return rgb && Math.abs(c.r * 255 - rgb[0]) < 3 && Math.abs(c.g * 255 - rgb[1]) < 3 && Math.abs(c.b * 255 - rgb[2]) < 3
@@ -39,7 +54,17 @@ Item {
                   + " · " + rv.r.total + (rv.r.total === 1 ? " lamp, " : " lamps, ") + rv.r.on + " on"
         }
     }
+    RoomMap { id: rmap; r: rv.r; sel: rv.pick; onPicked: (n) => rv.pick = rv.pick === n ? 0 : n }
+    // the lamp picked: its name (to read: it's in the band the screen doesn't feel)
     Row {
+        x: 44; y: 452; spacing: 14
+        opacity: rv.lamp ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.fadeMs } }
+        Mono { anchors.baseline: ln.baseline; text: "Lamp " + rv.shownPick; color: Theme.w62 }
+        T { id: ln; text: rv.shownPick > 0 && rmap.has ? rmap.map.lamps[rv.shownPick - 1].name : ""; font.pixelSize: 34; color: "white" }
+    }
+    Row {
+        visible: !rv.mapped
         anchors.right: parent.right; anchors.rightMargin: 44; y: 110
         Serif {
             id: big
@@ -106,7 +131,10 @@ Item {
             onReleased: { send.stop(); rv.setLevel(Math.round(bar.local * 100)) }
         }
     }
-    function setLevel(v) { if (v <= 0) room.roomOff(rv.name); else room.setRoomLevel(rv.name, v) }
+    function setLevel(v) {
+        if (rv.lamp) room.setLampLevel(rv.lamp.id, v)
+        else if (v <= 0) room.roomOff(rv.name); else room.setRoomLevel(rv.name, v)
+    }
 
     // ---------------------------------------------------------------- warmth
     Mono { x: 44; y: 620; text: "Warmth"; color: Theme.w62 }
@@ -117,7 +145,7 @@ Item {
             Press {
                 readonly property bool sel: !rv.coloured && rv.kn[1] === modelData[1]
                 width: lab.implicitWidth + 32; height: lab.implicitHeight + 24; pressScale: 0.95
-                onTapped: room.setRoomKelvin(rv.name, modelData[1])
+                onTapped: rv.lamp ? room.setLampKelvin(rv.lamp.id, modelData[1]) : room.setRoomKelvin(rv.name, modelData[1])
                 Rectangle {
                     anchors.fill: parent; radius: 8
                     color: parent.sel ? modelData[2] : "transparent"
@@ -136,8 +164,11 @@ Item {
             model: rv.cs
             Press {
                 width: 44; height: 44; pressScale: 0.94
-                readonly property bool sel: rv.coloured && rv.same(modelData, rv.r.rgb)
-                onTapped: { var c = Qt.color(modelData); room.setRoomColour(rv.name, Math.round(c.r * 255), Math.round(c.g * 255), Math.round(c.b * 255)) }
+                readonly property bool sel: rv.coloured && rv.same(modelData, rv.src.rgb)
+                onTapped: {
+                    var c = Qt.color(modelData), cr = Math.round(c.r * 255), cg = Math.round(c.g * 255), cb = Math.round(c.b * 255)
+                    if (rv.lamp) room.setLampColour(rv.lamp.id, cr, cg, cb); else room.setRoomColour(rv.name, cr, cg, cb)
+                }
                 Rectangle { anchors.centerIn: parent; visible: parent.sel; width: 54; height: 54; radius: 27; color: "white" }
                 Rectangle { anchors.centerIn: parent; visible: parent.sel; width: 50; height: 50; radius: 25; color: "black" }
                 Rectangle { anchors.fill: parent; radius: 22; color: modelData }
@@ -148,6 +179,7 @@ Item {
     // ---------------------------------------------------------------- the room's scenes
     Row {
         x: 44; y: 832; spacing: 30
+        visible: !rv.lamp
         Repeater {
             model: ["Relax", "Read", "Movie", "Night"]
             Press {
@@ -159,8 +191,24 @@ Item {
         }
     }
 
+    // a lamp picked: back to the whole room, or that lamp on or off
+    Row {
+        x: 44; y: 832; spacing: 30
+        visible: rv.lamp !== null
+        Repeater {
+            model: ["‹ Whole room", rv.on ? "Turn off" : "Turn on"]
+            Press {
+                width: wl.implicitWidth; height: wl.implicitHeight + 5; pressScale: 0.94
+                onTapped: index === 0 ? rv.pick = 0 : room.toggleLamp(rv.lamp.id)
+                Mono { id: wl; text: modelData }
+                Rectangle { y: parent.height - 1; width: parent.width; height: 1; color: Qt.rgba(1, 1, 1, 0.45) }
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- every lamp
     Item {
+        visible: !rv.mapped
         x: 744; y: 524; width: 580; height: 20
         Mono { text: "Lamps"; color: Theme.w62 }
         Mono { anchors.right: parent.right; text: "Tap to switch · drag to dim"; color: Theme.w62 }
@@ -168,6 +216,12 @@ Item {
     // where the cats can be: the big percentage's tops, the brightness line (clear of its label), each lamp's line
     // (lying down only: the rows are close), and the bottom edge under the lamps
     function catSpots(sc, out) {
+        if (rv.mapped) {                             // a drawing: the brightness line, and the bottom edge
+            var c = bar.mapToItem(sc, 260, 20), d = bar.mapToItem(sc, bar.width - 20, 20)
+            out.push({ id: "bright", x0: c.x, x1: d.x, y: c.y })
+            out.push({ id: "floor", x0: 110, x1: 640, floor: true })
+            return
+        }
         if (Math.round(big.shown) > 0) sc.catDigits(big, "big", true, out)
         var a = bar.mapToItem(sc, 260, 20), b = bar.mapToItem(sc, bar.width - 20, 20)
         out.push({ id: "bright", x0: a.x, x1: b.x, y: a.y })
@@ -180,7 +234,7 @@ Item {
     }
     Repeater {
         id: lampRep
-        model: rv.r ? rv.r.lamps : []
+        model: rv.r && !rv.mapped ? rv.r.lamps : []
         Item {
             id: lamp
             readonly property real gap: Math.min(62, (888 - 560) / Math.max(1, rv.r.lamps.length))

@@ -3,7 +3,7 @@ import QtQuick.Shapes
 
 // The song's words as a lyric sheet (music standby, the player's cover, Home's cover): its lines set small and quiet
 // in the serif, the one being sung bigger and bright, the sheet gliding up a line as the song moves on — and the
-// line's last words (its hook, room/lyrics.py) written across it big in script, in a colour from the cover, with a
+// line's last words (its hook, room/lyrics.py) written in script in their place, in a colour from the cover, with a
 // pen flourish under them. Aviral's references: a typeset lyric sheet with the title scrawled over it; "enjoy every
 // moment" in red brush script, underlined.
 //
@@ -23,6 +23,12 @@ Item {
     property real lh: 78
     property real cur: 1.75
     property real scriptPx: 300
+    // the hook: "inline" — written in place of the line's last words, a little bigger than the line (chosen: nothing
+    // overlaps); "over" — big across the line, as first designed (it covered the words); "ghost" — that, faint and
+    // behind the lines
+    property string hookMode: "inline"
+    readonly property bool inl: hookMode === "inline"
+    readonly property real hookPx: inl ? fs * cur * 1.9 : scriptPx
 
     // ---------------------------------------------------------------- where the song is
     readonly property int idx: {
@@ -50,7 +56,8 @@ Item {
             y: ly.curY + d * ly.lh - height / 2
             transformOrigin: Item.Left
             scale: 1 + (ly.cur - 1) * Math.max(0, 1 - ad)
-            text: modelData.text
+            readonly property bool cut: ly.inl && index === ly.hookIdx && ly.hookText !== ""
+            text: cut ? modelData.text.slice(0, modelData.text.lastIndexOf(ly.hookText)).replace(/\s+$/, "") : modelData.text
             font.family: "Instrument Serif"; font.pixelSize: ly.fs
             color: "white"
             renderType: Text.QtRendering
@@ -92,20 +99,25 @@ Item {
     // where the hook's words are in the sung line (the line's scale included)
     TextMetrics { id: pre; font.family: "Instrument Serif"; font.pixelSize: ly.fs
                   text: ly.hookIdx >= 0 && ly.hookIdx < ly.lines.length ? ly.lines[ly.hookIdx].text.slice(0, ly.lines[ly.hookIdx].text.lastIndexOf(ly.hookText)) : "" }
-    FontMetrics { id: sfm; font.family: "Mrs Saint Delafield"; font.pixelSize: ly.scriptPx }
+    FontMetrics { id: sfm; font.family: "Mrs Saint Delafield"; font.pixelSize: ly.hookPx }
+    FontMetrics { id: rfm; font.family: "Instrument Serif"; font.pixelSize: ly.fs }
     Item {
         id: hook
         visible: ly.ho > 0.01 && ly.hookText !== ""
-        opacity: ly.ho
-        readonly property real pad: ly.scriptPx * 0.35
-        // its box: like a web page's line-height 1 (the design), the hook's left a little before the words it's on
-        // (kept on the screen: a long hook late in a long line moves left, over the line still)
-        readonly property real boxX: Math.max(ly.sheetX - ly.scriptPx * 0.3,
-                                              Math.min(ly.sheetX + pre.advanceWidth * ly.cur - ly.scriptPx * 0.3, ly.width - 24 - hw.implicitWidth - ly.scriptPx * 0.1))
-        readonly property real boxY: ly.curY - ly.fs * ly.cur * 0.6 - ly.scriptPx * 0.42
+        opacity: ly.ho * (ly.hookMode === "ghost" ? 0.3 : 1)
+        z: ly.hookMode === "ghost" ? -1 : 0
+        readonly property real pad: ly.hookPx * 0.35
+        // over / ghost: its box like a web page's line-height 1 (the design), its left a little before the words it's
+        // on (kept on the screen: a long hook late in a long line moves left, over the line still)
+        readonly property real boxX: ly.inl ? ly.sheetX + pre.advanceWidth * ly.cur + ly.fs * ly.cur * 0.05
+                                   : Math.max(ly.sheetX - ly.hookPx * 0.3,
+                                              Math.min(ly.sheetX + pre.advanceWidth * ly.cur - ly.hookPx * 0.3, ly.width - 24 - hw.implicitWidth - ly.hookPx * 0.1))
+        // inline: on the sung line's baseline
+        readonly property real baseY: ly.curY + (rfm.ascent - rfm.height / 2) * ly.cur
+        readonly property real boxY: ly.inl ? baseY - sfm.ascent : ly.curY - ly.fs * ly.cur * 0.6 - ly.hookPx * 0.42
         x: boxX - pad; y: boxY - pad
-        width: hw.implicitWidth + 2 * pad + ly.scriptPx * 0.1; height: ly.scriptPx + 2 * pad
-        transform: Rotation { origin.x: hook.pad; origin.y: hook.pad + ly.scriptPx * 0.7; angle: -7 }
+        width: hw.implicitWidth + 2 * pad + ly.hookPx * 0.1; height: (ly.inl ? sfm.height : ly.hookPx) + 2 * pad
+        transform: Rotation { origin.x: hook.pad; origin.y: hook.pad + ly.hookPx * 0.7; angle: ly.inl ? -3 : -7 }
         // the words
         Item {
             anchors.fill: parent
@@ -118,9 +130,9 @@ Item {
             }
             Text {
                 id: hw
-                x: hook.pad; y: hook.pad + (ly.scriptPx - sfm.height) / 2
+                x: hook.pad; y: hook.pad + (ly.inl ? 0 : (ly.hookPx - sfm.height) / 2)
                 text: ly.hookText
-                font.family: "Mrs Saint Delafield"; font.pixelSize: ly.scriptPx
+                font.family: "Mrs Saint Delafield"; font.pixelSize: ly.hookPx
                 color: ly.accent
                 renderType: Text.QtRendering
             }
@@ -141,11 +153,11 @@ Item {
                 anchors.fill: parent
                 preferredRendererType: Shape.CurveRenderer
                 readonly property real x0: hook.pad + hw.implicitWidth * 0.1
-                readonly property real x1: hook.pad + hw.implicitWidth + ly.scriptPx * 0.05
-                readonly property real yb: hook.pad + ly.scriptPx * 0.92
-                readonly property real k: ly.scriptPx * 0.22
+                readonly property real x1: hook.pad + hw.implicitWidth + ly.hookPx * 0.05
+                readonly property real yb: ly.inl ? hook.pad + sfm.ascent + ly.hookPx * 0.16 : hook.pad + ly.hookPx * 0.92
+                readonly property real k: ly.hookPx * 0.22
                 ShapePath {
-                    strokeColor: ly.accent; strokeWidth: Math.max(1.6, ly.scriptPx / 52); fillColor: "transparent"
+                    strokeColor: ly.accent; strokeWidth: Math.max(1.6, ly.hookPx / 52); fillColor: "transparent"
                     capStyle: ShapePath.RoundCap
                     startX: fl.x0; startY: fl.yb + fl.k * 0.2
                     PathCubic {

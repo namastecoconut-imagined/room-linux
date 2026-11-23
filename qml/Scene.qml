@@ -479,6 +479,9 @@ Item {
             Art {
                 anchors.fill: parent; radius: 14
                 source: sc.sArt; rgb: sc.music.rgb || [201, 185, 163]; rgb2: sc.music.rgb2 || [44, 40, 34]
+                // under the lyrics: the cover blurred right down and a little darker, so the words read on any cover
+                layer.enabled: coverLyr.opacity > 0.01
+                layer.effect: MultiEffect { blurEnabled: true; blur: coverLyr.opacity; blurMax: 64; brightness: -0.1 * coverLyr.opacity }
             }
             // the lyric sheet over the cover (laid out for the player's 674 px cover; Home's is the same, smaller),
             // its lower part darkened a little so the words read on any cover
@@ -492,7 +495,7 @@ Item {
                 Rectangle {
                     anchors.fill: parent; radius: 14
                     gradient: Gradient {
-                        GradientStop { position: 0.3; color: Qt.rgba(14 / 255, 6 / 255, 22 / 255, 0) }
+                        GradientStop { position: 0.0; color: Qt.rgba(14 / 255, 6 / 255, 22 / 255, 0.12) }
                         GradientStop { position: 1.0; color: Qt.rgba(14 / 255, 6 / 255, 22 / 255, 0.62) }
                     }
                 }

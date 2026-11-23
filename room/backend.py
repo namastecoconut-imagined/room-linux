@@ -388,8 +388,9 @@ class Room(QObject):
     def _want_lyrics(self):
         """A song change: look its words up once it's settled (2.5 s on). AirPlay sends the new title a moment before
         the new song's length — asked at once, it went with the last song's length and matched nothing — and
-        skipping through songs shouldn't ask about each one."""
-        if self.demo or not self._panel_value("lyrics"):
+        skipping through songs shouldn't ask about each one. Looked up with lyrics off too: the Lyrics switch shows
+        only for a song that has them, so with lookups stopped it never came back to turn them on again."""
+        if self.demo:
             return
         if not hasattr(self, "_lyr_wait"):
             self._lyr_wait = QTimer(self); self._lyr_wait.setSingleShot(True); self._lyr_wait.setInterval(2500)

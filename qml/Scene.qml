@@ -82,6 +82,12 @@ Item {
     readonly property string songKey: exists ? (music.title || "") + "|" + (music.artist || "") : ""
     property string sTitle: ""
     property string sArtist: ""
+    // with lyrics up, their label names the song (plain title · main artist — no "(feat. …)", "(from …)" or every
+    // artist), so the card beside them on Home and music standby shows the album instead of saying it again
+    readonly property string sTitleShort: (sTitle.replace(/\s*[\(\[][^\)\]]*[\)\]]/g, "").split(/\s+-\s+/)[0].trim()) || sTitle
+    readonly property string sArtistMain: (sArtist.split(/\s*(?:,|&|\band\b|\bx\b|\bfeat\.?|\bft\.?|\bwith\b)\s*/i)[0].trim()) || sArtist
+    readonly property string lyrLabel: (sTitleShort + " \u00b7 " + sArtistMain).toUpperCase()
+    readonly property bool albumCard: lyrShown && (sV || hV)
     property string sAlbum: ""
     property string sArt: ""
     property real kCover: 1
@@ -529,7 +535,7 @@ Item {
                         transformOrigin: Item.TopLeft; scale: parent.width / 674
                         lines: coverLyr.visible ? sc.lyr.lines : []
                         pos: sc.pos - (room.lyricsLag || 0); ink: sc.lyrInkStrong; big: false
-                        label: (sc.sTitle + " · " + sc.sArtist).toUpperCase()
+                        label: sc.lyrLabel
                     }
                 }
             }
@@ -578,8 +584,8 @@ Item {
             id: tc
             width: parent.width
             // 30 px on 36 px lines (line-height 1.2), the type centred in each line as the design has it
-            T { width: parent.width; height: 36; verticalAlignment: Text.AlignVCenter; text: sc.live || sc.sV ? sc.sTitle : "Nothing playing"; font.pixelSize: 30; color: "white" }
-            T { width: parent.width; height: 36; verticalAlignment: Text.AlignVCenter; text: sc.live || sc.sV ? sc.sArtist : "Pick up where you left off"; font.pixelSize: 30; color: Theme.w62 }
+            T { width: parent.width; height: 36; verticalAlignment: Text.AlignVCenter; text: sc.albumCard ? (sc.sAlbum || sc.sTitle) : sc.live || sc.sV ? sc.sTitle : "Nothing playing"; font.pixelSize: 30; color: "white" }
+            T { width: parent.width; height: 36; verticalAlignment: Text.AlignVCenter; text: sc.albumCard ? "" : sc.live || sc.sV ? sc.sArtist : "Pick up where you left off"; font.pixelSize: 30; color: Theme.w62 }
         }
     }
     // Home: an arrow beside the title that opens the player. The cover above sits where the screen doesn't answer
@@ -1097,7 +1103,7 @@ Item {
             anchors.fill: parent
             lines: sbLyr.visible ? sc.lyr.lines : []
             pos: sc.pos - (room.lyricsLag || 0); ink: sc.lyrInkStrong; big: true
-            label: (sc.sTitle + " · " + sc.sArtist).toUpperCase()
+            label: sc.lyrLabel
         }
     }
     // the Lyrics switch on music standby, at the end of the song's title (a tap there turns them on or off without

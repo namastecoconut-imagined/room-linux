@@ -155,6 +155,24 @@ Item {
         if (c.hslHue < 0 || c.hslSaturation < 0.12) return "#f4eee6"
         return Qt.hsla(c.hslHue, Math.min(1, c.hslSaturation * 1.1 + 0.2), 0.8, 1)
     }
+    // the script behind the lyrics (LyricsBackdrop): of the cover's own colours, the one that stands out most from
+    // the background it's drawn on (a hue far from the field's base, and colourful), made strong — as the reference's red
+    // on its pale page. (The cover's single most colourful one was often the background's own: purple on purple.)
+    readonly property color lyrInkStrong: {
+        var cols = (field.cols || []).slice(), b = field.base
+        if (music.rgb && music.rgb.length === 3) cols.push(music.rgb)
+        var base = b && b.length === 3 ? Qt.rgba(b[0] / 255, b[1] / 255, b[2] / 255, 1) : Qt.rgba(0.3, 0.15, 0.4, 1)
+        var bh = base.hslHue < 0 ? 0 : base.hslHue, best = null, score = -1
+        cols.forEach(function (a) {
+            var c = Qt.rgba(a[0] / 255, a[1] / 255, a[2] / 255, 1)
+            if (c.hslHue < 0 || c.hslSaturation < 0.15) return
+            var dh = Math.abs(c.hslHue - bh); dh = Math.min(dh, 1 - dh)          // 0 … 0.5 round the colour wheel
+            var sc_ = dh * 2 * (0.4 + c.hslSaturation)
+            if (sc_ > score) { score = sc_; best = c }
+        })
+        if (!best || score < 0.25) return "#ff6a5c"                            // nothing stands out: the reference's red
+        return Qt.hsla(best.hslHue, Math.min(1, best.hslSaturation * 1.1 + 0.3), 0.62, 1)
+    }
     function lyrToggle() { room.setPanel("lyrics", !lyrOn) }
     // Lyrics on or off: the word, white and underlined by hand in the hook's colour while on, grey while off
     component LyrSwitch: Tap {
@@ -501,12 +519,12 @@ Item {
                 }
                 Item {
                     anchors.fill: parent; clip: true
-                    Lyrics {
+                    LyricsBackdrop {
                         width: 674; height: 674
                         transformOrigin: Item.TopLeft; scale: parent.width / 674
                         lines: coverLyr.visible ? sc.lyr.lines : []
-                        pos: sc.pos; accent: sc.lyrInk
-                        sheetX: 44; curY: 150; fs: 44; lh: 60; cur: 1; wrap: true; gap: 18; ahead: 5; behind: 1; margin: 40
+                        pos: sc.pos; ink: sc.lyrInkStrong; big: false
+                        label: (sc.sTitle + " · " + sc.sArtist).toUpperCase()
                     }
                 }
             }
@@ -1070,11 +1088,11 @@ Item {
         order: 22 + sc.rooms.length
         x: 0; y: 0; width: 1368; height: 912
         opacity: (sc.sV && sc.m && sc.lyrShown ? sc.kWords : 0) * sc.hk
-        Lyrics {
+        LyricsBackdrop {
             anchors.fill: parent
             lines: sbLyr.visible ? sc.lyr.lines : []
-            pos: sc.pos; accent: sc.lyrInk
-            sheetX: 200; curY: 345; fs: 34; lh: 78; cur: 1.75
+            pos: sc.pos; ink: sc.lyrInkStrong; big: true
+            label: (sc.sTitle + " · " + sc.sArtist).toUpperCase()
         }
     }
     // the Lyrics switch on music standby, at the end of the song's title (a tap there turns them on or off without

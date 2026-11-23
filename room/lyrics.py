@@ -21,6 +21,7 @@ AGENT = "Room panel v1.0 (https://github.com/namastecoconut-imagined/room-linux)
 DIR = STATE_DIR / "lyrics"
 RETRY_NONE = 3 * 86400           # a song LRCLIB didn't have: ask again after this
 SMALL = {"and", "the", "a", "an", "of", "to", "in", "on", "at", "but", "or", "so"}
+ASKING = 2                       # how songs are looked up (a miss saved by an older way is asked again)
 RETRY_FAIL = 120                 # no answer at all (offline): try again after this
 
 
@@ -84,59 +85,77 @@ class Lyrics(QObject):
         self.key, self.lines, self.state = key, [], "looking"
         self.changed.emit()
         saved = self._read(key)
-        if saved is not None and (saved.get("lines") or time.time() - saved.get("at", 0) < saved.get("retry", RETRY_NONE)):
+        if saved is not None and (saved.get("lines") or (saved.get("v") == ASKING
+                                                         and time.time() - saved.get("at", 0) < saved.get("retry", RETRY_NONE))):
             self._use(key, saved.get("lines") or [], cached=True)
             return
         self._ask(key, title, artist, album, duration)
 
     # ---------------------------------------------------------------- LRCLIB
+    # Asked in turn until one has timed lyrics: exactly as playing (title, artist, album, length); the plain title
+    # and the main artist (Spotify says "Jimmy Cooks (feat. 21 Savage)" by "Drake, 21 Savage", AirPlay can say
+    # "Drake & 21 Savage"); a search by those two; a free search with both. A search answer is long for a famous
+    # song (hundreds of versions), so the answers get time.
     def _ask(self, key, title, artist, album, duration):
         self._asking = key
         self._args = (key, title, artist, album, duration)
-        hdr = {"User-Agent": AGENT}
-        def searched(status, data):
-            if status != 200:
-                return self._done(key, None, status)
-            try:
-                found = json.loads(data)
-            except Exception:
-                found = []
-            best = None
-            for f in found if isinstance(found, list) else []:
-                if not f.get("syncedLyrics"):
-                    continue
-                if duration and f.get("duration") and abs(f["duration"] - duration) > 4:
-                    continue
-                best = f
-                break
-            self._done(key, best, status)
-        def got(status, data):
+        plain = re.split(r"\s+-\s+", re.sub(r"\s*[\(\[](feat|with|ft)\.?[^\)\]]*[\)\]]", "", title, flags=re.I))[0].strip() or title
+        main = re.split(r"\s*(?:,|&|\band\b|\bx\b|\bfeat\.?|\bft\.?|\bwith\b)\s*", artist, flags=re.I)[0].strip() or artist
+        dur = int(round(duration)) if duration and 1 <= duration <= 3600 else 0
+        steps = [("get", {"track_name": title, "artist_name": artist, "album_name": album, "duration": dur}),
+                 ("get", {"track_name": plain, "artist_name": main, "duration": dur}),
+                 ("search", {"track_name": plain, "artist_name": main}),
+                 ("search", {"q": f"{plain} {main}"})]
+        seen, todo = set(), []
+        for kind, p in steps:
+            p = {k: v for k, v in p.items() if v}
+            sig = kind + urlencode(sorted(p.items()))
+            if sig not in seen:
+                seen.add(sig); todo.append((kind, p))
+        self._try(key, todo, 0, main, dur, offline=False)
+
+    def _try(self, key, todo, i, main, dur, offline):
+        if key != self._asking:
+            return
+        if i >= len(todo):
+            return self._done(key, None, 0 if offline else 404)
+        kind, p = todo[i]
+        def answered(status, data):
+            off = offline or status == 0 or status >= 500
+            found = None
             if status == 200:
                 try:
-                    f = json.loads(data)
+                    found = json.loads(data)
                 except Exception:
-                    f = None
-                if f and (f.get("syncedLyrics") or f.get("instrumental")):
-                    return self._done(key, f, status)
-            if status in (0,) or status >= 500:
-                return self._done(key, None, status)
-            # not found as asked (album names differ between services): search by title and artist
-            plain = re.split(r"\s+-\s+", re.sub(r"\s*[\(\[](feat|with|ft)\.?[^\)\]]*[\)\]]", "", title, flags=re.I))[0].strip()
-            q = urlencode({"track_name": plain or title, "artist_name": artist.split(",")[0].strip()})
-            net.request("GET", API + "search?" + q, searched, hdr)
-        p = {"track_name": title, "artist_name": artist}
-        if album:
-            p["album_name"] = album
-        if duration and 1 <= duration <= 3600:
-            p["duration"] = int(round(duration))
-        net.request("GET", API + "get?" + urlencode(p), got, hdr)
+                    found = None
+            hit = self._pick(found, main, dur) if kind == "search" else \
+                  found if found and (found.get("syncedLyrics") or found.get("instrumental")) else None
+            if hit:
+                print(f"[room] lyrics: found by {kind} {i + 1} of {len(todo)} ({hit.get('trackName')} · {hit.get('artistName')})", flush=True)
+                return self._done(key, hit, 200)
+            self._try(key, todo, i + 1, main, dur, off)
+        net.request("GET", API + kind + "?" + urlencode(p), answered, {"User-Agent": AGENT}, timeout_ms=30000)
+
+    @staticmethod
+    def _pick(found, main, dur):
+        """From a search: a version with timed lyrics, by the main artist, as long as the song (closest, within
+        6 s) — or, the length not known, the first."""
+        if not isinstance(found, list):
+            return None
+        m = main.lower()
+        ok = [f for f in found if f.get("syncedLyrics") and (m in (f.get("artistName") or "").lower()
+                                                            or (f.get("artistName") or "").lower() in m)]
+        if dur:
+            near = sorted((abs((f.get("duration") or 0) - dur), n, f) for n, f in enumerate(ok) if f.get("duration"))
+            return near[0][2] if near and near[0][0] <= 6 else None
+        return ok[0] if ok else None
 
     def _done(self, key, found: dict | None, status: int):
         if key != self._asking:
             return
         lines = shape(parse(found.get("syncedLyrics") or "")) if found and not found.get("instrumental") else []
         offline = status == 0 or status >= 500
-        self._write(key, {"at": time.time(), "lines": lines, "retry": RETRY_FAIL if offline and not found else RETRY_NONE})
+        self._write(key, {"at": time.time(), "v": ASKING, "lines": lines, "retry": RETRY_FAIL if offline and not found else RETRY_NONE})
         print(f"[room] lyrics: {key.replace('|', ' · ')} → " + (f"{len(lines)} timed lines" if lines else
               "instrumental" if found and found.get("instrumental") else "no answer (offline?)" if offline else "none"), flush=True)
         self._use(key, lines)

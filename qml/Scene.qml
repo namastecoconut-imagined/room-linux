@@ -775,7 +775,7 @@ Item {
         Serif {
             id: clockT
             text: Theme.clock(sc.date, room.clock24)
-            font.pixelSize: 250; tracking: -0.03
+            font.pixelSize: 250; tracking: Theme.helv ? Theme.serifTrack : -0.03
         }
     }
 
@@ -1150,6 +1150,8 @@ Item {
                     y: 21; width: parent.width; height: font.pixelSize
                     text: modelData.val
                     font.family: modelData.k === "timer" ? Theme.serif : Theme.face
+                    font.weight: modelData.k === "timer" ? Theme.serifWeight : Font.Normal
+                    font.letterSpacing: modelData.k === "timer" ? Theme.serifTrack * (sc.m ? 40 : 54) : 0
                     font.pixelSize: modelData.k === "timer" ? (sc.m ? 40 : 54) : (sc.m ? 22 : 26)
                     color: modelData.k === "timer" ? Theme.timer2 : "white"
                     renderType: Text.QtRendering; elide: Text.ElideRight

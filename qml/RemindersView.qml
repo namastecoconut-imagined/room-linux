@@ -41,7 +41,7 @@ Item {
         x: 44; y: 126; width: 660; height: 300
         Mono { id: remLbl; text: "Reminders"; color: Theme.w62 }
         // none left: a headline, then what it means
-        Serif { y: 40; visible: rv.open_.length === 0; text: "All clear"; font.pixelSize: 132; tracking: -0.03 }
+        Serif { y: 40; visible: rv.open_.length === 0; text: "All clear"; font.pixelSize: 132; tracking: Theme.helv ? Theme.serifTrack : -0.03 }
         Text { y: 40 + 132 + 20; visible: rv.open_.length === 0; text: "Nothing to remember"; color: Theme.w62; font.pixelSize: 30; font.family: Theme.face; renderType: Text.QtRendering }
         // some: the count, big, and what it counts
         Row {

@@ -17,9 +17,20 @@ QtObject {
     // Helvetica Neue when it's installed (it's the panel's face); Inter Tight, which ships with Room, otherwise
     readonly property string face: Qt.fontFamilies().indexOf("Helvetica Neue") >= 0 ? "Helvetica Neue" : "Inter Tight"
     // ---- the redesign (room-motion.html / HANDOFF.md): type, colours, motion
-    // the clock, big numbers, room names, standby titles, Alexa's words: Kasero when it's installed (a licensed font,
-    // kept in ~/.config/room/fonts, not in the repo), Instrument Serif, which ships with Room, otherwise
-    readonly property string serif: Qt.fontFamilies().indexOf("Kasero") >= 0 ? "Kasero" : "Instrument Serif"
+    // the clock, big numbers, room names, standby titles, Alexa's words ("the display face"): Helvetica Now Display,
+    // Medium, 4 % tighter, when it's installed (Aviral's pick, 23 Nov — a licensed font, kept in ~/.config/room/fonts,
+    // not in the repo); Instrument Serif, which ships with Room, otherwise. (Kasero, the face before, is no longer used.)
+    // Some packages name each weight as its own family ("Helvetica Now Display Medium"): either is found.
+    readonly property string helvFamily: {
+        var f = Qt.fontFamilies()
+        if (f.indexOf("Helvetica Now Display") >= 0) return "Helvetica Now Display"
+        if (f.indexOf("Helvetica Now Display Medium") >= 0) return "Helvetica Now Display Medium"
+        return ""
+    }
+    readonly property bool helv: helvFamily !== ""
+    readonly property string serif: helv ? helvFamily : "Instrument Serif"
+    readonly property int serifWeight: helvFamily === "Helvetica Now Display" ? Font.Medium : Font.Normal
+    readonly property real serifTrack: helv ? -0.04 : 0         // letter spacing, a share of the size
     readonly property string mono: "IBM Plex Mono"         // nav, labels, small details — uppercase, 0.08em apart
     readonly property color w62: Qt.rgba(1, 1, 1, 0.62)
     readonly property color w42: Qt.rgba(1, 1, 1, 0.42)

@@ -21,7 +21,7 @@ Item {
     property int rows: 0
     property double lastAt: 0           // when the newest word comes in
 
-    Text { id: probe; visible: false; font.family: Theme.serif; font.pixelSize: 100 }
+    Text { id: probe; visible: false; font.family: Theme.serif; font.weight: Theme.serifWeight; font.pixelSize: 100 }
     FontMetrics { id: fm; font: probe.font }          // measured at 100, scaled
     ListModel { id: wm }
     // laid out once things settle (during creation the measuring font isn't set yet)
@@ -96,7 +96,8 @@ Item {
             text: w
             x: px; y: py
             visible: !over
-            font.family: Theme.serif; font.pixelSize: ws.cur
+            font.family: Theme.serif; font.weight: Theme.serifWeight; font.pixelSize: ws.cur
+            font.letterSpacing: Theme.serifTrack * ws.cur
             color: ws.color
             renderType: Text.CurveRendering        // Kasero's hairlines hold up (see Serif.qml)
             opacity: 0

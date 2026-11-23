@@ -545,7 +545,9 @@ Item {
         wake: 2
         x: sc.pV ? 790 : sc.sV ? 236 : 722; y: sc.pV ? 170 : sc.sV ? 722 : 556
         scale: sc.pV ? 2.2 : 1
-        width: sc.pV ? 232 : sc.sV ? 560 : 312; height: tc.height       // (Home: room for the arrow beside it)
+        // (Home: room for the arrow beside it; music standby with lyrics: for the Lyrics switch at the line's end —
+        // a long title or artist ran under it)
+        width: sc.pV ? 232 : sc.sV ? (sc.hasLyr ? 756 - sbLsw.width - 16 - 236 : 560) : 312; height: tc.height
         opacity: (sc.hV || sc.pV || (sc.sV && sc.m) ? sc.kTitle : 0) * sc.hk
         layer.enabled: sc.kTitle < 0.999
         layer.effect: MultiEffect { blurEnabled: true; blur: 1 - sc.kTitle; blurMax: 32 }

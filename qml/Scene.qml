@@ -170,7 +170,7 @@ Item {
             x: lsl.x - 4; y: lsl.y + lsl.height - 2; width: lsl.width + 10; height: 12
             visible: lsw.drawn > 0.01
             layer.enabled: lsw.drawn < 1
-            layer.effect: ShaderEffect { property real u: lsw.drawn; property real soft: 0.12; property real lean: 0; fragmentShader: shaderDir + "wipe.frag.qsb" }
+            layer.effect: ShaderEffect { property real u: lsw.drawn; property real soft: 0.12; property real lean: 0; property real flip: 0; fragmentShader: shaderDir + "wipe.frag.qsb" }
             Shape {
                 id: lus
                 anchors.fill: parent
@@ -483,8 +483,8 @@ Item {
                 layer.enabled: coverLyr.opacity > 0.01
                 layer.effect: MultiEffect { blurEnabled: true; blur: coverLyr.opacity; blurMax: 64; brightness: -0.1 * coverLyr.opacity }
             }
-            // the lyric sheet over the cover (laid out for the player's 674 px cover; Home's is the same, smaller),
-            // its lower part darkened a little so the words read on any cover
+            // the lyric sheet over the whole cover (laid out for the player's 674 px cover; Home's is the same,
+            // smaller), the cover darkened a little more toward the bottom so the words read on any cover
             Item {
                 id: coverLyr
                 anchors.fill: parent
@@ -506,7 +506,7 @@ Item {
                         transformOrigin: Item.TopLeft; scale: parent.width / 674
                         lines: coverLyr.visible ? sc.lyr.lines : []
                         pos: sc.pos; accent: sc.lyrInk
-                        sheetX: 36; curY: 466; fs: 24; lh: 56; cur: 1.6; scriptPx: 160
+                        sheetX: 44; curY: 150; fs: 44; lh: 60; cur: 1; wrap: true; gap: 18; ahead: 5; behind: 1; margin: 40
                     }
                 }
             }
@@ -1072,7 +1072,7 @@ Item {
             anchors.fill: parent
             lines: sbLyr.visible ? sc.lyr.lines : []
             pos: sc.pos; accent: sc.lyrInk
-            sheetX: 200; curY: 345; fs: 34; lh: 78; cur: 1.75; scriptPx: 300
+            sheetX: 200; curY: 345; fs: 34; lh: 78; cur: 1.75
         }
     }
     // the Lyrics switch on music standby, at the end of the song's title (a tap there turns them on or off without

@@ -1,0 +1,172 @@
+"""The song's words, timed to it, from LRCLIB (lrclib.net: free, no key) — for the lyric sheet on music standby, the
+player and Home (Lyrics.qml). Only timed lyrics are used: words that can't follow the song aren't shown, and the
+screens stay as they are.
+
+Each song is looked up once and kept on disk (~/.local/state/room/lyrics/), found or not — a song with no lyrics
+isn't asked about again for three days. LRCLIB asks for a User-Agent and a light touch (one look per song is that).
+"""
+import hashlib
+import json
+import re
+import time
+from urllib.parse import urlencode
+
+from PySide6.QtCore import QObject, QTimer, Signal
+
+from . import net
+from .config import STATE_DIR
+
+API = "https://lrclib.net/api/"
+AGENT = "Room panel v1.0 (https://github.com/namastecoconut-imagined/room-linux)"
+DIR = STATE_DIR / "lyrics"
+RETRY_NONE = 3 * 86400           # a song LRCLIB didn't have: ask again after this
+SMALL = {"and", "the", "a", "an", "of", "to", "in", "on", "at", "but", "or", "so"}
+RETRY_FAIL = 120                 # no answer at all (offline): try again after this
+
+
+def parse(lrc: str) -> list[dict]:
+    """LRC ("[01:02.34] words") → [{t, text}] in time order; a blank line is a gap in the singing (text "")."""
+    out = []
+    for raw in (lrc or "").splitlines():
+        stamps = re.findall(r"\[(\d+):(\d+(?:\.\d+)?)\]", raw)
+        if not stamps:
+            continue
+        text = re.sub(r"\[[^\]]*\]", "", raw).strip()
+        for mm, ss in stamps:
+            out.append({"t": round(int(mm) * 60 + float(ss), 2), "text": text})
+    out.sort(key=lambda l: l["t"])
+    return out
+
+
+def hook(text: str) -> str:
+    """The words a line lands on, written big over it: its last two words (one, if the last is long), without a
+    trailing "(oh)" or punctuation. Returned exactly as they appear in the line, so the screen can find them."""
+    t = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]\s*$", "", text).rstrip(" ,.;:!?…-–—\"'")
+    words = t.split()
+    if not words:
+        return ""
+    last = re.sub(r"[^\w']", "", words[-1])
+    pick = words[-1:] if len(last) >= 7 or len(words) == 1 else words[-2:]
+    if len(pick) == 2 and (len(" ".join(pick)) > 16 or pick[0].lower() in SMALL):
+        pick = words[-1:]
+    return " ".join(pick)
+
+
+def shape(lines: list[dict]) -> list[dict]:
+    """[{t, text}] → the sung lines only, each with when it ends (the next line or gap) and its hook."""
+    out = []
+    for i, l in enumerate(lines):
+        if not l["text"]:
+            continue
+        end = lines[i + 1]["t"] if i + 1 < len(lines) else l["t"] + 6
+        out.append({"t": l["t"], "end": end, "text": l["text"], "hook": hook(l["text"])})
+    return out
+
+
+class Lyrics(QObject):
+    changed = Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.key = ""                # the song asked about ("title|artist")
+        self.lines: list[dict] = []
+        self.state = "none"          # none · looking · ok
+        self._asking = ""
+
+    def snapshot(self) -> dict:
+        return {"key": self.key, "state": self.state, "lines": self.lines}
+
+    def want(self, title: str, artist: str, album: str = "", duration: float = 0):
+        """The song now playing (call on every change; only a new song does anything)."""
+        key = f"{title}|{artist}"
+        if not title or not artist or key == self.key:
+            return
+        self.key, self.lines, self.state = key, [], "looking"
+        self.changed.emit()
+        saved = self._read(key)
+        if saved is not None and (saved.get("lines") or time.time() - saved.get("at", 0) < saved.get("retry", RETRY_NONE)):
+            self._use(key, saved.get("lines") or [], cached=True)
+            return
+        self._ask(key, title, artist, album, duration)
+
+    # ---------------------------------------------------------------- LRCLIB
+    def _ask(self, key, title, artist, album, duration):
+        self._asking = key
+        self._args = (key, title, artist, album, duration)
+        hdr = {"User-Agent": AGENT}
+        def searched(status, data):
+            if status != 200:
+                return self._done(key, None, status)
+            try:
+                found = json.loads(data)
+            except Exception:
+                found = []
+            best = None
+            for f in found if isinstance(found, list) else []:
+                if not f.get("syncedLyrics"):
+                    continue
+                if duration and f.get("duration") and abs(f["duration"] - duration) > 4:
+                    continue
+                best = f
+                break
+            self._done(key, best, status)
+        def got(status, data):
+            if status == 200:
+                try:
+                    f = json.loads(data)
+                except Exception:
+                    f = None
+                if f and (f.get("syncedLyrics") or f.get("instrumental")):
+                    return self._done(key, f, status)
+            if status in (0,) or status >= 500:
+                return self._done(key, None, status)
+            # not found as asked (album names differ between services): search by title and artist
+            plain = re.split(r"\s+-\s+", re.sub(r"\s*[\(\[](feat|with|ft)\.?[^\)\]]*[\)\]]", "", title, flags=re.I))[0].strip()
+            q = urlencode({"track_name": plain or title, "artist_name": artist.split(",")[0].strip()})
+            net.request("GET", API + "search?" + q, searched, hdr)
+        p = {"track_name": title, "artist_name": artist}
+        if album:
+            p["album_name"] = album
+        if duration and 1 <= duration <= 3600:
+            p["duration"] = int(round(duration))
+        net.request("GET", API + "get?" + urlencode(p), got, hdr)
+
+    def _done(self, key, found: dict | None, status: int):
+        if key != self._asking:
+            return
+        lines = shape(parse(found.get("syncedLyrics") or "")) if found and not found.get("instrumental") else []
+        offline = status == 0 or status >= 500
+        self._write(key, {"at": time.time(), "lines": lines, "retry": RETRY_FAIL if offline and not found else RETRY_NONE})
+        print(f"[room] lyrics: {key.replace('|', ' · ')} → " + (f"{len(lines)} timed lines" if lines else
+              "instrumental" if found and found.get("instrumental") else "no answer (offline?)" if offline else "none"), flush=True)
+        self._use(key, lines)
+        if offline and not found:              # (no answer: ask again in a while, if it's still the song playing)
+            QTimer.singleShot(RETRY_FAIL * 1000, lambda: key == self.key and self.state == "none" and self._ask(*self._args))
+
+    def _use(self, key, lines, cached=False):
+        if key != self.key:
+            return
+        self.lines, self.state = lines, "ok" if lines else "none"
+        if cached:
+            print(f"[room] lyrics: {key.replace('|', ' · ')} → " + (f"{len(lines)} timed lines (kept)" if lines else "none (kept)"), flush=True)
+        self.changed.emit()
+
+    # ---------------------------------------------------------------- kept on disk
+    @staticmethod
+    def _file(key):
+        return DIR / (hashlib.sha1(key.lower().encode()).hexdigest()[:16] + ".json")
+
+    def _read(self, key):
+        try:
+            return json.loads(self._file(key).read_text())
+        except Exception:
+            return None
+
+    def _write(self, key, data):
+        try:
+            DIR.mkdir(parents=True, exist_ok=True)
+            tmp = self._file(key).with_suffix(".tmp")
+            tmp.write_text(json.dumps(data))
+            tmp.replace(self._file(key))
+        except Exception as e:
+            print(f"[room] lyrics: couldn't keep them ({e})", flush=True)

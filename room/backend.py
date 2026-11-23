@@ -10,6 +10,7 @@ from .wifi import Wifi
 from .display import Display
 from .calendar import Calendar
 from .lights import Lights
+from .lyrics import Lyrics
 from .screen import Screen
 from .spotify import Spotify
 from .things import Things
@@ -50,6 +51,7 @@ class Room(QObject):
     browserChanged = Signal()
     panelChanged = Signal()              # a setting changed in Settings → More settings
     updateChanged = Signal()             # checking for / updating to a newer Room
+    lyricsChanged = Signal()             # the playing song's timed words (room/lyrics.py)
     _sinkFound = Signal()                # (from the speaker lookup's thread)
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
@@ -85,6 +87,10 @@ class Room(QObject):
         self.calendar.changed.connect(self.eventsChanged)
         self.lights.changed.connect(self.roomsChanged)
         self.spotify.changed.connect(self.musicChanged)
+        # the song's words, looked up when a new song starts (only while lyrics are on)
+        self._lyrics = Lyrics()
+        self._lyrics.changed.connect(self.lyricsChanged)
+        self.musicChanged.connect(self._want_lyrics)
         self.screen = Screen(cfg)
         self.screen.statusChanged.connect(self.statusChanged)
         self._level = 0.0
@@ -368,6 +374,24 @@ class Room(QObject):
             self.musicChanged.emit()
         self._now = now
 
+    @Property("QVariantMap", notify=lyricsChanged)
+    def lyrics(self):
+        """The playing song's timed words: {key ("title|artist"), state (none · looking · ok), lines: [{t, end, text,
+        hook}]} — the screens show them only while the key is the song on screen."""
+        if self.demo:
+            m = demo.MUSIC
+            if os.environ.get("ROOM_DEMO_LYRICS") == "0":           # (checks) a song with none
+                return {"key": f"{m['title']}|{m['artist']}", "state": "none", "lines": []}
+            return {"key": f"{m['title']}|{m['artist']}", "state": "ok", "lines": demo.lyrics()}
+        return self._lyrics.snapshot()
+
+    def _want_lyrics(self):
+        if self.demo or not self._panel_value("lyrics"):
+            return
+        m = self.music
+        if m.get("exists") and m.get("title"):
+            self._lyrics.want(m.get("title", ""), m.get("artist", ""), m.get("album", ""), m.get("duration") or 0)
+
     @Property(bool, notify=panelChanged)
     def clock24(self):
         return bool(self.cfg.get("clock24"))
@@ -379,7 +403,7 @@ class Room(QObject):
     # ---------------------------------------------------------------- Settings → More settings
     # What can be set on the panel, its default and its range. Set there, it's kept in settings.json (config.py) and
     # takes effect at once; config.json keeps the rest (keys, logins, the rooms) and is never written.
-    PANEL = {"cats": (True,), "catsSleep": (True,), "standbyScenes": (True,), "clock24": (False,),
+    PANEL = {"cats": (True,), "catsSleep": (True,), "standbyScenes": (True,), "lyrics": (True,), "clock24": (False,),
              "nightStart": (23, 0, 23), "nightEnd": (7, 0, 23),
              "homeIdleSec": (300, 60, 1800), "homePlayingSec": (300, 60, 1800), "musicSec": (300, 60, 1800),
              "menuStandbySec": (180, 60, 1800),
@@ -420,6 +444,8 @@ class Room(QObject):
             self.eventsChanged.emit()                       # the agenda's times
         elif key == "roomMic":
             self._mic_on(v)
+        elif key == "lyrics" and v:
+            self._want_lyrics()
         elif key == "wakeAbove":
             self.sleep.wake_above = float(v)
         elif key in ("airplayToBluetooth", "speakerHeadroomDb") and getattr(self, "output", None):

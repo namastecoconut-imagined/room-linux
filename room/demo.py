@@ -78,3 +78,16 @@ BLUETOOTH = [
     {"mac": "00:11:22:33:44:56", "name": "JBL Flip 5", "kind": "Speaker", "paired": True, "connected": False},
     {"mac": "00:11:22:33:44:57", "name": "Sony WH-1000XM4", "kind": "Headphones", "paired": False, "connected": False},
 ]
+
+
+# (checks) a made-up song's words, timed to the demo song's place (it starts at 84 s)
+LYRICS = ["I left the porch light on for you", "the moths keep time the way you used to",
+          "and every car that slows outside", "sounds like you're finally coming home", "so I stay up, I stay up",
+          "I stay up for you", "the kettle's cold, the radio's low", "it plays the song we didn't know",
+          "and every word of it is true", "I stay up for you"]
+
+
+def lyrics() -> list:
+    from .lyrics import hook
+    t0, gap = 80.0, 4.8
+    return [{"t": t0 + i * gap, "end": t0 + (i + 1) * gap, "text": l, "hook": hook(l)} for i, l in enumerate(LYRICS)]

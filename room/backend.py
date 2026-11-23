@@ -52,6 +52,7 @@ class Room(QObject):
     panelChanged = Signal()              # a setting changed in Settings → More settings
     updateChanged = Signal()             # checking for / updating to a newer Room
     lyricsChanged = Signal()             # the playing song's timed words (room/lyrics.py)
+    lyricsLagChanged = Signal()          # how far the sound is behind the song's reported place
     _sinkFound = Signal()                # (from the speaker lookup's thread)
     volumeShown = Signal(int, str)       # the volume buttons were pressed: show the level (0–100) and of what
 
@@ -91,6 +92,8 @@ class Room(QObject):
         self._lyrics = Lyrics()
         self._lyrics.changed.connect(self.lyricsChanged)
         self.musicChanged.connect(self._want_lyrics)
+        self.musicChanged.connect(self.lyricsLagChanged)
+        self.panelChanged.connect(self.lyricsLagChanged)
         self.screen = Screen(cfg)
         self.screen.statusChanged.connect(self.statusChanged)
         self._level = 0.0
@@ -334,6 +337,7 @@ class Room(QObject):
             self._find_sink()
 
     def _sink_changed(self):
+        self.lyricsLagChanged.emit()               # (a Bluetooth speaker or not: the lyrics' timing)
         # the speaker changed: if the phone set a volume just before (it went to the old speaker), apply it here
         pv = getattr(self, "_phone_vol", None)
         if pv and time.time() - pv[1] < 20 and self.airplay.showing:
@@ -385,6 +389,16 @@ class Room(QObject):
             return {"key": f"{m['title']}|{m['artist']}", "state": "ok", "lines": demo.lyrics()}
         return self._lyrics.snapshot()
 
+    @Property(float, notify=lyricsLagChanged)
+    def lyricsLag(self):
+        """Seconds the sound comes out after the place Room's told the song is at — the lyrics are held back by it.
+        AirPlay buffers ~2 s of sound before it plays it, and the place Room has for it (Spotify's, or the phone's) is
+        the sender's; a Bluetooth speaker adds a little more. Plus the fine-tune in Settings → Sound (tenths of a s)."""
+        lag = 2.0 if (self.music.get("source") == "airplay") else 0.0
+        if self._sink != "@DEFAULT_AUDIO_SINK@":
+            lag += 0.25
+        return round(lag + self._panel_value("lyricsTrim") / 10, 2)
+
     def _want_lyrics(self):
         """A song change: look its words up once it's settled (2.5 s on). AirPlay sends the new title a moment before
         the new song's length — asked at once, it went with the last song's length and matched nothing — and
@@ -424,7 +438,8 @@ class Room(QObject):
              "homeIdleSec": (300, 60, 1800), "homePlayingSec": (300, 60, 1800), "musicSec": (300, 60, 1800),
              "menuStandbySec": (180, 60, 1800),
              "roomMic": (True,), "wakeAbove": (10, 3, 25), "airplayToBluetooth": (True,), "speakerHeadroomDb": (4, 0, 12),
-             "assistantVolume": (85, 10, 100)}      # the speaker while Room talks, % (the assistant reads it)
+             "assistantVolume": (85, 10, 100),
+             "lyricsTrim": (0, -30, 30)}             # the lyrics' timing, fine-tuned by ear: tenths of a second later      # the speaker while Room talks, % (the assistant reads it)
 
     def _panel_value(self, k):
         d = self.PANEL[k]
@@ -436,7 +451,8 @@ class Room(QObject):
         if isinstance(d[0], bool):
             return bool(v) if k == "clock24" else v is not False
         try:
-            return max(d[1], min(d[2], int(round(abs(float(v))))))
+            v = float(v)
+            return max(d[1], min(d[2], int(round(v if d[1] < 0 else abs(v)))))
         except (TypeError, ValueError):
             return d[0]
 

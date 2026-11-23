@@ -170,8 +170,13 @@ Item {
             var sc_ = dh * 2 * (0.4 + c.hslSaturation)
             if (sc_ > score) { score = sc_; best = c }
         })
-        if (!best || score < 0.25) return "#ff6a5c"                            // nothing stands out: the reference's red
-        return Qt.hsla(best.hslHue, Math.min(1, best.hslSaturation * 1.1 + 0.3), 0.62, 1)
+        if (best && score >= 0.12) return Qt.hsla(best.hslHue, Math.min(1, best.hslSaturation * 1.1 + 0.3), 0.62, 1)
+        // nothing far from the background's colour: the cover's most colourful one, made light (it stands out by
+        // being bright, not by its colour); a grey cover: the reference's red
+        var vivid = null
+        cols.forEach(function (a) { var c = Qt.rgba(a[0] / 255, a[1] / 255, a[2] / 255, 1)
+                                    if (c.hslHue >= 0 && c.hslSaturation >= 0.15 && (!vivid || c.hslSaturation > vivid.hslSaturation)) vivid = c })
+        return vivid ? Qt.hsla(vivid.hslHue, Math.min(1, vivid.hslSaturation + 0.25), 0.8, 1) : "#ff6a5c"
     }
     function lyrToggle() { room.setPanel("lyrics", !lyrOn) }
     // Lyrics on or off: the word, white and underlined by hand in the hook's colour while on, grey while off
@@ -523,7 +528,7 @@ Item {
                         width: 674; height: 674
                         transformOrigin: Item.TopLeft; scale: parent.width / 674
                         lines: coverLyr.visible ? sc.lyr.lines : []
-                        pos: sc.pos; ink: sc.lyrInkStrong; big: false
+                        pos: sc.pos - (room.lyricsLag || 0); ink: sc.lyrInkStrong; big: false
                         label: (sc.sTitle + " · " + sc.sArtist).toUpperCase()
                     }
                 }
@@ -1091,7 +1096,7 @@ Item {
         LyricsBackdrop {
             anchors.fill: parent
             lines: sbLyr.visible ? sc.lyr.lines : []
-            pos: sc.pos; ink: sc.lyrInkStrong; big: true
+            pos: sc.pos - (room.lyricsLag || 0); ink: sc.lyrInkStrong; big: true
             label: (sc.sTitle + " · " + sc.sArtist).toUpperCase()
         }
     }

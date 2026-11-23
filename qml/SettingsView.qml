@@ -513,6 +513,12 @@ Item {
                    Step { value: sv.pget("speakerHeadroomDb", 4) > 0 ? sv.pget("speakerHeadroomDb", 4) + " dB" : "None"
                           onLess: sv.pset("speakerHeadroomDb", Math.max(0, sv.pget("speakerHeadroomDb", 4) - 1))
                           onMore: sv.pset("speakerHeadroomDb", Math.min(12, sv.pget("speakerHeadroomDb", 4) + 1)) } }
+            // the lyrics' timing: Room holds them back for AirPlay's and the speaker's delay itself; this is by ear
+            Line { id: lyrT; label: "Lyrics timing"; sub: "Later, if the words come before the singing"
+                   readonly property int tr: sv.pget("lyricsTrim", 0)
+                   Step { value: lyrT.tr === 0 ? "On time" : (lyrT.tr > 0 ? "+" : "−") + (Math.abs(lyrT.tr) / 10).toFixed(1) + " s"
+                          onLess: sv.pset("lyricsTrim", Math.max(-30, lyrT.tr - 1))
+                          onMore: sv.pset("lyricsTrim", Math.min(30, lyrT.tr + 1)) } }
         }
     }
 

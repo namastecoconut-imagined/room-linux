@@ -21,7 +21,7 @@ AGENT = "Room panel v1.0 (https://github.com/namastecoconut-imagined/room-linux)
 DIR = STATE_DIR / "lyrics"
 RETRY_NONE = 3 * 86400           # a song LRCLIB didn't have: ask again after this
 SMALL = {"and", "the", "a", "an", "of", "to", "in", "on", "at", "but", "or", "so"}
-ASKING = 2                       # how songs are looked up (a miss saved by an older way is asked again)
+ASKING = 3                       # how songs are looked up (a miss saved by an older way is asked again)
 RETRY_FAIL = 120                 # no answer at all (offline): try again after this
 
 
@@ -93,7 +93,7 @@ class Lyrics(QObject):
 
     # ---------------------------------------------------------------- LRCLIB
     # Asked in turn until one has timed lyrics: exactly as playing (title, artist, album, length); the plain title
-    # and the main artist (Spotify says "Jimmy Cooks (feat. 21 Savage)" by "Drake, 21 Savage", AirPlay can say
+    # and the main artist, with the length and without (Spotify says "Jimmy Cooks (feat. 21 Savage)" by "Drake, 21 Savage", AirPlay can say
     # "Drake & 21 Savage"); a search by those two; a free search with both. A search answer is long for a famous
     # song (hundreds of versions), so the answers get time.
     def _ask(self, key, title, artist, album, duration):
@@ -104,6 +104,7 @@ class Lyrics(QObject):
         dur = int(round(duration)) if duration and 1 <= duration <= 3600 else 0
         steps = [("get", {"track_name": title, "artist_name": artist, "album_name": album, "duration": dur}),
                  ("get", {"track_name": plain, "artist_name": main, "duration": dur}),
+                 ("get", {"track_name": plain, "artist_name": main}),
                  ("search", {"track_name": plain, "artist_name": main}),
                  ("search", {"q": f"{plain} {main}"})]
         seen, todo = set(), []
@@ -121,6 +122,9 @@ class Lyrics(QObject):
             return self._done(key, None, 0 if offline else 404)
         kind, p = todo[i]
         def answered(status, data):
+            if status == 429:                  # asked too often: not a miss — ask again in a while
+                print("[room] lyrics: LRCLIB says too many requests — trying again in 2 min", flush=True)
+                return self._done(key, None, 0)
             off = offline or status == 0 or status >= 500
             found = None
             if status == 200:
@@ -147,8 +151,9 @@ class Lyrics(QObject):
                                                             or (f.get("artistName") or "").lower() in m)]
         if dur:
             near = sorted((abs((f.get("duration") or 0) - dur), n, f) for n, f in enumerate(ok) if f.get("duration"))
-            return near[0][2] if near and near[0][0] <= 6 else None
-        return ok[0] if ok else None
+            if near and near[0][0] <= 6:
+                return near[0][2]
+        return ok[0] if ok and not dur else None
 
     def _done(self, key, found: dict | None, status: int):
         if key != self._asking:

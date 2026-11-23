@@ -386,8 +386,23 @@ class Room(QObject):
         return self._lyrics.snapshot()
 
     def _want_lyrics(self):
+        """A song change: look its words up once it's settled (2.5 s on). AirPlay sends the new title a moment before
+        the new song's length — asked at once, it went with the last song's length and matched nothing — and
+        skipping through songs shouldn't ask about each one."""
         if self.demo or not self._panel_value("lyrics"):
             return
+        if not hasattr(self, "_lyr_wait"):
+            self._lyr_wait = QTimer(self); self._lyr_wait.setSingleShot(True); self._lyr_wait.setInterval(2500)
+            self._lyr_wait.timeout.connect(self._ask_lyrics)
+        m = self.music
+        key = f"{m.get('title', '')}|{m.get('artist', '')}"
+        # (the music changes every second or so while playing: only a new song starts the wait)
+        if key != self._lyrics.key and key != getattr(self, "_lyr_pending", None):
+            self._lyr_pending = key
+            self._lyr_wait.start()
+
+    def _ask_lyrics(self):
+        self._lyr_pending = None
         m = self.music
         if m.get("exists") and m.get("title"):
             self._lyrics.want(m.get("title", ""), m.get("artist", ""), m.get("album", ""), m.get("duration") or 0)

@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Effects
+import QtQuick.Shapes
 import "scenesdata.js" as SceneData
 
 // Room in the redesign (room-motion.html, HANDOFF.md): Home, the player, standby and the Room screen are one scene,
@@ -135,6 +136,51 @@ Item {
             SequentialAnimation { PauseAnimation { duration: 90 } In { target: sc; property: "kSb" } }
             SequentialAnimation { PauseAnimation { duration: 180 } In { target: sc; property: "kTitle" } }
             SequentialAnimation { PauseAnimation { duration: 270 } In { target: sc; property: "kWords" } }
+        }
+    }
+
+    // ---------------------------------------------------------------- the song's words (Lyrics.qml, room/lyrics.py)
+    // Shown while they're on (the Lyrics switch, kept in settings) and the song has timed lyrics: on music standby in
+    // place of the drifting words, in the player and on Home over the cover. Off, or a song without them: the screens
+    // exactly as they were.
+    readonly property var lyr: room.lyrics || ({})
+    readonly property bool lyrOn: room.panel.lyrics !== false
+    readonly property bool hasLyr: lyr.state === "ok" && lyr.key === songKey && songKey !== "" && (lyr.lines || []).length > 0
+    readonly property bool lyrShown: lyrOn && hasLyr
+    // the hook's colour: the cover's own (its most colourful), lifted to a soft tint that reads on the dark field
+    readonly property color lyrInk: {
+        var a = music.rgb
+        if (!a || a.length !== 3) return "#f4eee6"
+        var c = Qt.rgba(a[0] / 255, a[1] / 255, a[2] / 255, 1)
+        if (c.hslHue < 0 || c.hslSaturation < 0.12) return "#f4eee6"
+        return Qt.hsla(c.hslHue, Math.min(1, c.hslSaturation * 1.1 + 0.2), 0.8, 1)
+    }
+    function lyrToggle() { room.setPanel("lyrics", !lyrOn) }
+    // Lyrics on or off: the word, white and underlined by hand in the hook's colour while on, grey while off
+    component LyrSwitch: Tap {
+        id: lsw
+        property real size: 15
+        width: lsl.implicitWidth + 20; height: 44
+        onTapped: sc.lyrToggle()
+        property real drawn: sc.lyrOn ? 1 : 0
+        Behavior on drawn { NumberAnimation { duration: 450; easing.type: Easing.OutCubic } }
+        Mono { id: lsl; anchors.centerIn: parent; size: lsw.size; text: "Lyrics"; color: sc.lyrOn ? "white" : Theme.w42
+               Behavior on color { ColorAnimation { duration: 300 } } }
+        Item {
+            x: lsl.x - 4; y: lsl.y + lsl.height - 2; width: lsl.width + 10; height: 12
+            visible: lsw.drawn > 0.01
+            layer.enabled: lsw.drawn < 1
+            layer.effect: ShaderEffect { property real u: lsw.drawn; property real soft: 0.12; property real lean: 0; fragmentShader: shaderDir + "wipe.frag.qsb" }
+            Shape {
+                id: lus
+                anchors.fill: parent
+                preferredRendererType: Shape.CurveRenderer
+                ShapePath {
+                    strokeColor: sc.lyrInk; strokeWidth: 1.6; fillColor: "transparent"; capStyle: ShapePath.RoundCap
+                    startX: 2; startY: 8
+                    PathCubic { x: lus.width - 2; y: 4; control1X: lus.width * 0.3; control1Y: 2; control2X: lus.width * 0.7; control2Y: 9 }
+                }
+            }
         }
     }
 
@@ -434,6 +480,33 @@ Item {
                 anchors.fill: parent; radius: 14
                 source: sc.sArt; rgb: sc.music.rgb || [201, 185, 163]; rgb2: sc.music.rgb2 || [44, 40, 34]
             }
+            // the lyric sheet over the cover (laid out for the player's 674 px cover; Home's is the same, smaller),
+            // its lower part darkened a little so the words read on any cover
+            Item {
+                id: coverLyr
+                anchors.fill: parent
+                readonly property bool on: (sc.hV || sc.pV) && sc.lyrShown
+                opacity: on ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
+                Rectangle {
+                    anchors.fill: parent; radius: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.3; color: Qt.rgba(14 / 255, 6 / 255, 22 / 255, 0) }
+                        GradientStop { position: 1.0; color: Qt.rgba(14 / 255, 6 / 255, 22 / 255, 0.62) }
+                    }
+                }
+                Item {
+                    anchors.fill: parent; clip: true
+                    Lyrics {
+                        width: 674; height: 674
+                        transformOrigin: Item.TopLeft; scale: parent.width / 674
+                        lines: coverLyr.visible ? sc.lyr.lines : []
+                        pos: sc.pos; accent: sc.lyrInk
+                        sheetX: 36; curY: 466; fs: 24; lh: 56; cur: 1.6; scriptPx: 160
+                    }
+                }
+            }
         }
         // the player's cover: tap to play / pause; swipe sideways to skip — it follows your finger (its lower part:
         // the screen answers there)
@@ -609,6 +682,7 @@ Item {
                 onTapped: room.next()
                 Icon { anchors.centerIn: parent; name: "next"; size: 20; color: "white" }
             }
+            LyrSwitch { visible: sc.live && sc.hasLyr; size: 15 }
             Tap {             // nothing playing: your playlists (outlined, so it reads as a button)
                 visible: !sc.live; width: plL.implicitWidth + 36; height: 44
                 onTapped: sc.sheet = "library"
@@ -983,9 +1057,31 @@ Item {
         id: words
         order: 22 + sc.rooms.length
         x: 0; y: 0; width: 1368; height: 912
-        opacity: (sc.sV && sc.m ? sc.kWords : 0) * sc.hk
+        opacity: (sc.sV && sc.m && !sc.lyrShown ? sc.kWords : 0) * sc.hk
         StandbyWords { onTicked: bg.advance(); artist: sc.sArtist.toLowerCase(); title: sc.sTitle.toLowerCase(); album: sc.sAlbum.toLowerCase(); running: words.visible }
     }
+    Mover {
+        id: sbLyr
+        order: 22 + sc.rooms.length
+        x: 0; y: 0; width: 1368; height: 912
+        opacity: (sc.sV && sc.m && sc.lyrShown ? sc.kWords : 0) * sc.hk
+        Lyrics {
+            anchors.fill: parent
+            lines: sbLyr.visible ? sc.lyr.lines : []
+            pos: sc.pos; accent: sc.lyrInk
+            sheetX: 200; curY: 345; fs: 34; lh: 78; cur: 1.75; scriptPx: 300
+        }
+    }
+    // the Lyrics switch on music standby, at the end of the song's title (a tap there turns them on or off without
+    // waking the screen: Main.qml)
+    Mover {
+        id: sbLyrSw
+        order: 23 + sc.rooms.length
+        x: 756 - width; y: 718; width: sbLsw.width; height: 44
+        opacity: (sc.sV && sc.m && sc.hasLyr ? sc.kTitle : 0) * sc.hk
+        LyrSwitch { id: sbLsw; size: 13 }
+    }
+    readonly property rect lyrSwitchRect: sbLyrSw.opacity > 0.5 ? Qt.rect(sbLyrSw.x, sbLyrSw.y, sbLyrSw.width, sbLyrSw.height) : Qt.rect(0, 0, 0, 0)
     Mover {
         id: sbTop
         order: 23 + sc.rooms.length

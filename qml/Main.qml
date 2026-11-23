@@ -229,6 +229,9 @@ Window {
             var s = stage.scale, slop = 72 * s       // 30 phone points
             if (held < 40 || Math.abs(e.x - p0.x) > slop || Math.abs(e.y - p0.y) > slop) return
             var p = stage.mapFromItem(win.contentItem, e.x, e.y)
+            // the Lyrics switch on music standby: turns them on or off, and the screen stays on standby
+            var ls = scene.lyrSwitchRect
+            if (ls.width > 0 && p.x > ls.x - 16 && p.x < ls.x + ls.width + 16 && p.y > ls.y - 16 && p.y < ls.y + ls.height + 16) { scene.lyrToggle(); return }
             var c = scene.coverRect
             var onCover = win.musicFace && p.x > c.x - 30 && p.x < c.x + c.width + 30 && p.y > c.y - 30 && p.y < c.y + c.height + 30
             win.wake()

@@ -135,8 +135,13 @@ def main():
     cfg = config.load()
     room = Room(cfg)
 
+    # the pixel display (room/pixel): its link is kept up all the time, whatever screen is showing
+    from .pixel import Pixel
+    pixel = Pixel(cfg, demo=room.demo)
+
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("room", room)
+    engine.rootContext().setContextProperty("pixel", pixel)
     engine.rootContext().setContextProperty("shaderDir", QUrl.fromLocalFile(str(ROOT / "shaders") + "/").toString())
     engine.rootContext().setContextProperty("startScreen", os.environ.get("ROOM_SCREEN", "home"))
     engine.rootContext().setContextProperty("showDead", os.environ.get("ROOM_SHOW_DEAD") == "1")   # (checks) the dead strips, in red
@@ -147,6 +152,7 @@ def main():
     if not engine.rootObjects():
         sys.exit(1)
     win = engine.rootObjects()[0]
+    pixel.start()
     pointer = Pointer(app)  # noqa: F841
     held["room"] = room
     pointer.room = room

@@ -117,6 +117,9 @@ def main():
         finally:
             sys.stdout.flush(); sys.stderr.flush()
             os._exit(0)
+    # if the screen ever stops answering: `systemctl --user kill -s USR1 room` writes where every thread is to the log
+    import faulthandler
+    faulthandler.register(signal.SIGUSR1, all_threads=True)
     signal.signal(signal.SIGINT, stop_now)
     signal.signal(signal.SIGTERM, stop_now)
     # let Python see Ctrl-C while Qt is running

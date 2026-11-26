@@ -46,6 +46,22 @@ def clock(style, date, h24, r, g, b):
     return bytes([8, 0, 6, 1, _clamp(style, 0, 7) | (128 if date else 0) | (64 if h24 else 0), r, g, b])
 
 
+# the display's own timers and scoreboard (they keep running by themselves)
+def countdown(mode, minutes, seconds):
+    """mode: 0 off · 1 start · 2 pause · 3 resume"""
+    return bytes([7, 0, 8, 128, mode, _clamp(minutes, 0, 99), _clamp(seconds, 0, 59)])
+
+
+def chrono(mode):
+    """mode: 0 reset · 1 start · 2 pause · 3 continue"""
+    return bytes([5, 0, 9, 128, mode])
+
+
+def score(a, b):
+    a, b = _clamp(a, 0, 999), _clamp(b, 0, 999)
+    return bytes([8, 0, 10, 128, a & 255, a >> 8, b & 255, b >> 8])
+
+
 # ---- what it says back
 def is_upload_ack(d): return len(d) >= 5 and d[0] == 5 and d[1] == 0 and d[3] == 0 and d[2] <= 2
 
@@ -134,7 +150,8 @@ def _lzw(indices):
 
 
 def gif(frames, delay_ms):
-    """Frames (each N*N*4 RGBA bytes) as a looping GIF: one palette for them all, each frame drawn over the last."""
+    """Frames (each N*N*4 RGBA bytes) as a looping GIF: one palette for them all, each frame drawn over the last.
+    delay_ms: one number for every frame, or a list with one for each."""
     shift = 0
     while True:                             # at most 256 colours: drop low bits until they fit (art is one hue: it fits)
         seen = {}
@@ -150,8 +167,9 @@ def gif(frames, delay_ms):
         table[i * 3:i * 3 + 3] = bytes([min(255, r << shift), min(255, g << shift), min(255, b << shift)])
     out = bytearray(b"GIF89a" + struct.pack("<HHBBB", N, N, 0x80 | 0x70 | (bits - 1), 0, 0) + bytes(table))
     out += b"\x21\xff\x0bNETSCAPE2.0\x03\x01\x00\x00\x00"
-    cs = max(2, int(delay_ms / 10 + 0.5))
-    for f in frames:
+    delays = delay_ms if isinstance(delay_ms, (list, tuple)) else [delay_ms] * len(frames)
+    for f, ms in zip(frames, delays):
+        cs = max(2, int(ms / 10 + 0.5))
         idx = bytes(seen[(f[i] >> shift, f[i + 1] >> shift, f[i + 2] >> shift)] for i in range(0, len(f), 4))
         out += b"\x21\xf9\x04\x04" + struct.pack("<H", cs) + b"\x00\x00"
         out += b"\x2c" + struct.pack("<HHHH", 0, 0, N, N) + b"\x00" + _lzw(idx)

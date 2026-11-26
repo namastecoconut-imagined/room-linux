@@ -133,6 +133,13 @@ the link is doing: `journalctl --user -u room | grep '\[pixel\]'`.
   (each second with the seconds dot), whatever screen Room is on.
 - **Art:** 28 loops of 48 frames, sent once; the display plays them by itself.
 - **Light:** the display's own 7 effects in 2–7 colours, or one colour.
+- **Timers:** a countdown, a stopwatch or a scoreboard — drawn by Room in the clock's digits ("Minimal") or the
+  display's own screens ("Built-in"). They're up for now: when one ends, what was showing comes back.
+- **Text:** a scrolling message (typed on the on-screen keyboard), in a colour, size, speed and typeface.
+- **Library:** GIFs and pictures kept in `~/.local/state/room/pixel-library/` on the Surface — copy files in from the
+  Mac (`scp picture.gif namastecoconut@fedora.local:.local/state/room/pixel-library/`). Tap one to show it; tick
+  some and start a slideshow (it carries on after a restart).
+- **Setup → Assistant face:** the chosen Library pictures take turns on the display while the assistant answers.
 - Brightness and on / off are in the screen's top bar. What's showing and every choice are kept in
   `~/.local/state/room/pixel.json`, so the display comes back the same after a restart or a power cut.
 - The pictures are drawn in `qml/pixeldata.js` (from pixelcontrol.html, the web app this was ported from), and

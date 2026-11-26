@@ -3,7 +3,7 @@
 The Pixel screen (qml/PixelView.qml) draws the pictures — clock faces, art loops — dot by dot and hands the frames
 over; this turns them into what the display takes (a PNG for a still, a GIF for a loop, corrected for LEDs), sends them
 down the link (link.py), and remembers what's showing and every choice made (~/.local/state/room/pixel.json), so the
-display comes back the same after a restart, an update or a power cut. Effects, one colour and the Classic clock are
+display comes back the same after a restart, an update or a power cut. Effects and one colour are
 the display's own: a short command starts them and they keep running by themselves.
 
 "pixel": false in config.json: no link at all (the screen says so).
@@ -20,12 +20,13 @@ from PySide6.QtGui import QImage, QImageReader
 from .. import config
 from . import proto
 
-CHOICES = {"face": "orbit", "clockCol": 0, "h24": True, "secs": False, "date": True, "art": "ripple", "artCol": 0, "pace": 85,
+CHOICES = {"face": "orbit", "clockCol": 0, "h24": True, "secs": False, "art": "lattice", "artCol": 0, "pace": 85,
            "effect": 0, "effCols": [1, 3, 5], "solidCol": 6,
            "item": "", "slides": [], "every": 60, "shuffle": False, "faces": [], "faceOrder": "order",
            "cdSet": 1500, "score": [0, 0], "timerStyle": "minimal",
            "text": "Hello", "textCol": 3, "textSpeed": 5, "textSize": 55, "textFont": "sans", "textLook": "crisp",
            "tune": dict(proto.TUNE), "flip": False, "eco": {"on": False, "start": 22 * 60, "end": 7 * 60, "light": 10}, "held": True}
+GONE = ("classic", "rings", "jumbo", "outline", "solar")       # clock faces taken out (27 Nov)
 PICTURES = (".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp")
 MAX_FRAMES = 300
 
@@ -44,7 +45,10 @@ class Pixel(QObject):
         self.sel = dict(CHOICES, **(saved.get("sel") or {}))
         self.on = saved.get("on", True)
         self.bright = int(saved.get("bright", 50))
-        self.mode = saved.get("mode", "")             # clockface · classic · art · text · effect · colour · library · slideshow
+        self.mode = saved.get("mode", "")             # clockface · art · text · effect · colour · library · slideshow
+        if self.mode == "classic" or (self.mode == "clockface" and self.sel["face"] in GONE):
+            self.mode, self.label, self.sel["face"] = "clockface", "Orbit", "orbit"      # (a face that's been taken out)
+        self._stills = False                          # the display is in its picture mode (the last thing sent was a still)
         self.over = None                              # something up for now, over that: a timer, the assistant's face
         self.lib_dir = config.STATE_DIR / "pixel-library"     # saved GIFs and pictures (copied in from the Mac)
         self.items = []
@@ -66,7 +70,7 @@ class Pixel(QObject):
             if "light" in scr:
                 self.mode, self.label = "effect", "Gradient sweep"
             if "library" in scr or "setup" in scr:
-                self.items = [{"id": n + ".gif", "name": n.capitalize(), "url": "", "sample": i} for i, n in enumerate(["ripple", "heart", "tunnel", "radar", "snow"])]
+                self.items = [{"id": n + ".gif", "name": n.capitalize(), "url": "", "sample": i} for i, n in enumerate(["ripple", "heart", "tunnel", "comet", "snow"])]
                 self.sel.update(slides=["ripple.gif", "tunnel.gif"], faces=["heart.gif"], item="heart.gif")
                 if "library" in scr:
                     self.mode, self.label = "library", "Heart"
@@ -133,11 +137,27 @@ class Pixel(QObject):
     def _up(self):
         return self.link is not None and self.link.state == "on"
 
+    def _still(self, png):
+        """A still, sent. The display is told to go into its picture mode only when it isn't in it already: told each
+        time, it went black for a moment before every frame (a clock's seconds, a countdown)."""
+        self.link.picture("png", png, not self._stills)
+        self._stills = True
+
+    def _loop(self, kind, data):
+        self._stills = kind == "png"
+        self.link.picture(kind, data, True)
+
+    def _cmd(self, data):
+        """A command that puts something else on the display (an effect, a colour, its own timers, off)."""
+        self._stills = False
+        self.link.command(data)
+
     def _tint(self, index):
         return self.tuner.one(*proto.rgb(proto.PALETTE[int(index) % len(proto.PALETTE)]))
 
     # ---------------------------------------------------------------- the display has just (re)connected
     def _ready(self):
+        self._stills = False
         self.link.command(proto.brightness(self.bright))
         self.link.command(proto.flip(bool(self.sel["flip"])))
         self._eco()
@@ -152,15 +172,13 @@ class Pixel(QObject):
         ln = self.link
         if self.mode == "clockface":
             self.again.emit()
-        elif self.mode == "classic":
-            self._classic()
         elif self.mode == "effect":
             self._effect()
         elif self.mode == "colour":
-            ln.command(proto.colour(*self._tint(self.sel["solidCol"])))
+            self._cmd(proto.colour(*self._tint(self.sel["solidCol"])))
         elif self.mode in ("art", "text"):
             try:
-                ln.picture("gif", self.gif_path.read_bytes())
+                self._loop("gif", self.gif_path.read_bytes())
             except OSError:
                 pass
         elif self.mode in ("library", "slideshow"):
@@ -234,7 +252,7 @@ class Pixel(QObject):
         if self.over and (mode, label) == (self.mode, self.label):
             return                                     # (the clock keeping time: not over a timer or the face)
         if self._up() and self.on:
-            self.link.picture("png", proto.png(self.tuner.frame(data)))
+            self._still(proto.png(self.tuner.frame(data)))
         if self.over or (mode, label) != (self.mode, self.label):
             self._showing(mode, label)
 
@@ -245,7 +263,7 @@ class Pixel(QObject):
         if len(data) != proto.N * proto.N * 4:
             return
         if self._up() and self.on:
-            self.link.picture("png", proto.png(self.tuner.frame(data)))
+            self._still(proto.png(self.tuner.frame(data)))
         if not self.over or self.over.get("kind") != kind or self.over.get("label") != label:
             self.over = {"kind": kind, "label": label}
             self.changed.emit()
@@ -260,7 +278,7 @@ class Pixel(QObject):
         if not cmd:
             return
         if self._up() and self.on:
-            self.link.command(cmd())
+            self._cmd(cmd())
         if what in ("cd_start", "sw_start", "score") and not (self.over and self.over.get("kind") == "native"):
             self.over = {"kind": "native", "label": what}
             self.changed.emit()
@@ -290,14 +308,14 @@ class Pixel(QObject):
             except OSError:
                 pass
         if self._up() and self.on:
-            self.link.picture("gif", data)
+            self._loop("gif", data)
         self._showing(mode, label)
 
     def _effect(self):
         cols = [self._tint(i) for i in (self.sel["effCols"] or [1, 3])][:7]
         if len(cols) < 2:
             cols = cols + cols if cols else [(255, 77, 46), (46, 196, 255)]
-        self.link.command(proto.effect(int(self.sel["effect"]), cols))
+        self._cmd(proto.effect(int(self.sel["effect"]), cols))
 
     @Slot(str)
     def effect(self, label):
@@ -309,19 +327,8 @@ class Pixel(QObject):
     @Slot(str)
     def colour(self, label):
         if self._up() and self.on:
-            self.link.command(proto.colour(*self._tint(self.sel["solidCol"])))
+            self._cmd(proto.colour(*self._tint(self.sel["solidCol"])))
         self._showing("colour", label)
-
-    def _classic(self):
-        self.link.command(proto.set_time(time.localtime()))
-        self.link.command(proto.clock(3, bool(self.sel["date"]), bool(self.sel["h24"]), *self._tint(self.sel["clockCol"])))
-
-    @Slot()
-    def classic(self):
-        """The display's own clock: it keeps time by itself."""
-        if self._up() and self.on:
-            self._classic()
-        self._showing("classic", "Classic")
 
     # ---------------------------------------------------------------- the library: saved GIFs and pictures
     def _scan(self):
@@ -379,7 +386,7 @@ class Pixel(QObject):
     def _send_item(self, item):
         made = self._make(item) if item else None
         if made and self._up() and self.on:
-            self.link.picture(*made)
+            self._loop(*made)
         return made is not None
 
     @Slot()
@@ -471,7 +478,7 @@ class Pixel(QObject):
         self.on = bool(on)
         self.over = None
         if self._up():
-            self.link.command(proto.power(self.on))
+            self._cmd(proto.power(self.on))
             if self.on:
                 self._rest()                           # (back on: what it was showing, sent again)
         self._save.start()

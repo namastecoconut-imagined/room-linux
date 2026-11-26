@@ -222,13 +222,15 @@ class Link(QObject):
             self._jobs.append(("cmd", bytes(data)))
             self._pump()
 
-    def picture(self, kind, data):
-        """A still ("png") or an animation ("gif"). The newest picture wins: one still waiting to go is dropped."""
+    def picture(self, kind, data, fresh=True):
+        """A still ("png") or an animation ("gif"). The newest picture wins: one still waiting to go is dropped.
+        fresh: a still is preceded by the command that puts the display in its picture mode (not needed, and a
+        black flash, when the last thing it was sent was a still too)."""
         if self.state != "on":
             return
         self._gen += 1
         self._jobs = [j for j in self._jobs if j[0] == "cmd"]
-        if kind == "png":
+        if kind == "png" and fresh:
             self._jobs.append(("cmd", proto.image_mode()))
         parts = proto.png_payloads(data) if kind == "png" else proto.gif_payloads(data)
         self.sent, self.total = 0, sum(len(p) for p in parts)

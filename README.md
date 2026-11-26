@@ -122,6 +122,23 @@ rolls belly up, and wanders off again. They never take a touch. Settings → Mor
 at night. To check them:
 `ROOM_SCREEN=catsdayhome` / `catsdaystandby` (everything happens sooner).
 
+## The pixel display
+
+A 32 × 32 dot display on Bluetooth (an iDotMatrix panel, name `IDM-…`) is run from Room: Home → Pixel. It only shows
+what's sent to it and takes one connection at a time, so Room holds the link all the time (`room/pixel/link.py`):
+it connects when the display is seen, sets its clock, and reconnects by itself. `[pixel]` lines in the log say what
+the link is doing: `journalctl --user -u room | grep '\[pixel\]'`.
+
+- **Clock:** 14 faces. Classic is the display's own clock; the other 13 are drawn by Room and sent again each minute
+  (each second with the seconds dot), whatever screen Room is on.
+- **Art:** 28 loops of 48 frames, sent once; the display plays them by itself.
+- **Light:** the display's own 7 effects in 2–7 colours, or one colour.
+- Brightness and on / off are in the screen's top bar. What's showing and every choice are kept in
+  `~/.local/state/room/pixel.json`, so the display comes back the same after a restart or a power cut.
+- The pictures are drawn in `qml/pixeldata.js` (from pixelcontrol.html, the web app this was ported from), and
+  `room/pixel/proto.py` turns them into the display's bytes — the same bytes as the web app's.
+- `"pixel": false` in config.json: no link at all (so the web app or the phone app can connect to the display).
+
 ## Buttons and screen
 
 - Power button: screen off; a sound or a touch brings it back. Hold it to power off.

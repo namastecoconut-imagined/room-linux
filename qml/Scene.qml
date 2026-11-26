@@ -29,6 +29,7 @@ Item {
     signal openClock()
     signal openWeather()
     signal openReminders()
+    signal openPixel()
     signal openSettings()
     signal goHome()
 
@@ -51,7 +52,8 @@ Item {
     readonly property bool wV: cur === "weather"
     readonly property bool remV: cur === "reminders"
     readonly property bool setV: cur === "settings"
-    readonly property bool scV: cV || wV || remV || setV      // the redesigned screens (pass 2)
+    readonly property bool pxV: cur === "pixel"
+    readonly property bool scV: cV || wV || remV || setV || pxV      // the redesigned screens (pass 2)
     readonly property bool menu: rV || oV
 
     // ---------------------------------------------------------------- what's playing
@@ -856,6 +858,7 @@ Item {
         if (remV) remV_.catSpots(sc, out)
         if (cV) clockV.catSpots(sc, out)
         if (setV) setV_.catSpots(sc, out)
+        if (pxV) pixelV.catSpots(sc, out)
         // the seek bar's line, while a song's showing: only for pushing the playhead along (use: "push")
         if (prog.opacity > 0.5 && (hV || pV || (sV && m)))
             out.push({ id: "seek", x0: prog.x, x1: prog.x + prog.width, y: prog.y, use: "push" })
@@ -927,6 +930,7 @@ Item {
             Btn { text: "Weather"; onTapped: sc.openWeather() }
             Btn { text: "Reminders"; onTapped: sc.openReminders() }
             Btn { text: "Scenes"; onTapped: sc.sheet = "scenes" }
+            Btn { text: "Pixel"; onTapped: sc.openPixel() }
         }
     }
     // top bar, right: All off · Dim · Night · the mic · settings
@@ -978,7 +982,7 @@ Item {
         order: 15
         x: 150; y: 34; width: 300; height: 44
         opacity: (sc.scV ? 1 : 0) * sc.hk
-        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : sc.remV ? "Reminders" : sc.setV ? "Settings" : "") }
+        Mono { anchors.verticalCenter: parent.verticalCenter; color: Theme.w62; text: "/ " + (sc.cV ? "Clock" : sc.wV ? "Weather" : sc.remV ? "Reminders" : sc.setV ? "Settings" : sc.pxV ? "Pixel display" : "") }
     }
     Mover {
         id: scrTop
@@ -1199,6 +1203,7 @@ Item {
         WeatherView { id: weatherV_; shown: sc.wV }
         RemindersView { id: remV_; shown: sc.remV }
         SettingsView { id: setV_; shown: sc.setV }
+        PixelView { id: pixelV; shown: sc.pxV; now: sc.now }
     }
 
     // ================================================================= the sheets

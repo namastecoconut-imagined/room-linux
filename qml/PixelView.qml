@@ -11,8 +11,7 @@ import "pixeldata.js" as Pix
 // The pictures are drawn here (pixeldata.js: the clock faces and art loops, dot by dot) and handed to `pixel` as
 // frames. A clock face is a still, sent again each minute (each second with the seconds dot) for as long as it's
 // showing — whatever screen Room is on, standby included; an art loop is 48 frames sent once, which the display then
-// plays by itself — a scrolling message goes the same way. Effects, one colour and the Classic clock are the display's
-// own. A countdown, the stopwatch, the scoreboard and the assistant's face are up "for now": what was showing is
+// plays by itself — a scrolling message goes the same way. Effects and one colour are the display's own. A countdown, the stopwatch, the scoreboard and the assistant's face are up "for now": what was showing is
 // remembered and comes back when they're done. Saved GIFs and pictures (the Library) are files on the Surface.
 Item {
     id: pv
@@ -39,12 +38,11 @@ Item {
     readonly property bool sending: v.sending
     readonly property int pct: Math.round(v.progress * 100)
     readonly property var pal: v.palette
-    readonly property string face: v.sel.face
+    readonly property string face: Pix.FACE_NAMES[v.sel.face] ? v.sel.face : "orbit"
     readonly property int clockCol: v.sel.clockCol
     readonly property bool h24: v.sel.h24
     readonly property bool secs: v.sel.secs
-    readonly property bool date: v.sel.date
-    readonly property string art: v.sel.art
+    readonly property string art: Pix.ART_NAMES[v.sel.art] ? v.sel.art : "lattice"
     readonly property int artCol: v.sel.artCol
     readonly property int pace: v.sel.pace
     readonly property int effect: v.sel.effect
@@ -99,12 +97,8 @@ Item {
     // ---------------------------------------------------------------- the clock faces
     readonly property real minuteNow: Math.floor(now / 60) * 60           // (changes once a minute: the tiles follow it)
     readonly property var clockOpts: ({ col: col(clockCol), h24: h24, secs: secs })
-    function faceFrame(id, at) {
-        var d = new Date(at * 1000)
-        return id === "classic" ? Pix.classicFrame(d, { col: col(clockCol), h24: h24, secs: date }) : Pix.clockFrame(id, d, clockOpts)
-    }
+    function faceFrame(id, at) { return Pix.clockFrame(id, new Date(at * 1000), clockOpts) }
     function showFace(id) {
-        if (id === "classic") { pixel.classic(); return }
         pixel.still("clockface", Pix.FACE_NAMES[id], Pix.clockFrame(id, new Date(), clockOpts).buffer)
     }
     // a face that's showing is kept in time: drawn and sent again when the minute (or second) changes
@@ -123,7 +117,7 @@ Item {
             if (pv.mode === "art") pv.showArt(pv.art); else if (pv.mode === "text") pv.showText(); else { pv.sentAt = -1; pv.keepTime() }
         }
     }
-    function clockAgain() { if (mode === "classic") pixel.classic(); else if (mode === "clockface") showFace(face) }
+    function clockAgain() { if (mode === "clockface") showFace(face) }
 
     // ---------------------------------------------------------------- loops: an art piece's 48 frames (drawn a few
     // at a time between the screen's own frames, so a tap never holds the screen up) or a message's, then sent as one
@@ -275,7 +269,6 @@ Item {
         if (mode === "art") return Pix.artFrame(art, artT, col(artCol))
         if (mode === "effect") return Pix.effectFrame(effect, effCols.map(col), effF)
         if (mode === "colour") return Pix.solid(col(solidCol))
-        if (mode === "classic") return faceFrame("classic", minuteNow)
         if (mode === "clockface") return faceFrame(face, secs ? now : minuteNow)
         return Pix.blank()
     }
@@ -291,7 +284,7 @@ Item {
                                    : over === "face" ? "The assistant's face · until it's done"
                                    : timing ? (timerKind === "score" ? "Scoreboard" : (timerKind === "sw" ? "Stopwatch" : "Countdown") + (tm ? (tm.paused ? " · paused" : " · running") : nativePaused ? " · paused" : " · on the display"))
                                    : mode === "text" ? "Scrolling text" : mode === "library" ? "From the library" : mode === "slideshow" ? "Slideshow · changes every " + everText(every)
-                                   : mode === "clockface" ? "Clock face · kept in time by Room" : mode === "classic" ? "Clock · the display's own"
+                                   : mode === "clockface" ? "Clock face · kept in time by Room"
                                    : mode === "art" ? "Art · loops on the display" : mode === "effect" ? "Effect · made by the display"
                                    : mode === "colour" ? "One colour" : "Tap something below to show it"
 
@@ -473,19 +466,20 @@ Item {
         }
     }
 
-    // ---- Clock: fourteen faces, colour, 24-hour, seconds
+    // ---- Clock: fifteen faces, colour, 24-hour, seconds
     Rise {
         order: 3; visible: pv.tab === "clock" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Loader {
             active: pv.everShown && pv.tab === "clock"
             sourceComponent: Grid {
-                columns: 7; columnSpacing: 18; rowSpacing: 12
+                columns: 8; columnSpacing: 17; rowSpacing: 16
                 Repeater {
                     model: Pix.FACES
                     Tile {
+                        side: 92
                         label: modelData[1]; px: pv.faceFrame(modelData[0], pv.minuteNow)
-                        picked: (pv.mode === "clockface" || pv.mode === "classic") && pv.face === modelData[0]
+                        picked: pv.mode === "clockface" && pv.face === modelData[0]
                         onTapped: { pixel.choose("face", modelData[0]); pv.showFace(modelData[0]) }
                     }
                 }
@@ -498,28 +492,23 @@ Item {
             Column {
                 y: 166; width: parent.width; spacing: 6
                 Line { label: "24-hour"; Toggle { on: pv.h24; onTapped: { pixel.choose("h24", !pv.h24); pv.clockAgain() } } }
-                Line {
-                    label: pv.face === "classic" ? "Show the date" : "Seconds dot"
-                    Toggle {
-                        on: pv.face === "classic" ? pv.date : pv.secs
-                        onTapped: { if (pv.face === "classic") pixel.choose("date", !pv.date); else pixel.choose("secs", !pv.secs); pv.clockAgain() }
-                    }
-                }
+                Line { label: "Seconds dot"; Toggle { on: pv.secs; onTapped: { pixel.choose("secs", !pv.secs); pv.clockAgain() } } }
             }
         }
     }
 
-    // ---- Art: twenty-eight loops, fourteen at a time
+    // ---- Art: the loops, sixteen at a time
     Rise {
         order: 3; visible: pv.tab === "art" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Loader {
             active: pv.everShown && pv.tab === "art"
             sourceComponent: Grid {
-                columns: 7; columnSpacing: 18; rowSpacing: 12
+                columns: 8; columnSpacing: 17; rowSpacing: 16
                 Repeater {
-                    model: Pix.ART.slice(pv.artPage * 14, pv.artPage * 14 + 14)
+                    model: Pix.ART.slice(pv.artPage * 16, pv.artPage * 16 + 16)
                     Tile {
+                        side: 92
                         label: modelData[1]; px: Pix.artFrame(modelData[0], 0.3, pv.col(pv.artCol))
                         picked: pv.mode === "art" && pv.art === modelData[0]
                         onTapped: { pixel.choose("art", modelData[0]); pv.showArt(modelData[0]) }
@@ -541,9 +530,9 @@ Item {
             }
             Row {
                 anchors.right: parent.right; y: 244; spacing: 10
-                Mono { anchors.verticalCenter: parent.verticalCenter; rightPadding: 6; color: Theme.w62; text: (pv.artPage * 14 + 1) + "–" + (pv.artPage * 14 + 14) + " of " + Pix.ART.length }
+                Mono { anchors.verticalCenter: parent.verticalCenter; rightPadding: 6; color: Theme.w62; text: (pv.artPage * 16 + 1) + "–" + Math.min(Pix.ART.length, pv.artPage * 16 + 16) + " of " + Pix.ART.length }
                 Chip { text: "‹"; padX: 22; opacity: pv.artPage > 0 ? 1 : 0.35; enabled: pv.artPage > 0; onTapped: pv.artPage-- }
-                Chip { text: "›"; padX: 22; opacity: pv.artPage < 1 ? 1 : 0.35; enabled: pv.artPage < 1; onTapped: pv.artPage++ }
+                Chip { text: "›"; padX: 22; opacity: (pv.artPage + 1) * 16 < Pix.ART.length ? 1 : 0.35; enabled: (pv.artPage + 1) * 16 < Pix.ART.length; onTapped: pv.artPage++ }
             }
         }
     }

@@ -6,7 +6,7 @@ function blank() { var p = new Uint8ClampedArray(N * N * 4); for (var i = 3; i <
 function hex(c) { return [1, 3, 5].map(function (i) { return parseInt(c.substr(i, 2), 16); }); }
 var palette = ["#ffffff", "#ff4d2e", "#ff9f1c", "#ffd23f", "#3ddc84", "#2ec4ff", "#3a5bff", "#9b5de5", "#ff5ea8", "#8a8f93", "#000000"];
 var DIGITS = { 0: "111101101101111", 1: "010110010010111", 2: "111001111100111", 3: "111001111001111", 4: "101101111001001", 5: "111100111001111", 6: "111100111101111", 7: "111001001001001", 8: "111101111101111", 9: "111101111001111", ":": "000010000010000" };
-var FACES = [["classic", "Classic"], ["stack", "Stack"], ["tiny", "Tiny"], ["corner", "Corner"], ["diagonal", "Diagonal"], ["ring", "Ring"], ["orbit", "Orbit"], ["dots", "Dots"], ["rings", "Rings"], ["jumbo", "Jumbo"], ["outline", "Outline"], ["dial", "Dial"], ["solar", "Solar"], ["modular", "Modular"]];
+var FACES = [["stack", "Stack"], ["tiny", "Tiny"], ["corner", "Corner"], ["diagonal", "Diagonal"], ["ring", "Ring"], ["orbit", "Orbit"], ["dots", "Dots"], ["dial", "Dial"], ["modular", "Modular"], ["moons", "Moons"], ["grid", "Grid"], ["comet", "Comet"], ["binary", "Binary"], ["edge", "Edge"], ["arc", "Arc"]];
 var FACE_NAMES = {}; FACES.forEach(function (f) { FACE_NAMES[f[0]] = f[1]; });
 var shade = (c, k) => c.map(v => Math.round(v * k));
 var TAU = Math.PI * 2, frac = v => v - Math.floor(v), rnd1 = n => { const v = Math.sin(n * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
@@ -20,7 +20,17 @@ function pen(p) {
   const stroke = (x0, y0, x1, y1, c) => { const n = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0))) || 1; for (let i = 0; i <= n; i++) put(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n, c); };
   return { put, glyph, width, at, word, stroke };
 }
+// the seconds dot: once round the outer edge a minute, from top centre
+function edgeDot(put, sec, col) {
+  var e = N - 1, k = Math.round(sec / 60 * 4 * e + e / 2) % (4 * e), side = Math.floor(k / e), r = k % e;
+  put(side === 0 ? r : side === 1 ? e : side === 2 ? e - r : 0, side === 0 ? 0 : side === 1 ? r : side === 2 ? e : e - r, col);
+}
 function clockFrame(face, d, o) {
+  if (NEWFACES[face]) {                           // the faces added on the Surface (below)
+    var q = blank(); NEWFACES[face](q, d, o);
+    if (o.secs && face !== "edge") edgeDot(pen(q).put, d.getSeconds(), o.col);     // (Edge's own dot walks the edge)
+    return q;
+  }
   const p = blank(), col = o.col, mid2 = shade(col, 0.6), dim = shade(col, 0.3), faint = shade(col, 0.14), { put, at, word, stroke } = pen(p);
   let h = d.getHours(); const m = d.getMinutes(); if (!o.h24) h = h % 12 || 12;
   const secs = o.secs, ACCENT = [215, 25, 33];
@@ -57,20 +67,6 @@ function clockFrame(face, d, o) {
     const top = Math.max(1, (N - (5 * s + 2 * s + 1 + 5 * pitch + size)) >> 1), gy = top + 5 * s + 2 * s + 1;
     word(hh, top, s, col);
     for (let k = 0; k < 60; k++) for (let a = 0; a < size; a++) for (let q = 0; q < size; q++) put(gx + (k % 10) * pitch + q, gy + Math.floor(k / 10) * pitch + a, k < m ? col : faint);
-  } else if (face === "rings") {                 // three rings: minutes, hours, and the day (or seconds)
-    const th = Math.max(1, Math.round(N / 16)), R1 = N / 2 - 0.5 - th / 2, R2 = R1 - 2 * th, R3 = R2 - 2 * th;
-    const parts = [[R1, m / 60, col], [R2, ((d.getHours() % 12) + m / 60) / 12, mid2], [R3, secs ? d.getSeconds() / 60 : (d.getHours() * 60 + m) / 1440, secs ? ACCENT : dim]];
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { const r = Math.hypot(x - c0, y - c0), f = frac(Math.atan2(x - c0, c0 - y) / TAU);
-      for (const [R, part, on] of parts) if (Math.abs(r - R) <= th / 2) put(x, y, f < part ? on : faint); }
-  } else if (face === "jumbo") {                 // the hour as large as it goes, minutes underneath
-    const s = Math.max(1, Math.floor((N - 4) / 7)), s2 = Math.max(1, Math.floor(s / 3)), gap = Math.max(2, s2 * 2), y0 = Math.max(0, (N - (5 * s + gap + 5 * s2)) >> 1);
-    word(hh, y0, s, col); word(mm, y0 + 5 * s + gap, s2, mid2);
-  } else if (face === "outline") {               // hollow hour, solid minutes
-    const s = N < 20 ? 1 : Math.max(2, Math.floor((N - 2) / 10)), s2 = Math.max(1, Math.floor(s * 0.67)), y0 = Math.max(0, (N - (5 * s + 2 + 5 * s2)) >> 1);
-    const mask = new Uint8Array(N * N), mp = pen({ set: (v, i) => { mask[i >> 2] = 1; } });
-    mp.word(hh, y0, s, [1, 1, 1]);
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (mask[y * N + x] && (s < 3 || !(x > 0 && mask[y * N + x - 1] && x < N - 1 && mask[y * N + x + 1] && y > 0 && mask[(y - 1) * N + x] && y < N - 1 && mask[(y + 1) * N + x]))) put(x, y, col);
-    word(mm, y0 + 5 * s + 2, s2, mid2);
   } else if (face === "dial") {                  // tick marks, a heavy hour hand, a fine minute hand
     const R = N / 2 - 1, wide = N >= 32 ? 1 : 0;
     for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6, len = (k % 3 ? 0.1 : 0.2) * R + 1; stroke(...polar(a, R), ...polar(a, R - len), k % 3 ? dim : col); }
@@ -79,14 +75,6 @@ function clockFrame(face, d, o) {
     stroke(c0, c0, ...polar(am, R * 0.82), mid2);
     if (secs) stroke(c0, c0, ...polar(d.getSeconds() * Math.PI / 30, R * 0.9), ACCENT);
     put(c0 - 0.5, c0 - 0.5, ACCENT); put(c0 + 0.5, c0 - 0.5, ACCENT); put(c0 - 0.5, c0 + 0.5, ACCENT); put(c0 + 0.5, c0 + 0.5, ACCENT);
-  } else if (face === "solar") {                 // the sun's path over a horizon: left at 6, top at noon, right at 18
-    const hz = Math.round(N * 0.6), R = N * 0.42, steps = Math.ceil(R * 8), f = (d.getHours() * 60 + m) / 1440, a = TAU * (f - 0.25);
-    for (let k = 0; k < steps; k++) { const q = k / steps * TAU, y = hz - Math.sin(q) * R; put(c0 - Math.cos(q) * R, y, y <= hz ? dim : faint); }
-    for (let x = 0; x < N; x++) put(x, hz, dim);
-    const sx = c0 - Math.cos(a) * R, sy = hz - Math.sin(a) * R, big = N >= 32 ? 1 : 0, sun = sy <= hz ? col : dim;
-    for (let i = -big; i <= big; i++) for (let j = -big; j <= big; j++) put(sx + i, sy + j, sun);
-    const s = Math.max(1, Math.floor(N / 32)); for (let y = hz + 1; y < Math.min(N, hz + 3 + 5 * s + 1); y++) for (let x = 0; x < N; x++) if (Math.abs(x - c0) < (N >= 20 ? 11 : 9) * s) put(x, y, [0, 0, 0]);
-    word(flat, Math.min(N - 5 * s, hz + 3), s, col);
   } else {                                       // modular: time, weekday, date and two progress bars
     const u = N / 32, s = Math.max(1, Math.floor(u)), s2 = N >= 32 ? 2 * s : s, P = v => Math.round(v * u), today = (d.getDay() + 6) % 7;
     at(flat, P(2), P(2), s, col);
@@ -98,45 +86,50 @@ function clockFrame(face, d, o) {
   if (o.secs) {                 // one dot that goes round once a minute
     const sec = d.getSeconds();
     if (face === "ring" || face === "orbit") put(...polar(sec * Math.PI / 30, N / 2 - (face === "ring" ? 1.5 : 2)), face === "ring" ? col : mid2);
-    else if (face === "rings" || face === "dial") { /* these show seconds in their own way */ }
-    else { const e = N - 1, k = Math.round(sec / 60 * 4 * e + e / 2) % (4 * e), side = Math.floor(k / e), r = k % e;   // along the outer edge, from top centre
-      put(side === 0 ? r : side === 1 ? e : side === 2 ? e - r : 0, side === 0 ? 0 : side === 1 ? r : side === 2 ? e : e - r, col); }
+    else if (face === "dial") { /* it has a seconds hand */ }
+    else edgeDot(put, sec, col);
   }
   return p;
 }
+var lat = function (x, y, g) { return x % g.p === g.o && y % g.p === g.o; };
 var ART = [
   ["ripple", "Ripple", (x, y, t, g) => g.r > 1.05 ? 0 : Math.max(0, (Math.sin(g.r * 11 - TAU * t) - 0.55) / 0.45) * (1 - g.r * 0.55)],
   ["breathe", "Breathe", (x, y, t, g) => Math.max(near((g.r - (0.3 + 0.32 * (0.5 - 0.5 * Math.cos(TAU * t)))) * g.h, 1.1), g.r * g.h < 1 ? 1 : 0)],
   ["orbits", "Orbits", (x, y, t, g) => { let v = 0; for (let k = 0; k < 4; k++) { const R = (0.24 + k * 0.2) * g.h, a = TAU * (t * (4 - k) + k * 0.23); v = Math.max(v, near(Math.hypot(x - g.c - Math.sin(a) * R, y - g.c + Math.cos(a) * R), 1.4), near(g.r * g.h - R, 0.6) * 0.1); } return v; }],
   ["spiral", "Spiral", (x, y, t, g) => g.r > 1 ? 0 : Math.max(0, (Math.sin(g.a * 2 + g.r * 9 - TAU * t) - 0.72) / 0.28) * (0.35 + 0.65 * g.r)],
-  ["waves", "Waves", (x, y, t, g) => { let v = 0; for (let k = 0; k < 3; k++) v = Math.max(v, near(y - (g.c + (k - 1) * g.h * 0.42 + Math.sin(x / g.n * TAU * 1.5 + TAU * t + k * 1.3) * g.h * 0.16), 1) * [0.35, 1, 0.6][k]); return v; }],
   ["rain", "Rain", (x, y, t, g) => { if (rnd1(x) > 0.55) return 0; const sp = 1 + Math.floor(rnd1(x + 50) * 2), head = ((t * sp + rnd1(x + 9)) % 1) * (g.n + 9) - 2, d = head - y; return d >= 0 && d < 7 ? 1 - d / 7 : 0; }],
   ["lattice", "Lattice", (x, y, t, g) => (x % g.p !== g.o || y % g.p !== g.o) ? 0 : 0.1 + 0.9 * Math.pow(Math.max(0, Math.sin(TAU * (t - (x + y) / (2 * g.n)))), 2)],
-  ["contours", "Contours", (x, y, t, g) => { const v = Math.sin(g.u * 3 + TAU * t) + Math.sin(g.v * 4 - TAU * t) + Math.sin((g.u + g.v) * 3 + TAU * 2 * t); return Math.abs(v - 0.9) < 0.22 ? 1 : Math.abs(v + 0.6) < 0.16 ? 0.3 : 0; }],
-  ["scan", "Scan", (x, y, t, g) => { const xl = g.c + g.h * 0.86 * Math.sin(TAU * t), d = (x - xl) * Math.sign(Math.cos(TAU * t)); return Math.max(near(x - xl, 0.8), d < 0 && d > -6 ? (1 + d / 6) * 0.35 : 0, (x % g.p === g.o && y % g.p === g.o) ? 0.12 : 0); }],
   ["stars", "Stars", (x, y, t, g) => { const k = rnd1(x * 57 + y * 131); return k > 0.045 ? 0 : Math.pow(0.5 + 0.5 * Math.sin(TAU * (t * (1 + Math.floor(rnd1(k * 999) * 2)) + rnd1(x + y * 7))), 3); }],
   ["blobs", "Blobs", (x, y, t, g) => { let f = 0; for (let k = 0; k < 3; k++) { const bx = Math.sin(TAU * (t * (k + 1) + k * 0.31)) * 0.5, by = Math.cos(TAU * (t * (3 - k) + k * 0.17)) * 0.5; f += 0.07 / ((g.u - bx) ** 2 + (g.v - by) ** 2 + 0.002); } return f > 1 ? 1 : f > 0.72 ? 0.28 : 0; }],
-  ["levels", "Levels", (x, y, t, g) => { const w = Math.max(2, g.n >> 3), i = Math.floor(x / w); if (x % w === w - 1 || i > 7) return 0; const top = g.n - 2 - Math.round((0.12 + 0.76 * (0.5 + 0.5 * Math.sin(TAU * (t * (1 + i % 3) + rnd1(i))))) * (g.n - 4)); return y > g.n - 2 ? 0 : y === top ? 1 : y > top ? 0.3 : 0; }],
-  ["pulse", "Pulse", (x, y, t, g) => { const s = ((x / g.n + t) % 1 + 1) % 1, k = s < 0.42 ? 0 : s < 0.47 ? (s - 0.42) / 0.05 * -0.25 : s < 0.52 ? -0.25 + (s - 0.47) / 0.05 * 1.05 : s < 0.58 ? 0.8 - (s - 0.52) / 0.06 * 1.15 : s < 0.63 ? -0.35 + (s - 0.58) / 0.05 * 0.35 : 0; return near(y - (g.c + g.h * 0.2 - k * g.h * 0.75), 1) * (0.35 + 0.65 * x / g.n); }],
   ["tunnel", "Tunnel", (x, y, t, g) => { const d = Math.max(Math.abs(g.u), Math.abs(g.v)); return d > 1 ? 0 : Math.max(0, (Math.sin(d * 10 - TAU * t) - 0.7) / 0.3) * (0.25 + 0.75 * d); }],
-  ["radar", "Radar", (x, y, t, g) => { if (g.r > 1) return 0; const lag = frac((TAU * t - Math.atan2(g.u, -g.v)) / TAU) * TAU; return Math.max(lag < 0.14 ? 1 : 0, lag < 1.7 ? (1 - lag / 1.7) * 0.42 : 0, near((g.r - 0.97) * g.h, 0.7) * 0.22, rnd1(x * 13 + y * 71) < 0.012 ? Math.pow(Math.max(0, 1 - lag / 3), 2) : 0); }],
-  ["interfere", "Interfere", (x, y, t, g) => { const v = Math.sin(Math.hypot(g.u + 0.5, g.v) * 12 - TAU * t) + Math.sin(Math.hypot(g.u - 0.5, g.v) * 12 - TAU * t); return v > 1.3 ? 1 : v > 0.75 ? 0.28 : 0; }],
-  ["helix", "Helix", (x, y, t, g) => { const ph = y / g.n * TAU * 1.25 + TAU * t, s = Math.sin(ph) * g.h * 0.5, dp = Math.cos(ph); return Math.max(near(x - g.c - s, 1) * (0.55 + 0.45 * dp), near(x - g.c + s, 1) * (0.55 - 0.45 * dp), y % 4 === 1 && Math.abs(x - g.c) < Math.abs(s) - 1 ? 0.13 : 0); }],
   ["bounce", "Bounce", (x, y, t, g) => { let v = y === g.n - 1 ? 0.14 : 0; for (let k = 0; k < 5; k++) v = Math.max(v, near(Math.hypot(x - (k + 0.5) * g.n / 5, y - (g.n - 3 - Math.abs(Math.sin(Math.PI * (t * (1 + k % 2) + k * 0.19))) * (g.n - 6) * (0.55 + 0.09 * k))), 1.5)); return v; }],
   ["trace", "Trace", (x, y, t, g) => { let v = 0; for (let k = 0; k < 26; k++) { const q = t - k * 0.006; v = Math.max(v, near(Math.hypot(g.u - Math.sin(TAU * 2 * q) * 0.8, g.v - Math.sin(TAU * 3 * q + 0.5) * 0.8) * g.h, 1.2) * (1 - k / 26)); } return v; }],
   ["diamonds", "Diamonds", (x, y, t, g) => { const d = Math.abs(g.u) + Math.abs(g.v); return Math.max(0, (Math.sin(d * 8 - TAU * t) - 0.68) / 0.32) * (1 - d * 0.35); }],
-  ["horizon", "Horizon", (x, y, t, g) => { if (g.v < 0.06) { const rr = Math.hypot(g.u, g.v + 0.12); return rr < 0.42 && g.v < 0.02 ? (y % 2 ? 0.75 : 0.12) : 0; } if (g.v < 0.11) return 0.55; const z = 0.3 / g.v, fade = Math.min(1, g.v * 1.9); return Math.max(frac(z * 1.4 + t) < 0.16 ? 1 : 0, Math.abs(frac(g.u * z * 1.6 + 0.5) - 0.5) < 0.07 * z ? 0.7 : 0) * fade; }],
   ["petals", "Petals", (x, y, t, g) => g.r > 1.05 ? 0 : Math.max(near((g.r - 0.9 * Math.abs(Math.cos(2 * g.a + TAU * t))) * g.h, 1.1), g.r * g.h < 1.2 ? 1 : 0)],
-  ["eclipse", "Eclipse", (x, y, t, g) => g.r >= 0.64 ? near((g.r - 0.66) * g.h, 0.8) * 0.3 : Math.hypot(g.u + 1.6 - 3.2 * t, g.v) > 0.64 ? 1 : 0.05],
-  ["pendulum", "Pendulum", (x, y, t, g) => { const an = 0.72 * Math.sin(TAU * t), px = g.c, py = 2, L = g.n * 0.74, bx = px + Math.sin(an) * L, by = py + Math.cos(an) * L, k = Math.max(0, Math.min(1, ((x - px) * (bx - px) + (y - py) * (by - py)) / (L * L))); return Math.max(near(Math.hypot(x - bx, y - by), Math.max(1.6, g.n / 14)), near(Math.hypot(x - px - k * (bx - px), y - py - k * (by - py)), 0.7) * 0.3, y === 1 && Math.abs(x - g.c) < g.h * 0.3 ? 0.2 : 0); }],
   ["loader", "Loader", (x, y, t, g) => { let v = 0; for (let k = 0; k < 10; k++) { const a = k * TAU / 10; v = Math.max(v, near(Math.hypot(g.u - Math.sin(a) * 0.62, g.v + Math.cos(a) * 0.62) * g.h, Math.max(1.2, g.n / 22)) * (0.1 + 0.9 * Math.pow(1 - frac(t - k / 10), 3))); } return v; }],
   ["heart", "Heart", (x, y, t, g) => { const beat = Math.pow(Math.max(0, Math.sin(TAU * t)), 10) + 0.6 * Math.pow(Math.max(0, Math.sin(TAU * (t - 0.17))), 10), s = 0.5 * (1 + 0.16 * beat), X = g.u / s, Y = -(g.v - 0.06) / s, f = Math.pow(X * X + Y * Y - 1, 3) - X * X * Y * Y * Y; return f < 0 ? 1 : f < 0.35 ? 0.16 * beat : 0; }],
-  ["weave", "Weave", (x, y, t, g) => { const v = Math.sin(g.u * 7 + TAU * t) * Math.sin(g.v * 7 - TAU * t); return v > 0.55 ? 1 : v < -0.6 ? 0.22 : 0; }],
   ["snow", "Snow", (x, y, t, g) => { let v = 0; for (let k = 0; k < 22; k++) { const sp = 1 + (k % 2), fy = frac(t * sp + rnd1(k + 3)) * (g.n + 2) - 1, fx = rnd1(k) * g.n + Math.sin(TAU * (t * sp + rnd1(k + 5))) * 1.4; v = Math.max(v, near(Math.hypot(x - fx, y - fy), 0.95) * (0.45 + 0.55 * rnd1(k + 7))); } return v; }],
+  // lattice pieces and orbits, added on the Surface
+  ["drift", "Drift", function (x, y, t, g) { if (!lat(x, y, g)) return 0; var dx = g.u - 0.62 * Math.sin(TAU * t), dy = g.v - 0.62 * Math.sin(TAU * 2 * t + 0.6); return 0.08 + 0.92 * Math.exp(-(dx * dx + dy * dy) / 0.16); }],
+  ["pond", "Pond", function (x, y, t, g) { if (!lat(x, y, g)) return 0; return 0.07 + 0.93 * Math.pow(Math.max(0, Math.sin(g.r * 7 - TAU * t)), 3) * (1 - g.r * 0.35); }],
+  ["bloom", "Bloom", function (x, y, t, g) { var cx = Math.round((x - g.o) / g.p) * g.p + g.o, cy = Math.round((y - g.o) / g.p) * g.p + g.o, dd = Math.abs(x - cx) + Math.abs(y - cy); if (dd > 1) return 0;
+    var w = 0.5 + 0.5 * Math.sin(TAU * (t - Math.hypot(cx - g.c, cy - g.c) / g.n)); return dd === 0 ? 0.2 + 0.8 * w : w > 0.6 ? (w - 0.6) / 0.4 * 0.8 : 0; }],
+  ["twinkle", "Twinkle", function (x, y, t, g) { if (!lat(x, y, g)) return 0; var k = rnd1(x * 7 + y * 13); return 0.06 + 0.94 * Math.pow(0.5 + 0.5 * Math.sin(TAU * (t * (1 + Math.floor(rnd1(k * 91) * 2)) + k)), 5); }],
+  ["sway", "Sway", function (x, y, t, g) { if (y % g.p !== g.o) return 0; var s = Math.sin(TAU * (t + y / g.n)), off = Math.round(1.5 * s); return (((x - off) % g.p) + g.p) % g.p === g.o ? 0.3 + 0.7 * (0.5 + 0.5 * s) : 0; }],
+  ["cascade", "Cascade", function (x, y, t, g) { if (!lat(x, y, g)) return 0; var col = (x - g.o) / g.p, row = (y - g.o) / g.p, rows = g.n / g.p, sp = 1 + Math.floor(rnd1(col + 40) * 2);
+    var head = frac(t * sp + rnd1(col + 3)) * (rows + 4) - 1, d = head - row; return d >= 0 && d < 4 ? Math.max(0.08, 1 - d / 4) : 0.08; }],
+  ["satellites", "Satellites", function (x, y, t, g) { var v = 0, k, a, px, py;      // Orbit, moving: two dots on two rings, opposite ways
+    for (k = 0; k < 12; k++) { a = TAU * k / 12; if (Math.round(g.c + Math.sin(a) * 14) === x && Math.round(g.c - Math.cos(a) * 14) === y) v = 0.16; if (Math.round(g.c + Math.sin(a) * 8) === x && Math.round(g.c - Math.cos(a) * 8) === y) v = 0.16; }
+    if (Math.abs(x - g.c) < 1 && Math.abs(y - g.c) < 1) v = 0.3;
+    a = TAU * t; px = Math.round(g.c + Math.sin(a) * 14); py = Math.round(g.c - Math.cos(a) * 14); if (Math.abs(x - px) + Math.abs(y - py) <= 1) v = 1;
+    a = -TAU * 2 * t + 2; px = Math.round(g.c + Math.sin(a) * 8); py = Math.round(g.c - Math.cos(a) * 8); if (Math.abs(x - px) + Math.abs(y - py) <= 1) v = Math.max(v, 0.6);
+    return v; }],
+  ["comet", "Comet", function (x, y, t, g) { var v = lat(x, y, g) ? 0.07 : 0, lag = frac((TAU * t - Math.atan2(g.u, -g.v)) / TAU);
+    if (Math.abs(g.r * g.h - 12.5) < 0.8) v = Math.max(v, lag < 0.6 ? Math.pow(1 - lag / 0.6, 2.2) : 0); return Math.max(v, near(Math.hypot(x - g.c - Math.sin(TAU * t) * 12.5, y - g.c + Math.cos(TAU * t) * 12.5), 1.7)); }]
 ];
 var ART_NAMES = {}, ART_FRAMES = 48; ART.forEach(function (a) { ART_NAMES[a[0]] = a[1]; });
 function artFrame(id, t, col) {
-  const fn = ART.find(a => a[0] === id)[2], p = new Uint8ClampedArray(N * N * 4), c = (N - 1) / 2, hN = N / 2, pitch = N >= 32 ? 4 : 3;
+  const fn = (ART.find(a => a[0] === id) || ART.find(a => a[0] === "lattice"))[2], p = new Uint8ClampedArray(N * N * 4), c = (N - 1) / 2, hN = N / 2, pitch = N >= 32 ? 4 : 3;
   const g = { n: N, c, h: hN, p: pitch, o: pitch >> 1, u: 0, v: 0, r: 0, a: 0 };
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
     g.u = (x - c) / hN; g.v = (y - c) / hN; g.r = Math.hypot(g.u, g.v); g.a = Math.atan2(g.v, g.u);
@@ -195,11 +188,55 @@ function textFrame(str, off, fg, bg) {
   }
   return p;
 }
-// the display's own clock (it draws this one itself; this is only its picture here): the time, and the date under it
-function classicFrame(d, o) {
-  var p = blank(), w = pen(p), h = d.getHours(); if (!o.h24) h = h % 12 || 12;
-  var two = function (v) { return (v < 10 ? "0" : "") + v; };
-  w.word(two(h) + ":" + two(d.getMinutes()), o.secs ? 8 : 13, 1, o.col);
-  if (o.secs) w.word(two(d.getDate()) + ":" + two(d.getMonth() + 1), 19, 1, shade(o.col, 0.5));
-  return p;
-}
+
+// ---- clock faces added on the Surface (p: the frame to draw on, d: the time, o: { col, h24, secs })
+var NEWFACES = {
+  moons: function (p, d, o) {              // no digits: the hour on the inner orbit, the minute on the outer
+    var w = pen(p), c0 = (N - 1) / 2, col = o.col, faint = shade(col, 0.14), m = d.getMinutes(), k;
+    var polar = function (a, r) { return [c0 + Math.sin(a) * r, c0 - Math.cos(a) * r]; };
+    var dot = function (q, c) { for (var a = -1; a <= 1; a++) for (var b = -1; b <= 1; b++) if (Math.abs(a) + Math.abs(b) <= 1) w.put(q[0] + a, q[1] + b, c); };
+    for (k = 0; k < 12; k++) { w.put.apply(null, polar(k * Math.PI / 6, 14).concat([faint])); w.put.apply(null, polar(k * Math.PI / 6, 8).concat([faint])); }
+    w.put(c0 - 0.5, c0 - 0.5, shade(col, 0.3)); w.put(c0 + 0.5, c0 - 0.5, shade(col, 0.3)); w.put(c0 - 0.5, c0 + 0.5, shade(col, 0.3)); w.put(c0 + 0.5, c0 + 0.5, shade(col, 0.3));
+    dot(polar(m * Math.PI / 30, 14), shade(col, 0.6)); dot(polar(((d.getHours() % 12) + m / 60) * Math.PI / 6, 8), col);
+  },
+  grid: function (p, d, o) {               // the time written on the lattice's own dots
+    var w = pen(p), col = o.col, h = d.getHours(), x, y; if (!o.h24) h = h % 12 || 12;
+    var two = function (v) { return (v < 10 ? "0" : "") + v; };
+    for (y = 2; y < N; y += 4) for (x = 2; x < N; x += 4) w.put(x, y, shade(col, 0.2));
+    var write = function (str, y0, c) { for (var n = 0; n < 2; n++) { var gl = DIGITS[str[n]]; for (var r = 0; r < 5; r++) for (var k = 0; k < 3; k++) if (gl[r * 3 + k] === "1") w.put(10 + n * 8 + k * 2, y0 + r * 2, c); } };
+    write(two(h), 6, col); write(two(d.getMinutes()), 18, shade(col, 0.6));
+  },
+  comet: function (p, d, o) {              // Orbit with a tail: the minute's dot drags a quarter-hour of light
+    var w = pen(p), c0 = (N - 1) / 2, col = o.col, m = d.getMinutes(), h = d.getHours(), k; if (!o.h24) h = h % 12 || 12;
+    var polar = function (a, r) { return [c0 + Math.sin(a) * r, c0 - Math.cos(a) * r]; };
+    for (k = 0; k < 12; k++) w.put.apply(null, polar(k * Math.PI / 6, 14).concat([shade(col, 0.12)]));
+    for (k = 15; k >= 1; k--) w.put.apply(null, polar((m - k) * Math.PI / 30, 14).concat([shade(col, 0.08 + 0.5 * Math.pow(1 - k / 16, 2))]));
+    var q = polar(m * Math.PI / 30, 14); for (var a = -1; a <= 1; a++) for (var b = -1; b <= 1; b++) if (Math.abs(a) + Math.abs(b) <= 1) w.put(q[0] + a, q[1] + b, col);
+    w.word((h < 10 ? "0" : "") + h, 11, 2, col);
+  },
+  binary: function (p, d, o) {             // four columns of dots: each digit of the time in binary (8 · 4 · 2 · 1, top to bottom)
+    var w = pen(p), col = o.col, h = d.getHours(), m = d.getMinutes(); if (!o.h24) h = h % 12 || 12;
+    var ds = [Math.floor(h / 10), h % 10, Math.floor(m / 10), m % 10];
+    for (var c = 0; c < 4; c++) for (var r = 0; r < 4; r++) {
+      var on = (ds[c] >> (3 - r)) & 1, x0 = 5 + c * 6 + (c > 1 ? 2 : 0), y0 = 6 + r * 6, cc = on ? (c < 2 ? col : shade(col, 0.6)) : shade(col, 0.2);
+      w.put(x0, y0, cc); w.put(x0 + 1, y0, cc); w.put(x0, y0 + 1, cc); w.put(x0 + 1, y0 + 1, cc);
+    }
+  },
+  edge: function (p, d, o) {               // the minute walks the display's edge once an hour; the hour sits in the middle
+    var w = pen(p), col = o.col, m = d.getMinutes(), h = d.getHours(), e = N - 3, k; if (!o.h24) h = h % 12 || 12;
+    var at = function (s) { s = ((Math.round(s) % (4 * e)) + 4 * e) % (4 * e); var side = Math.floor(s / e), r = s % e;
+      return side === 0 ? [1 + r, 1] : side === 1 ? [1 + e, 1 + r] : side === 2 ? [1 + e - r, 1 + e] : [1, 1 + e - r]; };
+    var head = m / 60 * 4 * e + e / 2;
+    for (k = 0; k < 4; k++) w.put.apply(null, at(k * e + e / 2).concat([shade(col, 0.14)]));
+    for (k = 18; k >= 1; k--) w.put.apply(null, at(head - k).concat([shade(col, 0.06 + 0.45 * Math.pow(1 - k / 19, 2))]));
+    var q = at(head); w.put(q[0], q[1], col);
+    w.word((h < 10 ? "0" : "") + h, 8, 2, col); w.word((m < 10 ? "0" : "") + m, 20, 1, shade(col, 0.55));
+  },
+  arc: function (p, d, o) {                // one thin ring that fills with the hour's minutes; the hour inside it
+    var w = pen(p), c0 = (N - 1) / 2, col = o.col, m = d.getMinutes(), h = d.getHours(); if (!o.h24) h = h % 12 || 12;
+    for (var k = 0; k < 120; k++) { var a = k * Math.PI / 60, lit = k / 2 <= m;
+      w.put(c0 + Math.sin(a) * 14, c0 - Math.cos(a) * 14, lit ? shade(col, 0.45) : shade(col, 0.1)); }
+    var q = [c0 + Math.sin(m * Math.PI / 30) * 14, c0 - Math.cos(m * Math.PI / 30) * 14]; w.put(q[0], q[1], col);
+    w.word((h < 10 ? "0" : "") + h, 11, 2, col);
+  }
+};

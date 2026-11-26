@@ -129,9 +129,10 @@ what's sent to it and takes one connection at a time, so Room holds the link all
 it connects when the display is seen, sets its clock, and reconnects by itself. `[pixel]` lines in the log say what
 the link is doing: `journalctl --user -u room | grep '\[pixel\]'`.
 
-- **Clock:** 14 faces. Classic is the display's own clock; the other 13 are drawn by Room and sent again each minute
-  (each second with the seconds dot), whatever screen Room is on.
-- **Art:** 28 loops of 48 frames, sent once; the display plays them by itself.
+- **Clock:** 15 faces, all drawn by Room and sent again each minute (each second with the seconds dot), whatever
+  screen Room is on. Only the first still in a run is preceded by the picture-mode command, so the display doesn't
+  blank between frames.
+- **Art:** 24 loops of 48 frames, sent once; the display plays them by itself.
 - **Light:** the display's own 7 effects in 2–7 colours, or one colour.
 - **Timers:** a countdown, a stopwatch or a scoreboard — drawn by Room in the clock's digits ("Minimal") or the
   display's own screens ("Built-in"). They're up for now: when one ends, what was showing comes back.

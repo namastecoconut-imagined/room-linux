@@ -20,7 +20,7 @@ Item {
     width: 1368; height: 912
     property bool shown: false
     property real now: Date.now() / 1000
-    readonly property bool sheetOpen: editor.open
+    readonly property bool sheetOpen: editor.open || tuning.open
     visible: opacity > 0.002
     opacity: shown ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: Theme.fadeMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.ease } }
@@ -73,6 +73,18 @@ Item {
     readonly property int textSize: v.sel.textSize
     readonly property string textFont: v.sel.textFont
     readonly property string textLook: v.sel.textLook
+    readonly property bool held: v.held
+    readonly property bool flip: v.sel.flip
+    readonly property bool ecoOn: v.sel.eco.on
+    readonly property int ecoStart: v.sel.eco.start
+    readonly property int ecoEnd: v.sel.eco.end
+    readonly property int ecoLight: v.sel.eco.light
+    function ecoSet(key, value) { var e = { on: ecoOn, start: ecoStart, end: ecoEnd, light: ecoLight }; e[key] = value; pixel.choose("eco", e) }
+    function hhmm(m) { return Theme.two(Math.floor(m / 60)) + ":" + Theme.two(m % 60) }
+    readonly property string tuneKey: JSON.stringify(v.sel.tune)
+    readonly property var tune: JSON.parse(tuneKey)
+    function tuneSet(key, value) { var t = JSON.parse(tuneKey); t[key] = value; pixel.choose("tune", t) }
+    function tuneIs(name) { var t = v.tunes[name]; for (var k in t) if (t[k] !== tune[k]) return false; return true }
     function itemOf(id) { for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i]; return null }
     function toggled(list, id) { var a = list.slice(), i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); return a }
     function col(i) { return Pix.hex(pal[i % pal.length]) }
@@ -81,6 +93,7 @@ Item {
     readonly property var tabs: [["clock", "Clock"], ["art", "Art"], ["light", "Light"], ["timers", "Timers"], ["text", "Text"], ["library", "Library"], ["setup", "Setup"]]
     property string tab: { var m = /^pixel-([a-z]+)/.exec(startScreen); return m && m[1] !== "lost" ? m[1] : "clock" }
     onTabChanged: if (tab === "library" || tab === "setup") pixel.rescan()
+    Component.onCompleted: if (startScreen === "pixel-tune") { tab = "setup"; tuning.open = true }      // (checks)
     property int artPage: 0
 
     // ---------------------------------------------------------------- the clock faces
@@ -102,7 +115,14 @@ Item {
         if (key !== sentAt) { sentAt = key; showFace(face) }
     }
     Timer { interval: 1000; repeat: true; running: pv.mode === "clockface" && pv.linked && pv.on && pv.over === ""; onTriggered: pv.keepTime() }
-    Connections { target: pixel; function onAgain() { pv.sentAt = -1; pv.keepTime() } }
+    Connections {
+        target: pixel
+        function onAgain() { pv.sentAt = -1; pv.keepTime() }
+        function onRedraw() {              // (the picture tuning changed: what's showing, drawn and sent again)
+            if (pv.over !== "") return
+            if (pv.mode === "art") pv.showArt(pv.art); else if (pv.mode === "text") pv.showText(); else { pv.sentAt = -1; pv.keepTime() }
+        }
+    }
     function clockAgain() { if (mode === "classic") pixel.classic(); else if (mode === "clockface") showFace(face) }
 
     // ---------------------------------------------------------------- loops: an art piece's 48 frames (drawn a few
@@ -257,11 +277,11 @@ Item {
     }
     // a saved picture that's on the display: the assistant's face, or the Library's
     readonly property var shownItem: over === "face" ? itemOf(overItem) : over === "" && (mode === "library" || mode === "slideshow") ? itemOf(item) : null
-    readonly property string title: !v.enabled ? "Switched off" : !linked ? (link === "connecting" ? "Connecting" : "Looking for it")
+    readonly property string title: !v.enabled ? "Switched off" : !held ? "Released" : !linked ? (link === "connecting" ? "Connecting" : "Looking for it")
                                     : !on ? "Off" : over === "face" ? v.overLabel
                                     : timing ? (timerKind === "score" ? scoreA + " – " + scoreB : tm ? Pix.mmss(tmSecs).join(":") : timerKind === "sw" ? "Stopwatch" : "Countdown")
                                     : mode === "slideshow" && shownItem ? shownItem.name : label !== "" ? label : "Nothing yet"
-    readonly property string kind: !v.enabled ? "\"pixel\": false in config.json" : !linked ? (v.name ? v.name + " isn't answering. Is it powered on?" : "No pixel display found yet. Is it powered on?")
+    readonly property string kind: !v.enabled ? "\"pixel\": false in config.json" : !held ? "Room has let go of it. Another app can connect to it now." : !linked ? (v.name ? v.name + " isn't answering. Is it powered on?" : "No pixel display found yet. Is it powered on?")
                                    : !on ? "The display is dark. Turn on to bring it back." : drawing ? "Drawing the loop…"
                                    : sending && pct > 0 ? "Sending · " + pct + "%"
                                    : over === "face" ? "The assistant's face · while it answers"
@@ -422,7 +442,8 @@ Item {
         Mono {
             y: 270; color: Theme.w62
             text: pv.linked ? (pv.v.name || "Display") + " · connected · brightness " + pv.bright + "%"
-                : !pv.v.enabled ? "" : pv.link === "connecting" ? "Found it · connecting" : "Searching · tries again by itself"
+                : !pv.v.enabled ? "" : !pv.held ? "Setup → Take it back, to use it from here again"
+                : pv.link === "connecting" ? "Found it · connecting" : "Searching · tries again by itself"
         }
     }
     Rise {
@@ -450,7 +471,7 @@ Item {
 
     // ---- Clock: fourteen faces, colour, 24-hour, seconds
     Rise {
-        order: 3; visible: pv.tab === "clock"
+        order: 3; visible: pv.tab === "clock" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Loader {
             active: pv.everShown && pv.tab === "clock"
@@ -486,7 +507,7 @@ Item {
 
     // ---- Art: twenty-eight loops, fourteen at a time
     Rise {
-        order: 3; visible: pv.tab === "art"
+        order: 3; visible: pv.tab === "art" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Loader {
             active: pv.everShown && pv.tab === "art"
@@ -525,7 +546,7 @@ Item {
 
     // ---- Light: the display's own effects, or one colour
     Rise {
-        order: 3; visible: pv.tab === "light"
+        order: 3; visible: pv.tab === "light" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Item {
             width: 600; height: parent.height
@@ -562,7 +583,7 @@ Item {
     }
     // ---- Timers: countdown, stopwatch or scoreboard — one at a time, as only one can be on the display
     Rise {
-        order: 3; visible: pv.tab === "timers"
+        order: 3; visible: pv.tab === "timers" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Row { spacing: 10; Repeater { model: [["cd", "Countdown"], ["sw", "Stopwatch"], ["score", "Scoreboard"]]; Chip { text: modelData[1]; warm: pv.tool === modelData[0]; onTapped: pv.tool = modelData[0] } } }
         Item {
@@ -620,7 +641,7 @@ Item {
 
     // ---- Text: a scrolling message
     Rise {
-        order: 3; visible: pv.tab === "text"
+        order: 3; visible: pv.tab === "text" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Item {
             width: 700; height: parent.height
@@ -651,7 +672,7 @@ Item {
     property string doomed: ""              // (held once: hold again to delete)
     Timer { id: spare; interval: 4000; onTriggered: pv.doomed = "" }
     Rise {
-        order: 3; visible: pv.tab === "library"
+        order: 3; visible: pv.tab === "library" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Loader {
             active: pv.everShown && pv.tab === "library"
@@ -720,36 +741,121 @@ Item {
         }
     }
 
-    // ---- Setup: the assistant's face (more comes here: night dimming, picture tuning, the display itself)
+    // ---- Setup: the assistant's face, night dimming, picture tuning, the display itself
+    property int facePage: 0
     Rise {
-        order: 3; visible: pv.tab === "setup"
+        order: 3; visible: pv.tab === "setup" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
-        Mono { text: "Assistant face · the ones to go round"; color: Theme.w62 }
-        Loader {
-            y: 36; active: pv.everShown && pv.tab === "setup"
-            sourceComponent: Row {
-                spacing: 14
-                Repeater {
-                    model: pv.items.slice(0, 9)
-                    Tile {
-                        side: 88; label: modelData.name.split(" ")[0]; picked: pv.faces.indexOf(modelData.id) >= 0
-                        src: modelData.url
-                        px: modelData.url === "" ? Pix.artFrame(modelData.id.replace(".gif", ""), 0.3, pv.col(8)) : null
-                        onTapped: pixel.choose("faces", pv.toggled(pv.faces, modelData.id))
+        Item {
+            width: 290; height: parent.height
+            Mono { text: "Assistant face"; color: Theme.w62 }
+            Loader {
+                y: 36; active: pv.everShown && pv.tab === "setup"
+                sourceComponent: Row {
+                    spacing: 13
+                    Repeater {
+                        model: pv.items.slice(pv.facePage * 3, pv.facePage * 3 + 3)
+                        Tile {
+                            side: 88; label: modelData.name.split(" ")[0]; picked: pv.faces.indexOf(modelData.id) >= 0
+                            src: modelData.url
+                            px: modelData.url === "" ? Pix.artFrame(modelData.id.replace(".gif", ""), 0.3, pv.col(8)) : null
+                            onTapped: pixel.choose("faces", pv.toggled(pv.faces, modelData.id))
+                        }
+                    }
+                }
+            }
+            Note { y: 60; width: 290; visible: pv.items.length === 0; text: "Pictures in the Library can be chosen here. Nothing is saved there yet." }
+            Row {
+                y: 172; spacing: 10
+                Repeater { model: [["order", "In order"], ["shuffle", "Shuffle"]]; Chip { text: modelData[1]; warm: pv.faceOrder === modelData[0]; onTapped: pixel.choose("faceOrder", modelData[0]) } }
+            }
+            Row {
+                y: 228; spacing: 10
+                Chip { text: "Show it now"; opacity: pv.faces.length ? 1 : 0.4; enabled: pv.faces.length > 0; onTapped: { pixel.faceOn(); faceTest.restart() } }
+                Chip { text: "‹"; padX: 17; visible: pv.items.length > 3; opacity: pv.facePage > 0 ? 1 : 0.35; enabled: pv.facePage > 0; onTapped: pv.facePage-- }
+                Chip { text: "›"; padX: 17; visible: pv.items.length > 3; opacity: (pv.facePage + 1) * 3 < pv.items.length ? 1 : 0.35; enabled: (pv.facePage + 1) * 3 < pv.items.length; onTapped: pv.facePage++ }
+            }
+        }
+        Item {
+            x: 330; width: 290; height: parent.height
+            Mono { text: "Night dimming"; color: Theme.w62 }
+            Column {
+                y: 36; width: parent.width; spacing: 12
+                Line { label: "Dim at night"; Toggle { on: pv.ecoOn; onTapped: pv.ecoSet("on", !pv.ecoOn) } }
+                Line { label: "From"; Step { value: pv.hhmm(pv.ecoStart); wide: 70; onLess: pv.ecoSet("start", (pv.ecoStart + 1410) % 1440); onMore: pv.ecoSet("start", (pv.ecoStart + 30) % 1440) } }
+                Line { label: "To"; Step { value: pv.hhmm(pv.ecoEnd); wide: 70; onLess: pv.ecoSet("end", (pv.ecoEnd + 1410) % 1440); onMore: pv.ecoSet("end", (pv.ecoEnd + 30) % 1440) } }
+                Line {
+                    label: "At"
+                    Step {
+                        readonly property var steps: [5, 10, 20, 30]
+                        value: pv.ecoLight + "%"; wide: 70
+                        onLess: pv.ecoSet("light", steps[Math.max(0, steps.indexOf(pv.ecoLight) - 1)])
+                        onMore: pv.ecoSet("light", steps[Math.min(steps.length - 1, steps.indexOf(pv.ecoLight) + 1)])
                     }
                 }
             }
         }
-        Row {
-            y: 176; spacing: 10
-            Repeater { model: [["order", "In order"], ["shuffle", "Shuffle"]]; Chip { text: modelData[1]; warm: pv.faceOrder === modelData[0]; onTapped: pixel.choose("faceOrder", modelData[0]) } }
-            Item { width: 14; height: 1 }
-            Chip { text: "Show it now"; opacity: pv.faces.length ? 1 : 0.4; enabled: pv.faces.length > 0; onTapped: { pixel.faceOn(); faceTest.restart() } }
+        Item {
+            x: 660; width: 290; height: parent.height
+            Mono { text: "Picture tuning"; color: Theme.w62 }
+            Flow {
+                y: 36; width: 290; spacing: 10
+                Repeater {
+                    model: [["balanced", "Balanced"], ["bright", "Bright"], ["deep", "Deep"], ["off", "Off"]]
+                    Chip { text: modelData[1]; warm: pv.tuneIs(modelData[0]); onTapped: pixel.choose("tune", pv.v.tunes[modelData[0]]) }
+                }
+            }
+            Chip { y: 160; text: "Fine tune"; onTapped: tuning.open = true }
+            Note { y: 224; width: 290; text: "LEDs show mid tones brighter than a screen. This corrects what's sent." }
         }
-        Note {
-            y: 240; width: 860
-            text: pv.items.length ? "One of the chosen pictures is on the display while Alexa answers; then what was there comes back. Tap a picture to choose or drop it."
-                                  : "Pictures in the Library can be chosen here. Nothing is saved there yet."
+        Item {
+            x: 990; width: 290; height: parent.height
+            Mono { text: "Display"; color: Theme.w62 }
+            Column { y: 36; width: parent.width; spacing: 12; Line { label: "Flip 180°"; Toggle { on: pv.flip; onTapped: pixel.choose("flip", !pv.flip) } } }
+            Note {
+                y: 96; width: 290
+                text: (pv.v.name || "No display yet") + (pv.v.firmware ? " · firmware " + pv.v.firmware : "")
+                      + "\n" + (pv.v.answer !== "" ? pv.v.answer : pv.linked ? "Packets of " + pv.v.packet + " bytes" : pv.held ? "Not connected" : "Released")
+            }
+            Chip { y: 160; text: "Check connection"; opacity: pv.linked ? 1 : 0.4; enabled: pv.linked; onTapped: pixel.check() }
+            Chip { y: 216; text: pv.held ? "Release display" : "Take it back"; solid: !pv.held; onTapped: pixel.hold(!pv.held) }
+        }
+    }
+
+    // ---------------------------------------------------------------- picture tuning, value by value
+    SheetFrame {
+        id: tuning
+        paneY: 520
+        onClose: open = false
+        Serif { x: 36; y: 30; font.pixelSize: 44; text: "Fine tune" }
+        Chip { x: 1280 - 36 - width; y: 30; solid: true; text: "Done"; onTapped: tuning.open = false }
+        component Dial: Line {
+            property string k: ""
+            property int lo: 0
+            property int hi: 100
+            property int by: 1
+            readonly property int val: pv.tune[k] === undefined ? 0 : pv.tune[k]
+            Step {
+                wide: 84
+                value: parent.parent.k === "exp" ? (parent.parent.val / 100).toFixed(2) + "×" : parent.parent.k === "gamma" || parent.parent.k === "sat" ? (parent.parent.val / 10).toFixed(1)
+                       : parent.parent.k === "lift" ? "" + parent.parent.val : parent.parent.val + "%"
+                onLess: pv.tuneSet(parent.parent.k, Math.max(parent.parent.lo, parent.parent.val - parent.parent.by))
+                onMore: pv.tuneSet(parent.parent.k, Math.min(parent.parent.hi, parent.parent.val + parent.parent.by))
+            }
+        }
+        Column {
+            x: 36; y: 106; width: 560; spacing: 10
+            Dial { label: "Exposure"; k: "exp"; lo: 50; hi: 250; by: 10 }
+            Dial { label: "Contrast"; k: "gamma"; lo: 10; hi: 30 }
+            Dial { label: "Shadow lift"; k: "lift"; lo: 0; hi: 40; by: 2 }
+            Dial { label: "Vividness"; k: "sat"; lo: 0; hi: 25 }
+        }
+        Column {
+            x: 684; y: 106; width: 560; spacing: 10
+            Dial { label: "Red"; k: "r"; lo: 40; hi: 100; by: 5 }
+            Dial { label: "Green"; k: "g"; lo: 40; hi: 100; by: 5 }
+            Dial { label: "Blue"; k: "b"; lo: 40; hi: 100; by: 5 }
+            Note { width: 560; topPadding: 8; text: "Each change is sent to the display at once, so you can judge it there." }
         }
     }
 

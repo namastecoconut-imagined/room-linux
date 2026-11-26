@@ -40,6 +40,8 @@ class Link(QObject):
         self.info = {}
         self.packet = 20
         self.sent, self.total = 0, 0      # the picture going up now, in bytes
+        self.answer = ""                  # the last connection check, in words
+        self._asked = 0
         self._wanted = False
         self._ctl = self._svc = self._wr = self._agent = self._found = None
         self._jobs = []           # ("cmd", bytes) · ("part", bytes, generation)
@@ -271,7 +273,26 @@ class Link(QObject):
     def _next_job(self):
         self._pump()
 
+    def check(self):
+        """How quickly it answers: a harmless command (its brightness, as it is) and the time to its reply."""
+        if self.state != "on":
+            return
+        self._asked = time.monotonic()
+        self.answer = "Checking…"
+        self.changed.emit()
+        QTimer.singleShot(2500, self._no_answer)
+
+    def _no_answer(self):
+        if self._asked:
+            self._asked = 0
+            self.answer = "No answer in 2.5 s (commands may still be getting through)"
+            self.changed.emit()
+
     def _reply(self, d):
+        if self._asked and proto.is_brightness_ack(d):
+            ms, self._asked = round((time.monotonic() - self._asked) * 1000), 0
+            self.answer = f"Answered in {ms} ms"
+            self.changed.emit()
         info = proto.details(d)
         if info:
             if info != self.info:

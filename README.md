@@ -139,11 +139,16 @@ the link is doing: `journalctl --user -u room | grep '\[pixel\]'`.
 - **Library:** GIFs and pictures kept in `~/.local/state/room/pixel-library/` on the Surface — copy files in from the
   Mac (`scp picture.gif namastecoconut@fedora.local:.local/state/room/pixel-library/`). Tap one to show it; tick
   some and start a slideshow (it carries on after a restart).
-- **Setup → Assistant face:** the chosen Library pictures take turns on the display while the assistant answers.
+- **Setup:** the assistant's face (the chosen Library pictures take turns on the display while the assistant
+  answers); night dimming (the display dims itself between two times); picture tuning (presets, or value by value —
+  what's showing is sent again with each change); flip 180°; a connection check; and Release display, which lets
+  go of the link so the web app or the phone app can connect (Take it back to return).
 - Brightness and on / off are in the screen's top bar. What's showing and every choice are kept in
   `~/.local/state/room/pixel.json`, so the display comes back the same after a restart or a power cut.
 - The pictures are drawn in `qml/pixeldata.js` (from pixelcontrol.html, the web app this was ported from), and
   `room/pixel/proto.py` turns them into the display's bytes — the same bytes as the web app's.
+- If the screen ever stops answering: `systemctl --user kill -s USR1 room` writes where every thread is to the log
+  (`journalctl --user -u room -n 80`), without stopping Room.
 - `"pixel": false` in config.json: no link at all (so the web app or the phone app can connect to the display).
 
 ## Buttons and screen

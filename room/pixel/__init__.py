@@ -23,7 +23,8 @@ CHOICES = {"face": "orbit", "clockCol": 0, "h24": True, "secs": False, "date": T
            "effect": 0, "effCols": [1, 3, 5], "solidCol": 6,
            "item": "", "slides": [], "every": 60, "shuffle": False, "faces": [], "faceOrder": "order",
            "cdSet": 1500, "score": [0, 0], "timerStyle": "minimal",
-           "text": "Hello", "textCol": 3, "textSpeed": 5, "textSize": 55, "textFont": "sans", "textLook": "crisp"}
+           "text": "Hello", "textCol": 3, "textSpeed": 5, "textSize": 55, "textFont": "sans", "textLook": "crisp",
+           "tune": dict(proto.TUNE), "flip": False, "eco": {"on": False, "start": 22 * 60, "end": 7 * 60, "light": 10}, "held": True}
 PICTURES = (".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp")
 MAX_FRAMES = 300
 
@@ -31,6 +32,7 @@ MAX_FRAMES = 300
 class Pixel(QObject):
     changed = Signal()
     again = Signal()              # (to the screen) draw the clock face now and send it: the display has just come back
+    redraw = Signal()             # (to the screen) draw what's showing again and send it: the picture tuning changed
 
     def __init__(self, cfg=None, demo=False):
         super().__init__()
@@ -51,7 +53,7 @@ class Pixel(QObject):
         self.label = saved.get("label", "")
         self.address, self.name = saved.get("address", ""), saved.get("name", "")
         self.gif_path = config.STATE_DIR / "pixel-loop.gif"       # the loop that's showing (art, text), as sent
-        self.tuner = proto.Tuner()
+        self.tuner = proto.Tuner(self.sel["tune"] if isinstance(self.sel["tune"], dict) else None)
         self.frames = []
         self.link = None
         self._save = QTimer(self); self._save.setSingleShot(True); self._save.setInterval(800); self._save.timeout.connect(self._write)
@@ -77,7 +79,8 @@ class Pixel(QObject):
         self.link = Link(self.address, self.name)
         self.link.changed.connect(self._link_changed)
         self.link.ready.connect(self._ready)
-        self.link.start()
+        if self.sel["held"]:                          # (released: left alone until it's taken back)
+            self.link.start()
 
     # ---------------------------------------------------------------- what the screen reads
     @Property("QVariantMap", notify=changed)
@@ -93,6 +96,8 @@ class Pixel(QObject):
             "sending": bool(ln and ln.total), "progress": (ln.sent / ln.total) if ln and ln.total else 0,
             "sel": dict(self.sel), "palette": proto.PALETTE,
             "over": (self.over or {}).get("kind", ""), "overLabel": (self.over or {}).get("label", ""), "overItem": (self.over or {}).get("item", ""),
+            "held": bool(self.sel["held"]), "packet": ln.packet if ln and ln.state == "on" else 0, "answer": ln.answer if ln else "",
+            "tunes": proto.TUNES,
             "items": self.items, "libraryPath": str(self.lib_dir).replace(os.path.expanduser("~"), "~"),
         }
 
@@ -125,6 +130,8 @@ class Pixel(QObject):
     # ---------------------------------------------------------------- the display has just (re)connected
     def _ready(self):
         self.link.command(proto.brightness(self.bright))
+        self.link.command(proto.flip(bool(self.sel["flip"])))
+        self._eco()
         self.over = None
         if not self.on:
             self.link.command(proto.power(False))
@@ -166,10 +173,45 @@ class Pixel(QObject):
     @Slot(str, "QVariant")
     def choose(self, key, value):
         """Keep a choice (a face, a colour, 24-hour…). It's shown when the screen asks for it to be."""
-        if key in CHOICES:
-            self.sel[key] = value.toVariant() if hasattr(value, "toVariant") else value
-            self._save.start()
-            self.changed.emit()
+        if key not in CHOICES or key == "held":
+            return
+        self.sel[key] = value.toVariant() if hasattr(value, "toVariant") else value
+        self._save.start()
+        self.changed.emit()
+        if key == "flip" and self._up():
+            self.link.command(proto.flip(bool(self.sel["flip"])))
+        elif key == "eco" and self._up():
+            self._eco()
+        elif key == "tune":                            # every picture is corrected again, and what's showing sent again
+            self.tuner = proto.Tuner(self.sel["tune"] if isinstance(self.sel["tune"], dict) else None)
+            self._made.clear()
+            if self._up() and self.on and not self.over:
+                if self.mode in ("clockface", "art", "text"):
+                    self.redraw.emit()
+                else:
+                    self._rest()
+
+    def _eco(self):
+        e = dict(CHOICES["eco"], **(self.sel["eco"] if isinstance(self.sel["eco"], dict) else {}))
+        self.link.command(proto.eco(bool(e["on"]), int(e["start"]), int(e["end"]), int(e["light"])))
+
+    @Slot(bool)
+    def hold(self, on):
+        """Let go of the display (so the web app or the phone app can connect to it), or take it back."""
+        self.sel["held"] = bool(on)
+        self._save.start()
+        if self.link is not None:
+            if on:
+                self.link.start()
+            else:
+                self.link.stop()
+        self.changed.emit()
+
+    @Slot()
+    def check(self):
+        if self._up():
+            self.link.check()
+            self.link.command(proto.brightness(self.bright))
 
     @Slot(str, str, QByteArray)
     def still(self, mode, label, rgba):

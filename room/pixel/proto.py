@@ -28,6 +28,7 @@ def rgb(colour):
 # ---- commands
 def power(on): return bytes([5, 0, 7, 1, 1 if on else 0])
 def brightness(pct): return bytes([5, 0, 4, 128, _clamp(pct, 5, 100)])
+def flip(on): return bytes([5, 0, 6, 128, 1 if on else 0])
 def colour(r, g, b): return bytes([7, 0, 2, 2, r, g, b])
 def image_mode(): return bytes([5, 0, 4, 1, 1])
 
@@ -44,6 +45,14 @@ def set_time(t):
 
 def clock(style, date, h24, r, g, b):
     return bytes([8, 0, 6, 1, _clamp(style, 0, 7) | (128 if date else 0) | (64 if h24 else 0), r, g, b])
+
+
+def eco(on, start, end, light):
+    """Night dimming, by the display itself: from start to end (minutes into the day) at light %."""
+    return bytes([10, 0, 2, 128, 1 if on else 0, start // 60 % 24, start % 60, end // 60 % 24, end % 60, _clamp(light, 0, 100)])
+
+
+def is_brightness_ack(d): return len(d) >= 5 and d[0] == 5 and d[2] == 4 and d[3] == 128
 
 
 # the display's own timers and scoreboard (they keep running by themselves)
@@ -179,6 +188,8 @@ def gif(frames, delay_ms):
 
 # ---- colour correction (the web app's "Balanced": vividness 1.3, contrast curve 1.8)
 TUNE = {"exp": 100, "gamma": 18, "lift": 0, "sat": 13, "r": 100, "g": 100, "b": 100}
+TUNES = {"balanced": TUNE, "bright": dict(TUNE, exp=140, gamma=15, lift=4, sat=15), "deep": dict(TUNE, exp=110, gamma=22, sat=14),
+         "off": dict(TUNE, gamma=10, sat=10)}
 
 
 def _c255(v):

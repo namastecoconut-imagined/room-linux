@@ -240,3 +240,105 @@ var NEWFACES = {
     w.word((h < 10 ? "0" : "") + h, 11, 2, col);
   }
 };
+
+// ---- the assistant's faces: up on the display from the moment it hears "Alexa" until it's done. Drawn here like
+// the art loops, in one colour, ASSIST_FRAMES frames to a loop; each is function (p, t, col), t going 0 → 1.
+function brush(p) {
+  var g = pen(p), put = g.put;
+  function box(x0, y0, x1, y1, c, r) {
+    x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+    for (var y = y0; y <= y1; y++) for (var x = x0; x <= x1; x++) {
+      if (r) { var dx = Math.min(x - x0, x1 - x), dy = Math.min(y - y0, y1 - y);
+               if (dx < r && dy < r && (r - dx) + (r - dy) > r) continue; }
+      put(x, y, c);
+    }
+  }
+  function disc(cx, cy, rad, c, ring) {
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+      var d = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+      if (ring ? Math.abs(d - rad) < 0.65 : d <= rad + 0.2) put(x, y, c);
+    }
+  }
+  return { put: put, stroke: g.stroke, box: box, disc: disc };
+}
+var blinkAt = function (t, at, w) { return Math.max(0, 1 - Math.abs(frac(t - at + 0.5) - 0.5) / w); };
+var ASSIST = [
+["blink", "Blink", function (p, t, col) {               // two eyes, glancing and blinking
+  var b = brush(p), faint = shade(col, 0.1), lid = shade(col, 0.45);
+  for (var y = 3; y < N; y += 6) for (var x = 3; x < N; x += 6) b.put(x, y, faint);
+  var ox = Math.round(2 * Math.sin(TAU * t)), sh = blinkAt(t, 0.52, 0.055);
+  var h = Math.max(0.5, 5.5 * (1 - sh));
+  [10, 21].forEach(function (cx) {
+    b.box(cx - 3 + ox, 15.5 - h, cx + 3 + ox, 15.5 + h, col, h > 2.5 ? 2 : 0);
+    if (sh > 0.6) b.box(cx - 3 + ox, 15.5 - h, cx + 3 + ox, 15.5 + h, lid, 0);
+  });
+}],
+["cat", "Cat", function (p, t, col) {                   // ears, whiskers, a blink — Bebo and Evan
+  var b = brush(p), dim = shade(col, 0.45);
+  b.stroke(7, 11, 10, 4, col); b.stroke(10, 4, 13, 9, col);        // ears
+  b.stroke(24, 11, 21, 4, col); b.stroke(21, 4, 18, 9, col);
+  b.disc(15.5, 17, 9.5, col, true);                                 // head
+  var sh = blinkAt(t, 0.58, 0.05), h = sh > 0.5 ? 0 : 1;
+  b.box(11, 15 - h, 12, 15 + h, col); b.box(19, 15 - h, 20, 15 + h, col);
+  b.box(15, 19, 16, 20, col);                                       // nose
+  var w = Math.round(Math.sin(TAU * t) * 0.6);
+  b.stroke(3, 18 + w, 9, 20, dim); b.stroke(3, 22 + w, 9, 21, dim);
+  b.stroke(28, 18 - w, 22, 20, dim); b.stroke(28, 22 - w, 22, 21, dim);
+}],
+["orb", "Orb", function (p, t, col) {                   // a breathing orb with a dot going round it
+  var b = brush(p), soft = shade(col, 0.2), r = 7 + 1.6 * Math.sin(TAU * t);
+  b.disc(15.5, 15.5, r, soft); b.disc(15.5, 15.5, r, col, true);
+  var a = TAU * t;
+  b.box(15.5 + Math.sin(a) * 13 - 0.5, 15.5 - Math.cos(a) * 13 - 0.5, 15.5 + Math.sin(a) * 13 + 0.5, 15.5 - Math.cos(a) * 13 + 0.5, col);
+}],
+["talk", "Talk", function (p, t, col) {                 // eyes and a mouth that moves as it speaks
+  var b = brush(p), sh = blinkAt(t, 0.8, 0.05), h = sh > 0.5 ? 0.5 : 2;
+  b.box(9, 10 - h, 11, 10 + h, col); b.box(20, 10 - h, 22, 10 + h, col);
+  var m = 1 + 3.2 * Math.abs(Math.sin(TAU * t * 2.5));
+  b.box(9, 21 - m, 22, 21 + m, col, m > 2 ? 2 : 0);
+}],
+["wave", "Wave", function (p, t, col) {                 // eyes, and speech moving under them
+  var b = brush(p), dim = shade(col, 0.45);
+  b.box(9, 8, 11, 12, col, 1); b.box(20, 8, 22, 12, col, 1);
+  var amp = 1.2 + 3.2 * (0.5 + 0.5 * Math.sin(TAU * t * 1.5));
+  for (var x = 3; x < 29; x++) {
+    var e = Math.min(1, (x - 2) / 6) * Math.min(1, (28 - x) / 6);
+    var y = 21 + Math.sin(TAU * (x / 11 - t * 2)) * amp * e;
+    b.put(x, y, col); b.put(x, y + (Math.sin(TAU * (x / 11 - t * 2)) > 0 ? -1 : 1), dim);
+  }
+}],
+["owl", "Owl", function (p, t, col) {                   // two big eyes, tufts, a slow blink
+  var b = brush(p), dim = shade(col, 0.4);
+  b.stroke(5, 10, 8, 4, col); b.stroke(8, 4, 11, 9, col);           // tufts
+  b.stroke(26, 10, 23, 4, col); b.stroke(23, 4, 20, 9, col);
+  var sh = blinkAt(t, 0.6, 0.06), g = Math.round(Math.sin(TAU * t) * 1.5);
+  [9, 22].forEach(function (cx) {
+    if (sh > 0.5) for (var x = cx - 6; x <= cx + 6; x++) b.put(x, 16, col);
+    else { b.disc(cx, 16, 6, col, true); b.box(cx - 1 + g, 15, cx + g, 17, col); }
+  });
+  b.stroke(14, 20, 15.5, 24, col); b.stroke(17, 20, 15.5, 24, col); // beak
+  b.stroke(10, 26, 15.5, 28, dim); b.stroke(21, 26, 15.5, 28, dim); // chin
+}],
+["visor", "Visor", function (p, t, col) {               // a light going back and forth behind a visor
+  var b = brush(p), dim = shade(col, 0.3);
+  b.box(3, 8, 28, 24, col, 3); b.box(5, 10, 26, 22, [0, 0, 0], 2);  // head, hollowed out
+  b.box(7, 13, 24, 18, dim, 1);                                     // the visor
+  var k = Math.abs(frac(t * 2) * 2 - 1), x0 = 8 + k * 11;
+  b.box(x0, 13, x0 + 4, 18, col, 1);
+  var v = shade(col, 0.4 + 0.6 * Math.abs(Math.sin(TAU * t * 3)));
+  b.stroke(15.5, 4, 15.5, 7, dim); b.box(15, 2, 16, 3, v, 0);       // antenna
+}],
+["dots", "Dots", function (p, t, col) {                 // three dots, thinking it over
+  var b = brush(p);
+  for (var k = 0; k < 3; k++) {
+    var v = Math.max(0, Math.sin(TAU * (t - k * 0.13)));
+    var y = 18 - 5 * v * v;
+    b.box(6 + k * 8, y - 2, 9 + k * 8, y + 1, shade(col, 0.4 + 0.6 * v), 1);
+  }
+}]
+];
+var ASSIST_NAMES = {}, ASSIST_FRAMES = 24, ASSIST_MS = 70; ASSIST.forEach(function (a) { ASSIST_NAMES[a[0]] = a[1]; });
+function assistFrame(id, t, col) {
+  var a = null; for (var i = 0; i < ASSIST.length; i++) if (ASSIST[i][0] === id) a = ASSIST[i];
+  var p = blank(); if (a) a[2](p, frac(t), col); return p;
+}

@@ -10,6 +10,7 @@ the display's own: a short command starts them and they keep running by themselv
 """
 import os
 import random
+import threading
 import re
 import time
 
@@ -81,6 +82,14 @@ class Pixel(QObject):
         self.link.ready.connect(self._ready)
         if self.sel["held"]:                          # (released: left alone until it's taken back)
             self.link.start()
+        self._warm()
+
+    def _warm(self):
+        """The assistant's faces made ready ahead of time (off the screen's thread), so the first one is as quick
+        as the rest."""
+        ids = list(self.sel["faces"])
+        if ids and not self.demo:
+            threading.Thread(target=lambda: [self._make(i) for i in ids], daemon=True).start()
 
     # ---------------------------------------------------------------- what the screen reads
     @Property("QVariantMap", notify=changed)
@@ -178,13 +187,16 @@ class Pixel(QObject):
         self.sel[key] = value.toVariant() if hasattr(value, "toVariant") else value
         self._save.start()
         self.changed.emit()
-        if key == "flip" and self._up():
+        if key == "faces":
+            self._warm()
+        elif key == "flip" and self._up():
             self.link.command(proto.flip(bool(self.sel["flip"])))
         elif key == "eco" and self._up():
             self._eco()
         elif key == "tune":                            # every picture is corrected again, and what's showing sent again
             self.tuner = proto.Tuner(self.sel["tune"] if isinstance(self.sel["tune"], dict) else None)
             self._made.clear()
+            self._warm()
             if self._up() and self.on and not self.over:
                 if self.mode in ("clockface", "art", "text"):
                     self.redraw.emit()

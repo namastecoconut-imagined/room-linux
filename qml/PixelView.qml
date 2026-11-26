@@ -248,9 +248,13 @@ Item {
     readonly property bool timing: over === "timer" || over === "native"
     readonly property string timerKind: tm ? tm.kind : nativeKind !== "" ? nativeKind : scoreUp ? "score" : "cd"
 
-    // ---------------------------------------------------------------- the assistant's face: up while it answers
+    // ---------------------------------------------------------------- the assistant's face: up from the moment it
+    // hears "Alexa" (so it's on the display before the answer starts — sent only once it spoke, it arrived ~3 s in)
+    // until it's done; a short gap between its listening, thinking and speaking doesn't take it down
     readonly property string voiceState: room.voice.state || "off"
-    onVoiceStateChanged: { if (voiceState === "speaking") pixel.faceOn(); else pixel.faceOff() }
+    readonly property bool voiceBusy: voiceState === "listening" || voiceState === "thinking" || voiceState === "speaking"
+    onVoiceBusyChanged: { if (voiceBusy) { faceDown.stop(); if (over !== "face") pixel.faceOn() } else faceDown.restart() }
+    Timer { id: faceDown; interval: 700; onTriggered: pixel.faceOff() }
     Timer { id: faceTest; interval: 5000; onTriggered: pixel.faceOff() }
 
     // ---------------------------------------------------------------- the display's picture, here: what's showing,
@@ -284,7 +288,7 @@ Item {
     readonly property string kind: !v.enabled ? "\"pixel\": false in config.json" : !held ? "Room has let go of it. Another app can connect to it now." : !linked ? (v.name ? v.name + " isn't answering. Is it powered on?" : "No pixel display found yet. Is it powered on?")
                                    : !on ? "The display is dark. Turn on to bring it back." : drawing ? "Drawing the loop…"
                                    : sending && pct > 0 ? "Sending · " + pct + "%"
-                                   : over === "face" ? "The assistant's face · while it answers"
+                                   : over === "face" ? "The assistant's face · until it's done"
                                    : timing ? (timerKind === "score" ? "Scoreboard" : (timerKind === "sw" ? "Stopwatch" : "Countdown") + (tm ? (tm.paused ? " · paused" : " · running") : nativePaused ? " · paused" : " · on the display"))
                                    : mode === "text" ? "Scrolling text" : mode === "library" ? "From the library" : mode === "slideshow" ? "Slideshow · changes every " + everText(every)
                                    : mode === "clockface" ? "Clock face · kept in time by Room" : mode === "classic" ? "Clock · the display's own"

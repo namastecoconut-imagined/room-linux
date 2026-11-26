@@ -91,7 +91,7 @@ Item {
     function col(i) { return Pix.hex(pal[i % pal.length]) }
     function effectName(style) { for (var i = 0; i < Pix.EFFECTS.length; i++) if (Pix.EFFECTS[i][0] === style) return Pix.EFFECTS[i][1]; return "Effect" }
 
-    readonly property var tabs: [["clock", "Clock"], ["art", "Art"], ["light", "Light"], ["timers", "Timers"], ["text", "Text"], ["face", "Face"], ["library", "Library"], ["setup", "Setup"]]
+    readonly property var tabs: [["clock", "Clock"], ["art", "Art"], ["light", "Light"], ["timers", "Timers"], ["text", "Text"], ["face", "Assistant face"], ["library", "Library"], ["setup", "Setup"]]
     property string tab: { var m = /^pixel-([a-z]+)/.exec(startScreen); return m && m[1] !== "lost" ? m[1] : "clock" }
     onTabChanged: if (tab === "library" || tab === "face") pixel.rescan()
     Component.onCompleted: if (startScreen === "pixel-tune") { tab = "setup"; tuning.open = true }      // (checks)

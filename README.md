@@ -140,7 +140,7 @@ the link is doing: `journalctl --user -u room | grep '\[pixel\]'`.
 - **Library:** GIFs and pictures kept in `~/.local/state/room/pixel-library/` on the Surface — copy files in from the
   Mac (`scp picture.gif namastecoconut@fedora.local:.local/state/room/pixel-library/`). Tap one to show it; tick
   some and start a slideshow (it carries on after a restart).
-- **Face:** what goes up on the display from the moment the assistant hears "Alexa" until it's done — 8 faces Room
+- **Assistant face:** what goes up on the display from the moment the assistant hears "Alexa" until it's done — 8 faces Room
   draws (Blink, Cat, Orb, Talk, Wave, Owl, Visor, Dots, in a colour you pick) and any Library picture. Ticked ones
   take turns, or come up at random. The drawn ones are drawn by the screen a moment after Room starts and made
   ready, so they go up as quickly as the rest.

@@ -59,7 +59,8 @@ class Bluetooth(QObject):
                     continue                                      # unnamed: nothing anyone could pick
                 if mac not in self._kinds:
                     m = re.search(r"Icon: (\S+)", ctl("info", mac))
-                    self._kinds[mac] = KINDS.get(m.group(1), "") if m else ""
+                    # (the pixel display, IDM-…, is Room's own: room/pixel holds its link — not a speaker)
+                    self._kinds[mac] = "Pixel display" if name.startswith("IDM-") else KINDS.get(m.group(1), "") if m else ""
                 out.append({"mac": mac, "name": name, "kind": self._kinds[mac],
                             "paired": mac in paired, "connected": mac in conn})
             out.sort(key=lambda d: (not d["connected"], not d["paired"], d["name"].lower()))

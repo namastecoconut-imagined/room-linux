@@ -140,8 +140,11 @@ the link is doing: `journalctl --user -u room | grep '\[pixel\]'`.
 - **Library:** GIFs and pictures kept in `~/.local/state/room/pixel-library/` on the Surface — copy files in from the
   Mac (`scp picture.gif namastecoconut@fedora.local:.local/state/room/pixel-library/`). Tap one to show it; tick
   some and start a slideshow (it carries on after a restart).
-- **Setup:** the assistant's face (the chosen Library pictures take turns on the display, from the moment the
-  assistant hears "Alexa" until it's done); night dimming (the display dims itself between two times); picture tuning (presets, or value by value —
+- **Face:** what goes up on the display from the moment the assistant hears "Alexa" until it's done — 8 faces Room
+  draws (Blink, Cat, Orb, Talk, Wave, Owl, Visor, Dots, in a colour you pick) and any Library picture. Ticked ones
+  take turns, or come up at random. The drawn ones are drawn by the screen a moment after Room starts and made
+  ready, so they go up as quickly as the rest.
+- **Setup:** night dimming (the display dims itself between two times); picture tuning (presets, or value by value —
   what's showing is sent again with each change); flip 180°; a connection check; and Release display, which lets
   go of the link so the web app or the phone app can connect (Take it back to return).
 - Brightness and on / off are in the screen's top bar. What's showing and every choice are kept in

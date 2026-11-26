@@ -22,10 +22,15 @@ from . import proto
 
 CHOICES = {"face": "orbit", "clockCol": 0, "h24": True, "secs": False, "art": "lattice", "artCol": 0, "pace": 85,
            "effect": 0, "effCols": [1, 3, 5], "solidCol": 6,
-           "item": "", "slides": [], "every": 60, "shuffle": False, "faces": [], "faceOrder": "order",
+           "item": "", "slides": [], "every": 60, "shuffle": False, "faces": ["drawn:blink"], "faceOrder": "order", "faceCol": 0,
            "cdSet": 1500, "score": [0, 0], "timerStyle": "minimal",
            "text": "Hello", "textCol": 3, "textSpeed": 5, "textSize": 55, "textFont": "sans", "textLook": "crisp",
            "tune": dict(proto.TUNE), "flip": False, "eco": {"on": False, "start": 22 * 60, "end": 7 * 60, "light": 10}, "held": True}
+# the assistant's faces Room draws (qml/pixeldata.js, ASSIST) — they're chosen alongside Library pictures, as
+# "drawn:<id>"; the screen draws the frames and hands them over (drawnFace) and they're made into a GIF here
+DRAWN = {"drawn:" + k: n for k, n in (("blink", "Blink"), ("cat", "Cat"), ("orb", "Orb"), ("talk", "Talk"),
+                                       ("wave", "Wave"), ("owl", "Owl"), ("visor", "Visor"), ("dots", "Dots"))}
+DRAWN_MS = 70
 GONE = ("classic", "rings", "jumbo", "outline", "solar")       # clock faces taken out (27 Nov)
 PICTURES = (".gif", ".png", ".jpg", ".jpeg", ".webp", ".bmp")
 MAX_FRAMES = 300
@@ -52,8 +57,9 @@ class Pixel(QObject):
         self.over = None                              # something up for now, over that: a timer, the assistant's face
         self.lib_dir = config.STATE_DIR / "pixel-library"     # saved GIFs and pictures (copied in from the Mac)
         self.items = []
+        self._drawn = {}                              # a drawn face, as the screen drew it: id → (stamp, [frames])
         self._made = {}                               # a library picture as the display takes it: id → (mtime, kind, bytes)
-        self._face_i, self._face_last, self._slide_i = 0, "", 0
+        self._face_i, self._face_last, self._slide_i, self._stamp = 0, "", 0, 0
         self._slide = QTimer(self); self._slide.timeout.connect(self._slide_next)
         self.label = saved.get("label", "")
         self.address, self.name = saved.get("address", ""), saved.get("name", "")
@@ -69,6 +75,11 @@ class Pixel(QObject):
                 self.mode, self.label, self.sel["art"], self.sel["artCol"] = "art", "Tunnel", "tunnel", 5
             if "light" in scr:
                 self.mode, self.label = "effect", "Gradient sweep"
+            if "face" in scr:
+                self.items = [{"id": n + ".gif", "name": n.capitalize(), "url": "", "sample": i} for i, n in enumerate(["heart", "comet", "snow"])]
+                self.sel.update(faces=["drawn:blink", "drawn:cat", "drawn:orb", "drawn:talk"], faceCol=2)
+                if "up" in scr:
+                    self.over = {"kind": "face", "label": "Cat", "item": "drawn:cat"}
             if "library" in scr or "setup" in scr:
                 self.items = [{"id": n + ".gif", "name": n.capitalize(), "url": "", "sample": i} for i, n in enumerate(["ripple", "heart", "tunnel", "comet", "snow"])]
                 self.sel.update(slides=["ripple.gif", "tunnel.gif"], faces=["heart.gif"], item="heart.gif")
@@ -91,7 +102,7 @@ class Pixel(QObject):
     def _warm(self):
         """The assistant's faces made ready ahead of time (off the screen's thread), so the first one is as quick
         as the rest."""
-        ids = list(self.sel["faces"])
+        ids = [i for i in self.sel["faces"] if i not in DRAWN or i in self._drawn]
         if ids and not self.demo:
             threading.Thread(target=lambda: [self._make(i) for i in ids], daemon=True).start()
 
@@ -111,7 +122,9 @@ class Pixel(QObject):
             "over": (self.over or {}).get("kind", ""), "overLabel": (self.over or {}).get("label", ""), "overItem": (self.over or {}).get("item", ""),
             "held": bool(self.sel["held"]), "packet": ln.packet if ln and ln.state == "on" else 0, "answer": ln.answer if ln else "",
             "tunes": proto.TUNES,
-            "items": self.items, "libraryPath": str(self.lib_dir).replace(os.path.expanduser("~"), "~"),
+            "items": self.items,
+            "faceItems": [{"id": k, "name": n, "url": "", "drawn": k[6:]} for k, n in DRAWN.items()] + self.items,
+            "libraryPath": str(self.lib_dir).replace(os.path.expanduser("~"), "~"),
         }
 
     def _link_changed(self):
@@ -341,14 +354,18 @@ class Pixel(QObject):
                        "url": QUrl.fromLocalFile(str(p)).toString(), "sample": -1} for p in files]
         ids = {i["id"] for i in self.items}
         for key in ("slides", "faces"):
-            self.sel[key] = [i for i in self.sel[key] if i in ids]
+            self.sel[key] = [i for i in self.sel[key] if i in ids or (key == "faces" and i in DRAWN)]
 
     def _name(self, item):
+        if item in DRAWN:
+            return DRAWN[item]
         return next((i["name"] for i in self.items if i["id"] == item), "")
 
     def _make(self, item):
         """A library picture as the display takes it: every frame fitted to 32 × 32 (cropped to fill), corrected for
         LEDs; a PNG for a still, one GIF for an animation. Made once and kept until the file changes."""
+        if item in DRAWN:
+            return self._make_drawn(item)
         path = self.lib_dir / os.path.basename(item)
         try:
             mtime = path.stat().st_mtime
@@ -382,6 +399,30 @@ class Pixel(QObject):
         made = ("png", proto.png(frames[0])) if len(frames) == 1 else ("gif", proto.gif(frames, delays))
         self._made[item] = (mtime, *made)
         return made
+
+    def _make_drawn(self, item):
+        """A drawn face as the display takes it: its frames corrected for LEDs, as one GIF. Made again when the
+        screen draws it again (another colour) or the tuning changes."""
+        got = self._drawn.get(item)
+        if not got:
+            return None                               # (the screen hasn't drawn it yet: it does a moment after start)
+        stamp, frames = got
+        if item in self._made and self._made[item][0] == stamp:
+            return self._made[item][1:]
+        made = ("gif", proto.gif([self.tuner.frame(f) for f in frames], DRAWN_MS))
+        self._made[item] = (stamp, *made)
+        return made
+
+    @Slot(str, QByteArray)
+    def drawnFace(self, item, frames):
+        """A drawn face's frames, one after another (32 × 32 × RGBA each), from the screen."""
+        data, n = bytes(frames.data()), proto.N * proto.N * 4
+        if item not in DRAWN or not data or len(data) % n:
+            return
+        self._stamp += 1
+        self._drawn[item] = (self._stamp, [data[i:i + n] for i in range(0, len(data), n)])
+        if not self.demo:
+            threading.Thread(target=self._make_drawn, args=(item,), daemon=True).start()
 
     def _send_item(self, item):
         made = self._make(item) if item else None
@@ -455,7 +496,7 @@ class Pixel(QObject):
     def faceOn(self):
         """The assistant is answering: one of the chosen pictures (sel.faces — the next, or any other when shuffled)
         goes up until faceOff."""
-        ids = [i for i in self.sel["faces"] if any(x["id"] == i for x in self.items)]
+        ids = [i for i in self.sel["faces"] if i in DRAWN or any(x["id"] == i for x in self.items)]
         if not ids or not self.on or (self.over and self.over.get("kind") != "face"):
             return                                     # (none chosen; or a timer is up, and stays)
         if self.sel["faceOrder"] == "shuffle" and len(ids) > 1:

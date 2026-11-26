@@ -53,6 +53,9 @@ Item {
     readonly property string overItem: v.overItem
     readonly property string itemsKey: JSON.stringify(v.items)
     readonly property var items: JSON.parse(itemsKey)
+    readonly property string faceItemsKey: JSON.stringify(v.faceItems)
+    readonly property var faceItems: JSON.parse(faceItemsKey)           // the drawn faces, then the Library's pictures
+    readonly property int faceCol: v.sel.faceCol === undefined ? 0 : v.sel.faceCol
     readonly property string item: v.sel.item
     readonly property string slidesKey: v.sel.slides.join("|")
     readonly property var slides: slidesKey === "" ? [] : slidesKey.split("|")
@@ -83,14 +86,14 @@ Item {
     readonly property var tune: JSON.parse(tuneKey)
     function tuneSet(key, value) { var t = JSON.parse(tuneKey); t[key] = value; pixel.choose("tune", t) }
     function tuneIs(name) { var t = v.tunes[name]; for (var k in t) if (t[k] !== tune[k]) return false; return true }
-    function itemOf(id) { for (var i = 0; i < items.length; i++) if (items[i].id === id) return items[i]; return null }
+    function itemOf(id) { for (var i = 0; i < faceItems.length; i++) if (faceItems[i].id === id) return faceItems[i]; return null }
     function toggled(list, id) { var a = list.slice(), i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); return a }
     function col(i) { return Pix.hex(pal[i % pal.length]) }
     function effectName(style) { for (var i = 0; i < Pix.EFFECTS.length; i++) if (Pix.EFFECTS[i][0] === style) return Pix.EFFECTS[i][1]; return "Effect" }
 
-    readonly property var tabs: [["clock", "Clock"], ["art", "Art"], ["light", "Light"], ["timers", "Timers"], ["text", "Text"], ["library", "Library"], ["setup", "Setup"]]
+    readonly property var tabs: [["clock", "Clock"], ["art", "Art"], ["light", "Light"], ["timers", "Timers"], ["text", "Text"], ["face", "Face"], ["library", "Library"], ["setup", "Setup"]]
     property string tab: { var m = /^pixel-([a-z]+)/.exec(startScreen); return m && m[1] !== "lost" ? m[1] : "clock" }
-    onTabChanged: if (tab === "library" || tab === "setup") pixel.rescan()
+    onTabChanged: if (tab === "library" || tab === "face") pixel.rescan()
     Component.onCompleted: if (startScreen === "pixel-tune") { tab = "setup"; tuning.open = true }      // (checks)
     property int artPage: 0
 
@@ -251,6 +254,25 @@ Item {
     Timer { id: faceDown; interval: 700; onTriggered: pixel.faceOff() }
     Timer { id: faceTest; interval: 5000; onTriggered: pixel.faceOff() }
 
+    // the drawn faces that are chosen, drawn in their colour and handed over to be made ready (a moment after start,
+    // and whenever the choice or the colour changes) — one a tick, so the screen never stalls on them
+    property var faceQueue: []
+    onFacesKeyChanged: faceDraw.restart()
+    onFaceColChanged: faceDraw.restart()
+    Timer { id: faceDraw; interval: 400; running: true; onTriggered: { pv.faceQueue = pv.faces.filter(function (f) { return f.indexOf("drawn:") === 0 }); faceStep.start() } }
+    Timer {
+        id: faceStep; interval: 40; repeat: true
+        onTriggered: {
+            if (!pv.faceQueue.length) { stop(); return }
+            var id = pv.faceQueue[0], n = Pix.ASSIST_FRAMES, size = Pix.N * Pix.N * 4, all = new Uint8Array(n * size), c = pv.col(pv.faceCol)
+            pv.faceQueue = pv.faceQueue.slice(1)
+            for (var i = 0; i < n; i++) all.set(Pix.assistFrame(id.slice(6), i / n, c), i * size)
+            pixel.drawnFace(id, all.buffer)
+        }
+    }
+    property real faceT: 0
+    Timer { interval: Pix.ASSIST_MS; repeat: true; running: pv.shown && pv.over === "face"; onTriggered: pv.faceT = (pv.faceT + 1 / Pix.ASSIST_FRAMES) % 1 }
+
     // ---------------------------------------------------------------- the display's picture, here: what's showing,
     // moving as it moves (only while this screen is up)
     property real artT: 0
@@ -264,6 +286,7 @@ Item {
         if (!linked || !on) return Pix.blank()
         if (over === "timer") return overPx || Pix.blank()
         if (over === "native") return nativeKind === "score" ? Pix.scoreFrame(scoreA, scoreB, col(clockCol)) : Pix.timerFrame(nativeKind === "sw" ? "sw" : "cd", nativeKind === "sw" ? 0 : cdSet, cdSet, col(clockCol))
+        if (shownItem && shownItem.drawn) return Pix.assistFrame(shownItem.drawn, faceT, col(faceCol))
         if (shownItem) return shownItem.url === "" ? Pix.artFrame(shownItem.id.replace(".gif", ""), 0.3, col(8)) : null
         if (mode === "text") return textFrames.length ? textFrames[textI % textFrames.length] : Pix.blank()
         if (mode === "art") return Pix.artFrame(art, artT, col(artCol))
@@ -461,8 +484,9 @@ Item {
         }
         Mono {
             anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; color: Theme.w42
-            visible: pv.tab === "clock" || pv.tab === "art" || pv.tab === "light" || pv.tab === "library"
-            text: pv.linked ? "Tap one to show it" : "Choices are kept and shown once it's connected"
+            visible: pv.tab === "clock" || pv.tab === "art" || pv.tab === "light" || pv.tab === "library" || pv.tab === "face"
+            text: pv.tab === "face" ? "Tick the ones to use"
+                  : pv.linked ? "Tap one to show it" : "Choices are kept and shown once it's connected"
         }
     }
 
@@ -660,6 +684,46 @@ Item {
     }
     function textSet(key, value) { pixel.choose(key, value); if (mode === "text") showText() }
 
+
+    // ---- Face: what goes up on the display while the assistant is listening and answering — Room's drawn faces
+    // (in one colour) and any picture in the Library; ticked ones take turns, or come up at random
+    property int facePage: 0
+    Rise {
+        order: 3; visible: pv.tab === "face" && !pv.sheetOpen
+        x: 44; y: 592; width: 1280; height: 290
+        Loader {
+            active: pv.everShown && pv.tab === "face"
+            sourceComponent: Grid {
+                columns: 8; columnSpacing: 17; rowSpacing: 16
+                Repeater {
+                    model: pv.faceItems.slice(pv.facePage * 16, pv.facePage * 16 + 16)
+                    Tile {
+                        side: 92; label: modelData.name.split(" ")[0]; picked: pv.faces.indexOf(modelData.id) >= 0
+                        src: modelData.url
+                        px: modelData.drawn ? Pix.assistFrame(modelData.drawn, 0.3, pv.col(pv.faceCol))
+                            : modelData.url === "" ? Pix.artFrame(modelData.id.replace(".gif", ""), 0.3, pv.col(8)) : null
+                        onTapped: pixel.choose("faces", pv.toggled(pv.faces, modelData.id))
+                    }
+                }
+            }
+        }
+        Item {
+            x: 936; width: 344; height: parent.height
+            Mono { text: "Colour of the drawn ones"; color: Theme.w62 }
+            Swatches { y: 36; width: 344; cols: pv.pal; pick: pv.faceCol; onChose: (i) => pixel.choose("faceCol", i) }
+            Mono { y: 158; text: "Order"; color: Theme.w62 }
+            Row {
+                y: 190; spacing: 10
+                Repeater { model: [["order", "In order"], ["shuffle", "Shuffle"]]; Chip { text: modelData[1]; warm: pv.faceOrder === modelData[0]; onTapped: pixel.choose("faceOrder", modelData[0]) } }
+            }
+            Row {
+                y: 244; spacing: 10
+                Chip { text: "Show it now"; opacity: pv.faces.length && pv.linked ? 1 : 0.4; enabled: pv.faces.length > 0 && pv.linked; onTapped: { pixel.faceOn(); faceTest.restart() } }
+                Chip { text: "‹"; padX: 22; visible: pv.faceItems.length > 16; opacity: pv.facePage > 0 ? 1 : 0.35; enabled: pv.facePage > 0; onTapped: pv.facePage-- }
+                Chip { text: "›"; padX: 22; visible: pv.faceItems.length > 16; opacity: (pv.facePage + 1) * 16 < pv.faceItems.length ? 1 : 0.35; enabled: (pv.facePage + 1) * 16 < pv.faceItems.length; onTapped: pv.facePage++ }
+            }
+        }
+    }
     // ---- Library: what's saved, and a slideshow of the ticked ones
     property int libPage: 0
     property string doomed: ""              // (held once: hold again to delete)
@@ -734,43 +798,12 @@ Item {
         }
     }
 
-    // ---- Setup: the assistant's face, night dimming, picture tuning, the display itself
-    property int facePage: 0
+    // ---- Setup: night dimming, picture tuning, the display itself
     Rise {
         order: 3; visible: pv.tab === "setup" && !pv.sheetOpen
         x: 44; y: 592; width: 1280; height: 290
         Item {
             width: 290; height: parent.height
-            Mono { text: "Assistant face"; color: Theme.w62 }
-            Loader {
-                y: 36; active: pv.everShown && pv.tab === "setup"
-                sourceComponent: Row {
-                    spacing: 13
-                    Repeater {
-                        model: pv.items.slice(pv.facePage * 3, pv.facePage * 3 + 3)
-                        Tile {
-                            side: 88; label: modelData.name.split(" ")[0]; picked: pv.faces.indexOf(modelData.id) >= 0
-                            src: modelData.url
-                            px: modelData.url === "" ? Pix.artFrame(modelData.id.replace(".gif", ""), 0.3, pv.col(8)) : null
-                            onTapped: pixel.choose("faces", pv.toggled(pv.faces, modelData.id))
-                        }
-                    }
-                }
-            }
-            Note { y: 60; width: 290; visible: pv.items.length === 0; text: "Pictures in the Library can be chosen here. Nothing is saved there yet." }
-            Row {
-                y: 172; spacing: 10
-                Repeater { model: [["order", "In order"], ["shuffle", "Shuffle"]]; Chip { text: modelData[1]; warm: pv.faceOrder === modelData[0]; onTapped: pixel.choose("faceOrder", modelData[0]) } }
-            }
-            Row {
-                y: 228; spacing: 10
-                Chip { text: "Show it now"; opacity: pv.faces.length ? 1 : 0.4; enabled: pv.faces.length > 0; onTapped: { pixel.faceOn(); faceTest.restart() } }
-                Chip { text: "‹"; padX: 17; visible: pv.items.length > 3; opacity: pv.facePage > 0 ? 1 : 0.35; enabled: pv.facePage > 0; onTapped: pv.facePage-- }
-                Chip { text: "›"; padX: 17; visible: pv.items.length > 3; opacity: (pv.facePage + 1) * 3 < pv.items.length ? 1 : 0.35; enabled: (pv.facePage + 1) * 3 < pv.items.length; onTapped: pv.facePage++ }
-            }
-        }
-        Item {
-            x: 330; width: 290; height: parent.height
             Mono { text: "Night dimming"; color: Theme.w62 }
             Column {
                 y: 36; width: parent.width; spacing: 12
@@ -789,7 +822,7 @@ Item {
             }
         }
         Item {
-            x: 660; width: 290; height: parent.height
+            x: 495; width: 290; height: parent.height
             Mono { text: "Picture tuning"; color: Theme.w62 }
             Flow {
                 y: 36; width: 290; spacing: 10
